@@ -1,0 +1,8 @@
+name: 'Commerce Domains test'
+type: module
+description: 'A fake marketplace provider that keeps its listings in State.'
+package: Testing
+hidden: true
+dependencies:
+  - commerce_domains:commerce_domains
+core_version_requirement: ^11.4

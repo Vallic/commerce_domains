@@ -1,0 +1,4 @@
+administer commerce_domains providers:
+  title: 'Administer domain providers'
+  description: 'Add registrars and marketplaces, and change their API settings.'
+  restrict access: true

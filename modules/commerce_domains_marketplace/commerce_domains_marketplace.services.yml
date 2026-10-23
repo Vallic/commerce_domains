@@ -1,0 +1,19 @@
+services:
+  _defaults:
+    autowire: true
+
+  logger.channel.commerce_domains_marketplace:
+    parent: logger.channel_base
+    arguments: ['commerce_domains_marketplace']
+
+  Drupal\commerce_domains_marketplace\MarketplaceSync:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_marketplace'
+
+  Drupal\commerce_domains_marketplace\SyncScheduler:
+    tags:
+      - { name: needs_destruction }
+
+  Drupal\commerce_domains_marketplace\EventSubscriber\CatalogSubscriber:
+    tags:
+      - { name: event_subscriber }

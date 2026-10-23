@@ -1,0 +1,8 @@
+name: Commerce Domains
+type: module
+description: 'Sell domain names with Drupal Commerce: domain product fields, registrars and the providers domains are listed with.'
+package: Commerce (contrib)
+core_version_requirement: ^11.4
+php: 8.3
+dependencies:
+  - commerce:commerce_product

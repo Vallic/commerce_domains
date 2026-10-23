@@ -1,0 +1,27 @@
+################
+# GitLab CI for Commerce Domains, on the Drupal Association's templates.
+#
+# The templates are kept up to date centrally; see
+# https://project.pages.drupalcode.org/gitlab_templates/ for every variable.
+################
+include:
+  - project: $_GITLAB_TEMPLATES_REPO
+    ref: $_GITLAB_TEMPLATES_REF
+    file:
+      - "/includes/include.drupalci.main.yml"
+      - "/includes/include.drupalci.variables.yml"
+      - "/includes/include.drupalci.workflows.yml"
+
+variables:
+  # Drupal 11.4 is the baseline; also test the next major, so the code stays
+  # ready for Drupal 12.
+  OPT_IN_TEST_PREVIOUS_MINOR: 1
+  OPT_IN_TEST_NEXT_MAJOR: 1
+  OPT_IN_TEST_PREVIOUS_MAJOR: 0
+  # Kernel tests run in separate processes; run test classes in parallel.
+  _PHPUNIT_CONCURRENT: 1
+  # No JavaScript or CSS to lint.
+  SKIP_ESLINT: 1
+  SKIP_STYLELINT: 1
+  # The bundled Public Suffix List is data, not prose.
+  _CSPELL_IGNORE_PATHS: 'data/public_suffix_list.dat'

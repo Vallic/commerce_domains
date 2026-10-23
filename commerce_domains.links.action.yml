@@ -1,0 +1,5 @@
+entity.commerce_domains_provider.add_form:
+  title: 'Add domain provider'
+  route_name: entity.commerce_domains_provider.add_form
+  appears_on:
+    - entity.commerce_domains_provider.collection

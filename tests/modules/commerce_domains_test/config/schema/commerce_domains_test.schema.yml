@@ -1,0 +1,10 @@
+commerce_domains.provider_plugin.test_marketplace:
+  type: mapping
+  label: 'Test marketplace settings'
+  mapping:
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'

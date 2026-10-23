@@ -1,0 +1,10 @@
+commerce_domains.provider.*.third_party.commerce_domains_marketplace:
+  type: mapping
+  label: 'Marketplace sync settings'
+  mapping:
+    auto_sync:
+      type: boolean
+      label: 'Push catalog changes automatically'
+    delete_unlisted:
+      type: boolean
+      label: 'Remove listings for domains no longer for sale'

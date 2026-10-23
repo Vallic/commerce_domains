@@ -1,0 +1,17 @@
+{
+    "name": "drupal/commerce_domains",
+    "description": "Sell domain names with Drupal Commerce: domain product fields, registrars and marketplace providers.",
+    "type": "drupal-module",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=8.3",
+        "drupal/commerce": "^3",
+        "jeremykendall/php-domain-parser": "^6.4"
+    },
+    "require-dev": {
+        "drush/drush": "^13"
+    },
+    "suggest": {
+        "drush/drush": "To review and push marketplace syncs with drush commerce-domains:marketplace-sync."
+    }
+}

@@ -1,0 +1,102 @@
+commerce_domains.provider.*:
+  type: config_entity
+  label: 'Domain provider'
+  mapping:
+    id:
+      type: machine_name
+      label: 'ID'
+    label:
+      type: required_label
+      label: 'Name'
+    plugin:
+      type: string
+      label: 'API plugin'
+      nullable: true
+    configuration:
+      type: commerce_domains.provider_plugin.[%parent.plugin]
+
+commerce_domains.provider_plugin.*:
+  type: mapping
+  label: 'Provider plugin settings'
+
+commerce_domains.provider_plugin.afternic:
+  type: mapping
+  label: 'Afternic settings'
+  mapping:
+    api_key:
+      type: string
+      label: 'API key'
+    api_secret:
+      type: string
+      label: 'API secret'
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'
+
+commerce_domains.provider_plugin.spaceship:
+  type: mapping
+  label: 'Spaceship settings'
+  mapping:
+    api_key:
+      type: string
+      label: 'API key'
+    api_secret:
+      type: string
+      label: 'API secret'
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'
+
+commerce_domains.provider_plugin.atom:
+  type: mapping
+  label: 'Atom settings'
+  mapping:
+    api_token:
+      type: string
+      label: 'API token'
+    user_id:
+      type: string
+      label: 'User ID'
+    price_factor:
+      type: float
+      label: 'Price factor'
+
+commerce_domains.provider_plugin.fruits:
+  type: mapping
+  label: 'fruits settings'
+  mapping:
+    client_id:
+      type: string
+      label: 'Client ID'
+    client_secret:
+      type: string
+      label: 'Client secret'
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'
+
+commerce_domains.provider_plugin.dynadot:
+  type: mapping
+  label: 'Dynadot settings'
+  mapping:
+    api_key:
+      type: string
+      label: 'API key'
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'
+    requests_per_minute:
+      type: integer
+      label: 'API rate limit (requests per minute)'
