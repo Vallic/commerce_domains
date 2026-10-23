@@ -8,10 +8,11 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\Registration;
 use Drupal\commerce_domains\Clients\SpaceshipClient;
 
 /**
- * Lists domains on Spaceship SellerHub.
+ * Lists domains on Spaceship SellerHub, and reads registration details.
  *
  * Buy Now at the catalog price times the price factor, with offers from the
  * base minimum (the full price for Atom premium names). The API has no
@@ -23,7 +24,7 @@ use Drupal\commerce_domains\Clients\SpaceshipClient;
   label: new TranslatableMarkup('Spaceship'),
   description: new TranslatableMarkup('Pushes listings to SellerHub through the Spaceship API.'),
 )]
-final class Spaceship extends MarketplacePluginBase {
+final class Spaceship extends MarketplacePluginBase implements RegistrarInterface {
 
   protected const CREDENTIALS = [
     'api_key' => 'SPACESHIP_API_KEY',
@@ -97,6 +98,34 @@ final class Spaceship extends MarketplacePluginBase {
   /**
    * {@inheritdoc}
    */
+  public function fetchRegistrations(?array $names = NULL): array {
+    $client = $this->client();
+    if ($names !== NULL && count($names) <= self::SINGLE_FETCH_LIMIT) {
+      $domains = array_filter(array_map($client->getRegistration(...), array_values($names)));
+    }
+    else {
+      $domains = $client->listRegistrations();
+    }
+
+    $registrations = [];
+    foreach ($domains as $domain) {
+      $name = DomainName::normalize((string) $domain['name']);
+      $expires = isset($domain['expirationDate']) ? strtotime((string) $domain['expirationDate']) : FALSE;
+      $statuses = $domain['eppStatuses'] ?? NULL;
+      $registrations[$name] = new Registration(
+        name: $name,
+        expires: $expires === FALSE ? NULL : $expires,
+        locked: is_array($statuses) ? in_array('clientTransferProhibited', $statuses, TRUE) : NULL,
+        autoRenew: isset($domain['autoRenew']) ? (bool) $domain['autoRenew'] : NULL,
+        status: isset($domain['lifecycleStatus']) ? (string) $domain['lifecycleStatus'] : NULL,
+      );
+    }
+    return $names === NULL ? $registrations : array_intersect_key($registrations, array_flip($names));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function describeValue(string $field, mixed $value): string {
     if (in_array($field, self::MONEY_FIELDS, TRUE) && (is_int($value) || is_float($value))) {
       return $this->formatMoney($value);
@@ -145,7 +174,7 @@ final class Spaceship extends MarketplacePluginBase {
    * {@inheritdoc}
    */
   protected function credentialsHelp(): string {
-    return (string) $this->t('Create a key with the SellerHub read and write scopes in the Spaceship API Manager.');
+    return (string) $this->t('Create a key in the Spaceship API Manager with the SellerHub read and write scopes, plus domains read for registration details.');
   }
 
   /**

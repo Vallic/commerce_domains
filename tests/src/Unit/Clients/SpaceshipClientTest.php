@@ -62,6 +62,28 @@ class SpaceshipClientTest extends ClientTestBase {
   }
 
   /**
+   * Tests reading the domains the account holds.
+   */
+  public function testRegistrations(): void {
+    $page = fn(int $from, int $count) => array_map(
+      fn($i) => ['name' => "r$i.com", 'expirationDate' => '2027-01-01T00:00:00Z'],
+      range($from, $from + $count - 1),
+    );
+    $client = $this->client([
+      self::json(['items' => $page(0, 100), 'total' => 101]),
+      self::json(['items' => $page(100, 1), 'total' => 101]),
+      self::json(['name' => 'a.com', 'autoRenew' => TRUE]),
+      self::json(['detail' => 'Not found'], 404),
+    ]);
+    $this->assertCount(101, $client->listRegistrations());
+    $this->assertSame('GET https://spaceship.dev/api/v1/domains', $this->call(0));
+    $this->assertSame(['take' => '100', 'skip' => '100'], $this->query(1));
+    $this->assertSame(['name' => 'a.com', 'autoRenew' => TRUE], $client->getRegistration('a.com'));
+    $this->assertSame('GET https://spaceship.dev/api/v1/domains/a.com', $this->call(2));
+    $this->assertNull($client->getRegistration('elsewhere.com'));
+  }
+
+  /**
    * Tests that validation errors name the field and the operation.
    */
   public function testValidationError(): void {
@@ -77,7 +99,7 @@ class SpaceshipClientTest extends ClientTestBase {
     }
     catch (ProviderException $e) {
       $this->assertFalse($e->retryable);
-      $this->assertSame('Spaceship POST domains: HTTP 422: Validation failed (minPrice must be lower than binPrice) [operation abcdefgh12345678]', $e->getMessage());
+      $this->assertSame('Spaceship POST sellerhub/domains: HTTP 422: Validation failed (minPrice must be lower than binPrice) [operation abcdefgh12345678]', $e->getMessage());
     }
   }
 

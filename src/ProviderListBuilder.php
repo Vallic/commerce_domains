@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains;
 
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\Core\Config\Entity\ConfigEntityListBuilder;
 use Drupal\Core\Entity\EntityInterface;
 
@@ -33,6 +34,7 @@ class ProviderListBuilder extends ConfigEntityListBuilder {
     // Capability interfaces and how the list names them.
     $names = [
       MarketplaceInterface::class => $this->t('Marketplace'),
+      RegistrarInterface::class => $this->t('Registrar'),
     ];
     $capabilities = array_filter($names, fn(string $interface) => $plugin instanceof $interface, ARRAY_FILTER_USE_KEY);
     $row['label'] = $entity->label();

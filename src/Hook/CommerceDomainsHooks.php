@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Hook;
 
 use Drupal\commerce_domains\DomainNameParser;
+use Drupal\commerce_domains\RegistrarSync;
 use Drupal\Core\Hook\Attribute\Hook;
 
 /**
@@ -12,7 +13,10 @@ use Drupal\Core\Hook\Attribute\Hook;
  */
 class CommerceDomainsHooks {
 
-  public function __construct(protected DomainNameParser $parser) {}
+  public function __construct(
+    protected DomainNameParser $parser,
+    protected RegistrarSync $registrarSync,
+  ) {}
 
   /**
    * Implements hook_entity_type_alter().
@@ -30,6 +34,7 @@ class CommerceDomainsHooks {
   #[Hook('cron')]
   public function cron(): void {
     $this->parser->refresh();
+    $this->registrarSync->cron();
   }
 
 }

@@ -4,6 +4,7 @@ blala
 brandnew
 buynow
 cdms
+cdrs
 drush
 dynadot
 giftcase
@@ -19,6 +20,7 @@ nontransitional
 notatld
 purchas
 screenpoint
+sellerhub
 spkey
 unrequested
 upserting

@@ -40,4 +40,14 @@ interface ProviderInterface extends ConfigEntityInterface, EntityWithPluginColle
    */
   public function hasCapability(string $capability): bool;
 
+  /**
+   * Whether cron refreshes registration details from the registrar daily.
+   */
+  public function syncsRegistrations(): bool;
+
+  /**
+   * Sets whether cron refreshes registration details daily.
+   */
+  public function setRegistrationSync(bool $sync): static;
+
 }

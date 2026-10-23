@@ -9,18 +9,18 @@ use GuzzleHttp\RequestOptions;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * Talks to the SellerHub part of the Spaceship API.
+ * Talks to the Spaceship API: SellerHub listings and the domains held.
  *
  * Every write is one domain per request, and each operation allows 300
  * requests per 5 minutes, so big pushes wait out the limit as they go.
  *
- * @see https://docs.spaceship.dev/#tag/SellerHub
+ * @see https://docs.spaceship.dev/
  */
 final class SpaceshipClient extends ApiClient {
 
   protected const NETWORK = 'Spaceship';
 
-  protected const BASE_URI = 'https://spaceship.dev/api/v1/sellerhub/';
+  protected const BASE_URI = 'https://spaceship.dev/api/v1/';
 
   protected const PAGE_SIZE = 100;
 
@@ -44,16 +44,7 @@ final class SpaceshipClient extends ApiClient {
    *   Domain records as the API returns them.
    */
   public function listDomains(): array {
-    $domains = [];
-    $skip = 0;
-    do {
-      $page = $this->request('GET', 'domains', [RequestOptions::QUERY => ['take' => self::PAGE_SIZE, 'skip' => $skip]]);
-      $batch = $page['items'] ?? [];
-      array_push($domains, ...$batch);
-      $skip += count($batch);
-      $total = $page['total'] ?? NULL;
-    } while (count($batch) === self::PAGE_SIZE && ($total === NULL || $skip < $total));
-    return $domains;
+    return $this->pages('sellerhub/domains');
   }
 
   /**
@@ -63,6 +54,26 @@ final class SpaceshipClient extends ApiClient {
    *   The domain record, or NULL when it is not in SellerHub.
    */
   public function getDomain(string $name): ?array {
+    return $this->request('GET', 'sellerhub/domains/' . rawurlencode($name), [], [404]) ?: NULL;
+  }
+
+  /**
+   * Fetches every domain registered in the account.
+   *
+   * @return array[]
+   *   Domain records as the API returns them.
+   */
+  public function listRegistrations(): array {
+    return $this->pages('domains');
+  }
+
+  /**
+   * Fetches one registered domain.
+   *
+   * @return array|null
+   *   The domain record, or NULL when the account doesn't hold it.
+   */
+  public function getRegistration(string $name): ?array {
     return $this->request('GET', 'domains/' . rawurlencode($name), [], [404]) ?: NULL;
   }
 
@@ -73,21 +84,40 @@ final class SpaceshipClient extends ApiClient {
    *   The record to create, with a name.
    */
   public function createDomain(array $domain): void {
-    $this->request('POST', 'domains', [RequestOptions::JSON => $domain]);
+    $this->request('POST', 'sellerhub/domains', [RequestOptions::JSON => $domain]);
   }
 
   /**
    * Changes the given fields of a listing.
    */
   public function updateDomain(string $name, array $fields): void {
-    $this->request('PATCH', 'domains/' . rawurlencode($name), [RequestOptions::JSON => $fields]);
+    $this->request('PATCH', 'sellerhub/domains/' . rawurlencode($name), [RequestOptions::JSON => $fields]);
   }
 
   /**
    * Removes a domain from SellerHub; one that is already gone is fine.
    */
   public function deleteDomain(string $name): void {
-    $this->request('DELETE', 'domains/' . rawurlencode($name), [], [404]);
+    $this->request('DELETE', 'sellerhub/domains/' . rawurlencode($name), [], [404]);
+  }
+
+  /**
+   * Fetches every page of a take/skip list.
+   *
+   * @return array[]
+   *   The items of all pages.
+   */
+  protected function pages(string $path): array {
+    $items = [];
+    $skip = 0;
+    do {
+      $page = $this->request('GET', $path, [RequestOptions::QUERY => ['take' => self::PAGE_SIZE, 'skip' => $skip]]);
+      $batch = $page['items'] ?? [];
+      array_push($items, ...$batch);
+      $skip += count($batch);
+      $total = $page['total'] ?? NULL;
+    } while (count($batch) === self::PAGE_SIZE && ($total === NULL || $skip < $total));
+    return $items;
   }
 
   /**

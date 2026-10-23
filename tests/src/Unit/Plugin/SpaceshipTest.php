@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Spaceship;
+use Drupal\commerce_domains\Registration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 
@@ -94,6 +96,30 @@ class SpaceshipTest extends ProviderTestBase {
 
     $this->assertSame([], $plugin->deleteListings(['a.com']));
     $this->assertSame('DELETE https://spaceship.dev/api/v1/sellerhub/domains/a.com', $this->call(2));
+  }
+
+  /**
+   * Tests reading registration details.
+   */
+  public function testFetchRegistrations(): void {
+    $plugin = $this->plugin(Spaceship::class, 'spaceship', self::KEYS, [
+      self::json([
+        'name' => 'a.com',
+        'expirationDate' => '2027-03-04T05:06:07.000Z',
+        'autoRenew' => TRUE,
+        'lifecycleStatus' => 'registered',
+        'eppStatuses' => ['clientTransferProhibited', 'clientDeleteProhibited'],
+      ]),
+      self::json(['name' => 'b.com', 'eppStatuses' => []]),
+      self::json(['detail' => 'Not found'], 404),
+    ]);
+    $this->assertInstanceOf(RegistrarInterface::class, $plugin);
+    $registrations = $plugin->fetchRegistrations(['a.com', 'b.com', 'elsewhere.com']);
+    $this->assertEquals([
+      'a.com' => new Registration('a.com', 1804136767, TRUE, TRUE, 'registered'),
+      'b.com' => new Registration('b.com', NULL, FALSE, NULL, NULL),
+    ], $registrations);
+    $this->assertSame('GET https://spaceship.dev/api/v1/domains/elsewhere.com', $this->call(2));
   }
 
   /**

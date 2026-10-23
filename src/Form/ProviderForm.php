@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Form;
 
 use Drupal\commerce_domains\Entity\Provider;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\ProviderPluginManager;
 use Drupal\Core\Entity\EntityForm;
 use Drupal\Core\Form\FormStateInterface;
@@ -91,9 +92,17 @@ class ProviderForm extends EntityForm {
       $form['status'] = [
         '#type' => 'checkbox',
         '#title' => $this->t('Enabled'),
-        '#description' => $this->t('Disabled providers are never called, not even by a manual sync.'),
+        '#description' => $this->t('Disabled providers are never synced; a Drush dry run still reads them.'),
         '#default_value' => $this->entity->status(),
       ];
+      if ($plugin instanceof RegistrarInterface) {
+        $form['registration_sync'] = [
+          '#type' => 'checkbox',
+          '#title' => $this->t('Refresh registration details daily'),
+          '#description' => $this->t('Cron updates the expiry date of every catalog domain registered here.'),
+          '#default_value' => $this->entity->syncsRegistrations(),
+        ];
+      }
       $form['configuration'] = [
         '#type' => 'details',
         '#title' => $this->t('@provider settings', ['@provider' => $plugin->label()]),
@@ -132,7 +141,7 @@ class ProviderForm extends EntityForm {
     if ($entity->isNew() && $form_state->hasValue('plugin') && $form_state->getValue('plugin') !== (string) $entity->getPluginId()) {
       $entity->setPluginId($form_state->getValue('plugin') ?: NULL);
     }
-    foreach (['label', 'id', 'status'] as $key) {
+    foreach (['label', 'id', 'status', 'registration_sync'] as $key) {
       if ($form_state->hasValue($key)) {
         $entity->set($key, $form_state->getValue($key));
       }

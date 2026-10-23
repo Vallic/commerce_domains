@@ -40,7 +40,7 @@ class AutomaticSyncTest extends MarketplaceKernelTestBase {
   }
 
   /**
-   * Ends the request the way the kernel does, queuing collected changes.
+   * Ends the request the way the kernel does, queueing collected changes.
    *
    * @return list<array>
    *   The queued items' data.

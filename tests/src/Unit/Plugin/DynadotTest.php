@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Dynadot;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
+use Drupal\commerce_domains\Registration;
 use Drupal\Core\Form\FormState;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
@@ -88,6 +90,32 @@ class DynadotTest extends ProviderTestBase {
     $this->assertSame(['price'], $plugin->changedFields(['price' => 1400], $listings['a.com']));
     $this->assertSame('pending sale', $plugin->lockReason(['pending_sale' => TRUE]));
     $this->assertNull($plugin->lockReason($listings['a.com']));
+  }
+
+  /**
+   * Tests reading registration details from the account list.
+   */
+  public function testFetchRegistrations(): void {
+    $domains = [
+      [
+        'Name' => 'A.com',
+        'Expiration' => '1804136767000',
+        'Locked' => 'yes',
+        'RenewOption' => 'auto-renew',
+        'Status' => 'active',
+      ],
+      ['Name' => 'b.com', 'Expiration' => '1804136767999', 'Locked' => 'no', 'RenewOption' => 'no renew option'],
+      ['Name' => 'c.com'],
+    ];
+    $plugin = $this->plugin(Dynadot::class, 'dynadot', self::KEYS, [
+      self::json(['ListDomainInfoResponse' => ['ResponseCode' => 0, 'Status' => 'success', 'MainDomains' => $domains]]),
+    ]);
+    $this->assertInstanceOf(RegistrarInterface::class, $plugin);
+    $this->assertEquals([
+      'a.com' => new Registration('a.com', 1804136767, TRUE, TRUE, 'active'),
+      'b.com' => new Registration('b.com', 1804136767, FALSE, FALSE, NULL),
+    ], $plugin->fetchRegistrations(['a.com', 'b.com']));
+    $this->assertCount(1, $this->history, 'One account list serves every name.');
   }
 
   /**

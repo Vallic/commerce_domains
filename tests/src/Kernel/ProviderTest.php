@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\ProviderPluginManager;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
@@ -29,14 +30,18 @@ class ProviderTest extends DomainsKernelTestBase {
     $manager = $this->container->get('plugin.manager.commerce_domains_provider');
     $ids = array_keys($manager->getDefinitions());
     sort($ids);
-    $this->assertSame(['afternic', 'atom', 'dynadot', 'fruits', 'spaceship', 'test_marketplace'], $ids);
-    $this->assertEqualsCanonicalizing($ids, $manager->getPluginIdsWith(MarketplaceInterface::class));
+    $this->assertSame(['afternic', 'atom', 'dynadot', 'fruits', 'spaceship', 'test_marketplace', 'test_registrar'], $ids);
+    $marketplaces = ['afternic', 'atom', 'dynadot', 'fruits', 'spaceship', 'test_marketplace'];
+    $registrars = ['dynadot', 'spaceship', 'test_registrar'];
+    $this->assertEqualsCanonicalizing($marketplaces, $manager->getPluginIdsWith(MarketplaceInterface::class));
+    $this->assertEqualsCanonicalizing($registrars, $manager->getPluginIdsWith(RegistrarInterface::class));
 
     foreach ($ids as $id) {
       Provider::create(['id' => $id, 'label' => ucfirst($id), 'plugin' => $id])->save();
       $provider = Provider::load($id);
       $this->assertSame($id, $provider->getPluginId());
-      $this->assertTrue($provider->hasCapability(MarketplaceInterface::class));
+      $this->assertSame(in_array($id, $marketplaces, TRUE), $provider->hasCapability(MarketplaceInterface::class), $id);
+      $this->assertSame(in_array($id, $registrars, TRUE), $provider->hasCapability(RegistrarInterface::class), $id);
       $this->assertSame($provider->getPlugin()->defaultConfiguration(), $provider->getPlugin()->getConfiguration());
     }
   }

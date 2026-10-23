@@ -57,6 +57,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
     'label',
     'plugin',
     'configuration',
+    'registration_sync',
   ],
 )]
 class Provider extends ConfigEntityBase implements ProviderInterface {
@@ -88,6 +89,13 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
    * @var array
    */
   protected array $configuration = [];
+
+  /**
+   * Whether cron refreshes registration details daily.
+   *
+   * @var bool
+   */
+  protected bool $registration_sync = FALSE;
 
   /**
    * The collection holding the plugin.
@@ -125,6 +133,21 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
    */
   public function hasCapability(string $capability): bool {
     return $this->getPlugin() instanceof $capability;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function syncsRegistrations(): bool {
+    return $this->registration_sync;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setRegistrationSync(bool $sync): static {
+    $this->registration_sync = $sync;
+    return $this;
   }
 
   /**

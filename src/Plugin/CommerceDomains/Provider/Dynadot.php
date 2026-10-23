@@ -10,9 +10,10 @@ use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\DynadotClient;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\Registration;
 
 /**
- * Lists domains registered at Dynadot in the Dynadot marketplace.
+ * Lists Dynadot-registered domains in its marketplace; reads registrations.
  *
  * The API only lists domains in the account itself, so this provider manages
  * the domains whose registrar is a Dynadot provider; names registered
@@ -26,7 +27,7 @@ use Drupal\commerce_domains\CatalogItem;
   label: new TranslatableMarkup('Dynadot'),
   description: new TranslatableMarkup('Lists domains registered at Dynadot in its marketplace through the Dynadot API.'),
 )]
-final class Dynadot extends MarketplacePluginBase {
+final class Dynadot extends MarketplacePluginBase implements RegistrarInterface {
 
   protected const CREDENTIALS = [
     'api_key' => 'DYNADOT_API_KEY',
@@ -151,6 +152,31 @@ final class Dynadot extends MarketplacePluginBase {
       ];
     }
     return $listings;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function fetchRegistrations(?array $names = NULL): array {
+    $registrations = [];
+    foreach ($this->client()->listDomains() as $domain) {
+      if (!isset($domain['Name'])) {
+        continue;
+      }
+      $name = DomainName::normalize((string) $domain['Name']);
+      $expiration = $domain['Expiration'] ?? NULL;
+      $renew = strtolower((string) ($domain['RenewOption'] ?? ''));
+      $registrations[$name] = new Registration(
+        name: $name,
+        // Milliseconds since the epoch.
+        expires: is_numeric($expiration) ? intdiv((int) $expiration, 1000) : NULL,
+        locked: isset($domain['Locked']) ? strtolower((string) $domain['Locked']) === 'yes' : NULL,
+        // "auto-renew", "do not renew", or "no renew option" when unset.
+        autoRenew: $renew === '' ? NULL : str_contains($renew, 'auto'),
+        status: isset($domain['Status']) ? (string) $domain['Status'] : NULL,
+      );
+    }
+    return $names === NULL ? $registrations : array_intersect_key($registrations, array_flip($names));
   }
 
   /**

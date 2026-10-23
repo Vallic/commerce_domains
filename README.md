@@ -68,6 +68,23 @@ A dry run works while the provider is disabled. Once the output looks right,
 enable the provider and, if wanted, *Push catalog changes automatically*:
 changed domains are then queued and pushed on cron.
 
+## Registrar details
+
+Providers whose plugin is a registrar (Dynadot, Spaceship) can update the
+catalog from the account: every domain recorded at that registrar gets its
+expiry date. Nothing is written to the registrar.
+
+```sh
+# See what would change, and which domains need a look: recorded here but
+# missing from the account, or in the account but recorded elsewhere.
+drush commerce-domains:registrar-sync dynadot --dry-run --details
+# Update expiry dates; --fix-registrar also corrects recorded registrars.
+drush cdrs dynadot --fix-registrar
+```
+
+Turn on *Refresh registration details daily* on the provider to have cron do
+the update once a day.
+
 ## Adding a provider
 
 Write a plugin in `src/Plugin/CommerceDomains/Provider` with the

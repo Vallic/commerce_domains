@@ -18,6 +18,10 @@ variables:
   OPT_IN_TEST_PREVIOUS_MINOR: 1
   OPT_IN_TEST_NEXT_MAJOR: 1
   OPT_IN_TEST_PREVIOUS_MAJOR: 0
+  # Opting in only offers the variants as manual jobs; run them on every push
+  # and merge request.
+  _AUTORUN_PREVIOUS_MINOR: 'all'
+  _AUTORUN_NEXT_MAJOR: 'all'
   # Kernel tests run in separate processes; run test classes in parallel.
   _PHPUNIT_CONCURRENT: 1
   # No JavaScript or CSS to lint.

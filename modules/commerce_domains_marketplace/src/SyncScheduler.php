@@ -14,7 +14,7 @@ use Drupal\Core\Queue\QueueFactory;
  * Collects catalog changes during a request and queues one sync for them.
  *
  * Saving a product saves its variation too, and a bulk edit touches hundreds
- * of domains; queuing at the end of the request turns all of that into a
+ * of domains; queueing at the end of the request turns all of that into a
  * single item per provider, which the worker pushes in batches.
  */
 class SyncScheduler implements DestructableInterface {

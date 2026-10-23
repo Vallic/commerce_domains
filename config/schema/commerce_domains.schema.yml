@@ -14,6 +14,9 @@ commerce_domains.provider.*:
       nullable: true
     configuration:
       type: commerce_domains.provider_plugin.[%parent.plugin]
+    registration_sync:
+      type: boolean
+      label: 'Refresh registration details daily'
 
 commerce_domains.provider_plugin.*:
   type: mapping

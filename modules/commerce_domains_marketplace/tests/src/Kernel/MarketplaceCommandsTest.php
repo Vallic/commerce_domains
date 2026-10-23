@@ -7,18 +7,11 @@ namespace Drupal\Tests\commerce_domains_marketplace\Kernel;
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains_marketplace\Drush\Commands\MarketplaceCommands;
 use Drupal\commerce_domains_marketplace\MarketplaceSync;
+use Drupal\Tests\commerce_domains\Kernel\DrushCommandTrait;
 use Drush\Commands\DrushCommands;
-use Drush\Drush;
-use Drush\Log\DrushLoggerManager;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
-use League\Container\Container;
-use Psr\Log\AbstractLogger;
-use Symfony\Component\Console\Input\ArrayInput;
-use Symfony\Component\Console\Input\InputDefinition;
-use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Output\BufferedOutput;
 
 /**
  * Tests the marketplace sync Drush command.
@@ -28,30 +21,14 @@ use Symfony\Component\Console\Output\BufferedOutput;
 #[RunTestsInSeparateProcesses]
 class MarketplaceCommandsTest extends MarketplaceKernelTestBase {
 
-  /**
-   * The command's output.
-   *
-   * @var \Symfony\Component\Console\Output\BufferedOutput
-   */
-  protected BufferedOutput $output;
-
-  /**
-   * What the command logged, as [level, message] pairs.
-   *
-   * @var array
-   */
-  protected array $logged = [];
+  use DrushCommandTrait;
 
   /**
    * {@inheritdoc}
    */
   protected function setUp(): void {
     parent::setUp();
-    if (!class_exists(DrushCommands::class)) {
-      $this->markTestSkipped('Drush is not installed.');
-    }
-    // dt() lives in an include that only Drush's own bootstrap loads.
-    require_once dirname((new \ReflectionClass(DrushCommands::class))->getFileName(), 3) . '/includes/output.inc';
+    $this->requireDrush();
     $this->createDomain('Same.com', 1000);
     $this->createDomain('Repriced.com', 2000);
     $this->createDomain('New.com', 3000);
@@ -63,41 +40,8 @@ class MarketplaceCommandsTest extends MarketplaceKernelTestBase {
    */
   protected function runCommand(string $provider, array $options = []): int {
     $command = new MarketplaceCommands($this->entityTypeManager, $this->container->get(MarketplaceSync::class));
-    $input = new ArrayInput(['--yes' => TRUE], new InputDefinition([new InputOption('yes', 'y')]));
-    $input->setInteractive(FALSE);
-    // Confirmations read --yes from Drush's own container.
-    $drush = new Container();
-    $drush->add('input', $input);
-    Drush::setContainer($drush);
-    $command->setInput($input);
-    $this->output = new BufferedOutput();
-    $command->setOutput($this->output);
-
-    $this->logged = [];
-    $logger = new class($this->logged) extends AbstractLogger {
-
-      public function __construct(protected array &$logged) {}
-
-      /**
-       * {@inheritdoc}
-       */
-      public function log($level, \Stringable|string $message, array $context = []): void {
-        $this->logged[] = [$level, (string) $message];
-      }
-
-    };
-    $manager = new DrushLoggerManager();
-    $manager->add('test', $logger);
-    $command->setLogger($manager);
-
+    $this->prepareCommand($command);
     return $command->sync($provider, $options + ['domains' => NULL, 'dry-run' => FALSE, 'details' => FALSE]);
-  }
-
-  /**
-   * Returns the logged messages of one level.
-   */
-  protected function messages(string $level): array {
-    return array_column(array_filter($this->logged, fn(array $entry) => $entry[0] === $level), 1);
   }
 
   /**
