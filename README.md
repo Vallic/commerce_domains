@@ -36,6 +36,11 @@ it is held at, and the marketplaces it is listed on.
 
   ¹ With a separate Registrar API token. ² Only for domains registered there.
   ³ Needs a GNAME reseller account.
+
+  A provider without a plugin, such as Hover, is a registrar without an API:
+  domains can be recorded there, and nothing is synced. A domain's registrar
+  can be any registrar, with or without an API, but not a marketplace-only
+  provider such as Afternic.
 - **Commerce Domains Marketplace** (submodule): keeps listings on those
   marketplaces in line with the catalog, with a Drush command for reviewing
   and pushing, and optional automatic pushes from cron.

@@ -46,6 +46,8 @@ class Domain extends EntityTraitBase {
       ->setLabel(new TranslatableMarkup('Registrar'))
       ->setDescription(new TranslatableMarkup('Where the domain is registered.'))
       ->setSetting('target_type', 'commerce_domains_provider')
+      // Registrars only, not marketplaces such as Afternic.
+      ->setSetting('handler', 'commerce_domains:registrar')
       ->setDisplayOptions('form', [
         'type' => 'options_select',
         'weight' => 10,
