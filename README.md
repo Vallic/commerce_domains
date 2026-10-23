@@ -14,8 +14,28 @@ it is held at, and the marketplaces it is listed on.
 - **Domain providers**: the companies domains are registered or listed with.
   A provider is a config entity with an optional API plugin. Without one it is
   just a registrar name; with one, the plugin's capabilities apply.
-- **Provider plugins** for Afternic, Spaceship, Atom, fruits and Dynadot, with
-  the marketplace capability.
+- **Provider plugins** with one or both capabilities: *marketplace* (keeps
+  listings in line with the catalog) and *registrar* (reads the domains in the
+  account, with their expiry dates).
+
+  | Provider            | Marketplace | Registrar |
+  |---------------------|-------------|-----------|
+  | Afternic            | yes         |           |
+  | fruits              | yes         |           |
+  | Atom                | yes         | yes ¹     |
+  | Dynadot             | yes ²       | yes       |
+  | GNAME               | yes ²       | yes ³     |
+  | NameSilo            | yes ²       | yes       |
+  | Spaceship           | yes         | yes       |
+  | Unstoppable Domains | yes ²       | yes       |
+  | GoDaddy             |             | yes       |
+  | IONOS               |             | yes       |
+  | NameBright          |             | yes       |
+  | Namecheap           |             | yes       |
+  | Porkbun             |             | yes       |
+
+  ¹ With a separate Registrar API token. ² Only for domains registered there.
+  ³ Needs a GNAME reseller account.
 - **Commerce Domains Marketplace** (submodule): keeps listings on those
   marketplaces in line with the catalog, with a Drush command for reviewing
   and pushing, and optional automatic pushes from cron.
@@ -70,9 +90,9 @@ changed domains are then queued and pushed on cron.
 
 ## Registrar details
 
-Providers whose plugin is a registrar (Dynadot, Spaceship) can update the
-catalog from the account: every domain recorded at that registrar gets its
-expiry date. Nothing is written to the registrar.
+Providers whose plugin is a registrar can update the catalog from the
+account: every domain recorded at that registrar gets its expiry date.
+Nothing is written to the registrar.
 
 ```sh
 # See what would change, and which domains need a look: recorded here but
@@ -88,9 +108,17 @@ the update once a day.
 ## Adding a provider
 
 Write a plugin in `src/Plugin/CommerceDomains/Provider` with the
-`#[CommerceDomainsProvider]` attribute. Extend `MarketplacePluginBase` for a
-marketplace: implement `buildListing()`, `fetchListings()`,
-`saveListings()` and `deleteListings()`, and list the settings that hold
-credentials in `CREDENTIALS`. Put the HTTP client in `src/Clients`, extending
-`ApiClient` for retries, rate-limit waits and keeping credentials out of
-error messages.
+`#[CommerceDomainsProvider]` attribute, and list the settings that hold
+credentials in `CREDENTIALS`. Give the API's rate limit in
+`REQUESTS_PER_MINUTE` to get a setting for it.
+
+- For a marketplace, extend `MarketplacePluginBase` and implement
+  `buildListing()`, `fetchListings()`, `saveListings()` and
+  `deleteListings()`.
+- For a registrar, implement `RegistrarInterface` with `RegistrarTrait`:
+  fetch the account's records in `registrationRecords()` and map one to a
+  `Registration` in `registration()`. A registrar-only plugin extends
+  `ProviderPluginBase`.
+
+Put the HTTP client in `src/Clients`, extending `ApiClient` for retries,
+rate-limit waits and keeping credentials out of error messages.

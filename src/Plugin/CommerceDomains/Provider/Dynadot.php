@@ -29,9 +29,14 @@ use Drupal\commerce_domains\Registration;
 )]
 final class Dynadot extends MarketplacePluginBase implements RegistrarInterface {
 
+  use RegistrarTrait;
+
   protected const CREDENTIALS = [
     'api_key' => 'DYNADOT_API_KEY',
   ];
+
+  // Regular accounts; higher levels allow more.
+  protected const REQUESTS_PER_MINUTE = 60;
 
   // Dynadot allows installment plans of 2 to 12 months.
   protected const MAX_INSTALLMENTS = 12;
@@ -59,7 +64,7 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
    * {@inheritdoc}
    */
   public function defaultConfiguration(): array {
-    return ['price_factor' => 1.05, 'requests_per_minute' => 60] + parent::defaultConfiguration();
+    return ['price_factor' => 1.05] + parent::defaultConfiguration();
   }
 
   /**
@@ -67,6 +72,7 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
    */
   public function buildConfigurationForm(array $form, FormStateInterface $form_state): array {
     $form = parent::buildConfigurationForm($form, $form_state);
+    // The limit depends on the account level, so offer the levels.
     $form['requests_per_minute'] = [
       '#type' => 'select',
       '#title' => $this->t('API price level'),
@@ -75,14 +81,6 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
       '#default_value' => $this->configuration['requests_per_minute'],
     ];
     return $form;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function submitConfigurationForm(array &$form, FormStateInterface $form_state): void {
-    parent::submitConfigurationForm($form, $form_state);
-    $this->configuration['requests_per_minute'] = (int) $form_state->getValue('requests_per_minute');
   }
 
   /**
@@ -146,7 +144,7 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
       $price = $listing['Price'] ?? NULL;
       $listings[$name] = [
         // Unknown when the listing can't be read, so the next push resets it.
-        'price' => is_numeric($price) ? $this->number($price) : NULL,
+        'price' => is_numeric($price) ? self::number($price) : NULL,
         'type' => $listing['Type'] ?? NULL,
         'pending_sale' => strtolower((string) ($listing['PendingSaleLocked'] ?? '')) === 'yes',
       ];
@@ -157,26 +155,29 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
   /**
    * {@inheritdoc}
    */
-  public function fetchRegistrations(?array $names = NULL): array {
-    $registrations = [];
-    foreach ($this->client()->listDomains() as $domain) {
-      if (!isset($domain['Name'])) {
-        continue;
-      }
-      $name = DomainName::normalize((string) $domain['Name']);
-      $expiration = $domain['Expiration'] ?? NULL;
-      $renew = strtolower((string) ($domain['RenewOption'] ?? ''));
-      $registrations[$name] = new Registration(
-        name: $name,
-        // Milliseconds since the epoch.
-        expires: is_numeric($expiration) ? intdiv((int) $expiration, 1000) : NULL,
-        locked: isset($domain['Locked']) ? strtolower((string) $domain['Locked']) === 'yes' : NULL,
-        // "auto-renew", "do not renew", or "no renew option" when unset.
-        autoRenew: $renew === '' ? NULL : str_contains($renew, 'auto'),
-        status: isset($domain['Status']) ? (string) $domain['Status'] : NULL,
-      );
+  protected function registrationRecords(?array $names): iterable {
+    // There is no single-domain call with these details.
+    return $this->client()->listDomains();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function registration(array $record): ?Registration {
+    if (!isset($record['Name'])) {
+      return NULL;
     }
-    return $names === NULL ? $registrations : array_intersect_key($registrations, array_flip($names));
+    $expiration = $record['Expiration'] ?? NULL;
+    $renew = strtolower((string) ($record['RenewOption'] ?? ''));
+    return new Registration(
+      name: DomainName::normalize((string) $record['Name']),
+      // Milliseconds since the epoch.
+      expires: is_numeric($expiration) ? intdiv((int) $expiration, 1000) : NULL,
+      locked: isset($record['Locked']) ? strtolower((string) $record['Locked']) === 'yes' : NULL,
+      // "auto-renew", "do not renew", or "no renew option" when unset.
+      autoRenew: $renew === '' ? NULL : str_contains($renew, 'auto'),
+      status: isset($record['Status']) ? (string) $record['Status'] : NULL,
+    );
   }
 
   /**
@@ -238,21 +239,13 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
   }
 
   /**
-   * Reads a numeric string as an int when it is whole.
-   */
-  protected function number(string|int|float $value): int|float {
-    $value = (float) $value;
-    return floor($value) == $value ? (int) $value : $value;
-  }
-
-  /**
    * Returns the API client.
    *
    * @throws \Drupal\commerce_domains\ProviderException
    */
   protected function client(): DynadotClient {
     $this->assertReady();
-    return $this->client ??= new DynadotClient($this->httpClient, (string) $this->configuration['api_key'], (int) $this->configuration['requests_per_minute']);
+    return $this->client ??= new DynadotClient($this->httpClient, (string) $this->configuration['api_key'], $this->requestsPerMinute());
   }
 
 }

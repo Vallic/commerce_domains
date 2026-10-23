@@ -6,9 +6,11 @@ namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Clients\AtomClient;
+use Drupal\commerce_domains\Clients\AtomRegistrarClient;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\Registration;
 
 /**
  * Lists domains on Atom as standard listings.
@@ -17,17 +19,26 @@ use Drupal\commerce_domains\CatalogItem;
  * remove them, so they are left alone: catalog domains flagged as Atom
  * premium are not managed here, and any premium listing on Atom is locked.
  * Standard listings are priced at the catalog price times the price factor.
+ *
+ * Registration details come from the separate Registrar API, which needs its
+ * own token.
  */
 #[CommerceDomainsProvider(
   id: 'atom',
   label: new TranslatableMarkup('Atom'),
-  description: new TranslatableMarkup('Pushes standard listings through the Atom Seller API.'),
+  description: new TranslatableMarkup('Pushes standard listings through the Atom Seller API, and reads registrations through its Registrar API.'),
 )]
-final class Atom extends MarketplacePluginBase {
+final class Atom extends MarketplacePluginBase implements RegistrarInterface {
+
+  use RegistrarTrait;
 
   protected const CREDENTIALS = [
     'api_token' => 'ATOM_API_TOKEN',
     'user_id' => 'ATOM_USER_ID',
+  ];
+
+  protected const OPTIONAL_CREDENTIALS = [
+    'registrar_token' => 'ATOM_REGISTRAR_TOKEN',
   ];
 
   // Listing states that mean a sale is under way or done.
@@ -39,6 +50,13 @@ final class Atom extends MarketplacePluginBase {
    * @var \Drupal\commerce_domains\Clients\AtomClient|null
    */
   protected ?AtomClient $client = NULL;
+
+  /**
+   * The Registrar API client, once created.
+   *
+   * @var \Drupal\commerce_domains\Clients\AtomRegistrarClient|null
+   */
+  protected ?AtomRegistrarClient $registrarClient = NULL;
 
   /**
    * {@inheritdoc}
@@ -133,8 +151,33 @@ final class Atom extends MarketplacePluginBase {
   /**
    * {@inheritdoc}
    */
+  protected function registrationRecords(?array $names): iterable {
+    $client = $this->registrarClient();
+    return self::fewNames($names) ? array_filter(array_map($client->getDomain(...), array_values($names))) : $client->listDomains();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function registration(array $record): ?Registration {
+    if (!isset($record['domain_name'])) {
+      return NULL;
+    }
+    return new Registration(
+      name: DomainName::normalize((string) $record['domain_name']),
+      expires: self::timestamp($record['expiry_date'] ?? NULL),
+      // The registrar lock, or the ICANN 60 days after registering.
+      locked: isset($record['transfer_locked']) ? $record['transfer_locked'] || !empty($record['icann_transfer_lock']) : NULL,
+      autoRenew: isset($record['auto_renew']) ? (bool) $record['auto_renew'] : NULL,
+      status: isset($record['status']) ? (string) $record['status'] : NULL,
+    );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   protected function credentialsHelp(): string {
-    return (string) $this->t('Both are shown under API access in the Atom seller dashboard.');
+    return (string) $this->t('The token and user ID are shown under API access in the Atom seller dashboard; the registrar token needs Registrar API access, requested there too.');
   }
 
   /**
@@ -145,6 +188,17 @@ final class Atom extends MarketplacePluginBase {
   protected function client(): AtomClient {
     $this->assertReady();
     return $this->client ??= new AtomClient($this->httpClient, (string) $this->configuration['api_token'], (string) $this->configuration['user_id']);
+  }
+
+  /**
+   * Returns the Registrar API client.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  protected function registrarClient(): AtomRegistrarClient {
+    $this->assertReady();
+    $this->assertCredential('registrar_token');
+    return $this->registrarClient ??= new AtomRegistrarClient($this->httpClient, (string) $this->configuration['registrar_token']);
   }
 
 }

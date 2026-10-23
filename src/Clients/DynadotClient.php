@@ -43,8 +43,7 @@ final class DynadotClient extends ApiClient {
     protected string $apiKey,
     int $requestsPerMinute,
   ) {
-    parent::__construct($httpClient);
-    $this->minInterval = 60 / max($requestsPerMinute, 1);
+    parent::__construct($httpClient, max($requestsPerMinute, 1));
   }
 
   /**

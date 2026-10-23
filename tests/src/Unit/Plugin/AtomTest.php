@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use Drupal\commerce_domains\Clients\AtomRegistrarClient;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Atom;
 use Drupal\Core\Form\FormState;
+use Drupal\commerce_domains\ProviderException;
+use Drupal\commerce_domains\Registration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 
@@ -13,6 +16,7 @@ use PHPUnit\Framework\Attributes\Group;
  * Tests the Atom provider.
  */
 #[CoversClass(Atom::class)]
+#[CoversClass(AtomRegistrarClient::class)]
 #[Group('commerce_domains')]
 class AtomTest extends ProviderTestBase {
 
@@ -77,6 +81,59 @@ class AtomTest extends ProviderTestBase {
     $this->assertSame([], $plugin->deleteListings(['a.com']));
     $this->assertSame('a.com', $this->query(2)['domain_name']);
     $this->assertSame('$1,300', $plugin->describeValue('selling_price', 1300));
+  }
+
+  /**
+   * Tests registrations, which need the separate registrar token.
+   */
+  public function testFetchRegistrations(): void {
+    $keys = ['api_token' => 'at-Tok', 'user_id' => '42'];
+    $plugin = $this->registrar(Atom::class, 'atom', $keys);
+    try {
+      $plugin->fetchRegistrations();
+      $this->fail('The registrar token is needed.');
+    }
+    catch (ProviderException $e) {
+      $this->assertSame('Atom needs another credential for this: set ATOM_REGISTRAR_TOKEN.', $e->getMessage());
+      $this->assertTrue($e->retryable);
+    }
+
+    $plugin = $this->registrar(Atom::class, 'atom', $keys + ['registrar_token' => 'reg-Tok'], [
+      self::json([
+        'success' => TRUE,
+        'data' => [
+          [
+            'domain_name' => 'A.com',
+            'status' => 'active',
+            'expiry_date' => '2027-05-06 07:08:09',
+            'auto_renew' => TRUE,
+            'transfer_locked' => FALSE,
+            'icann_transfer_lock' => TRUE,
+          ],
+        ],
+        'pagination' => ['current_page' => 1, 'total_pages' => 2],
+      ]),
+      self::json([
+        'success' => TRUE,
+        'data' => [['domain_name' => 'b.com', 'transfer_locked' => FALSE]],
+        'pagination' => ['total_pages' => 2],
+      ]),
+    ]);
+    $this->assertEquals([
+      'a.com' => new Registration('a.com', 1809587289, TRUE, TRUE, 'active'),
+      'b.com' => new Registration('b.com', NULL, FALSE),
+    ], $plugin->fetchRegistrations());
+    $this->assertSame('GET https://www.atom.com/api/registrar/v1/domains', $this->call(0));
+    $this->assertSame('Bearer reg-Tok', $this->header(0, 'Authorization'));
+    $this->assertSame(['page' => '2', 'size' => '100'], $this->query(1));
+  }
+
+  /**
+   * Tests that the form names the optional registrar token.
+   */
+  public function testCredentialsHelp(): void {
+    $form = $this->plugin(Atom::class, 'atom')->buildConfigurationForm([], new FormState());
+    $this->assertStringContainsString('Optional: <code>ATOM_REGISTRAR_TOKEN</code>.', $form['credentials']['#markup']);
   }
 
 }

@@ -42,7 +42,15 @@ abstract class ApiClient {
    */
   protected float $lastRequest = 0.0;
 
-  public function __construct(protected ClientInterface $httpClient) {}
+  public function __construct(
+    protected ClientInterface $httpClient,
+    // The most requests a minute the API allows; 0 for no limit.
+    int $requestsPerMinute = 0,
+  ) {
+    if ($requestsPerMinute > 0) {
+      $this->minInterval = 60 / $requestsPerMinute;
+    }
+  }
 
   /**
    * Adds the credentials to a request.
@@ -141,8 +149,7 @@ abstract class ApiClient {
         continue;
       }
 
-      $body = json_decode((string) $response->getBody(), TRUE);
-      $body = is_array($body) ? $body : [];
+      $body = $this->decode($response);
       if (in_array($status, $ok, TRUE)) {
         return [];
       }
@@ -154,6 +161,16 @@ abstract class ApiClient {
       }
       return $body;
     }
+  }
+
+  /**
+   * Reads a response body into an array.
+   *
+   * JSON by default; clients of XML APIs override this.
+   */
+  protected function decode(ResponseInterface $response): array {
+    $body = json_decode((string) $response->getBody(), TRUE);
+    return is_array($body) ? $body : [];
   }
 
   /**

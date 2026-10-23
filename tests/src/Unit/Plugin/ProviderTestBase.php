@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\Component\Uuid\Php;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Tests\commerce_domains\Unit\Clients\ClientTestBase;
@@ -17,10 +18,10 @@ use Drupal\Tests\commerce_domains\Unit\Clients\ClientTestBase;
 abstract class ProviderTestBase extends ClientTestBase {
 
   /**
-   * Creates a plugin through its create() method.
+   * Creates a marketplace plugin through its create() method.
    *
    * @param class-string<\Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase> $class
-   *   The plugin class; every shipped plugin is a marketplace.
+   *   The plugin class.
    * @param string $id
    *   The plugin ID.
    * @param array $configuration
@@ -29,15 +30,49 @@ abstract class ProviderTestBase extends ClientTestBase {
    *   The HTTP responses the plugin's API calls get.
    */
   protected function plugin(string $class, string $id, array $configuration = [], array $responses = []): MarketplaceInterface&ProviderPluginBase {
+    $plugin = $this->create($class, $id, $configuration, $responses);
+    $this->assertInstanceOf(MarketplaceInterface::class, $plugin);
+    return $plugin;
+  }
+
+  /**
+   * Creates a registrar plugin through its create() method.
+   *
+   * @param class-string<\Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase> $class
+   *   The plugin class.
+   * @param string $id
+   *   The plugin ID.
+   * @param array $configuration
+   *   The plugin settings.
+   * @param array $responses
+   *   The HTTP responses the plugin's API calls get.
+   */
+  protected function registrar(string $class, string $id, array $configuration = [], array $responses = []): RegistrarInterface&ProviderPluginBase {
+    $plugin = $this->create($class, $id, $configuration, $responses);
+    $this->assertInstanceOf(RegistrarInterface::class, $plugin);
+    return $plugin;
+  }
+
+  /**
+   * Creates a plugin with a mocked HTTP client.
+   *
+   * @param class-string<\Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase> $class
+   *   The plugin class.
+   * @param string $id
+   *   The plugin ID.
+   * @param array $configuration
+   *   The plugin settings.
+   * @param array $responses
+   *   The HTTP responses the plugin's API calls get.
+   */
+  protected function create(string $class, string $id, array $configuration, array $responses): ProviderPluginBase {
     $container = new ContainerBuilder();
     $container->set('http_client', $this->http($responses));
     $container->set('uuid', new Php());
     $container->set('string_translation', $this->getStringTranslationStub());
     \Drupal::setContainer($container);
     $definition = ['id' => $id, 'label' => ucfirst($id), 'class' => $class, 'provider' => 'commerce_domains'];
-    $plugin = $class::create($container, $configuration, $id, $definition);
-    $this->assertInstanceOf(MarketplaceInterface::class, $plugin);
-    return $plugin;
+    return $class::create($container, $configuration, $id, $definition);
   }
 
   /**

@@ -26,6 +26,8 @@ use Drupal\commerce_domains\Clients\SpaceshipClient;
 )]
 final class Spaceship extends MarketplacePluginBase implements RegistrarInterface {
 
+  use RegistrarTrait;
+
   protected const CREDENTIALS = [
     'api_key' => 'SPACESHIP_API_KEY',
     'api_secret' => 'SPACESHIP_API_SECRET',
@@ -98,29 +100,26 @@ final class Spaceship extends MarketplacePluginBase implements RegistrarInterfac
   /**
    * {@inheritdoc}
    */
-  public function fetchRegistrations(?array $names = NULL): array {
+  protected function registrationRecords(?array $names): iterable {
     $client = $this->client();
-    if ($names !== NULL && count($names) <= self::SINGLE_FETCH_LIMIT) {
-      $domains = array_filter(array_map($client->getRegistration(...), array_values($names)));
-    }
-    else {
-      $domains = $client->listRegistrations();
-    }
+    return self::fewNames($names) ? array_filter(array_map($client->getRegistration(...), array_values($names))) : $client->listRegistrations();
+  }
 
-    $registrations = [];
-    foreach ($domains as $domain) {
-      $name = DomainName::normalize((string) $domain['name']);
-      $expires = isset($domain['expirationDate']) ? strtotime((string) $domain['expirationDate']) : FALSE;
-      $statuses = $domain['eppStatuses'] ?? NULL;
-      $registrations[$name] = new Registration(
-        name: $name,
-        expires: $expires === FALSE ? NULL : $expires,
-        locked: is_array($statuses) ? in_array('clientTransferProhibited', $statuses, TRUE) : NULL,
-        autoRenew: isset($domain['autoRenew']) ? (bool) $domain['autoRenew'] : NULL,
-        status: isset($domain['lifecycleStatus']) ? (string) $domain['lifecycleStatus'] : NULL,
-      );
+  /**
+   * {@inheritdoc}
+   */
+  protected function registration(array $record): ?Registration {
+    if (!isset($record['name'])) {
+      return NULL;
     }
-    return $names === NULL ? $registrations : array_intersect_key($registrations, array_flip($names));
+    $statuses = $record['eppStatuses'] ?? NULL;
+    return new Registration(
+      name: DomainName::normalize((string) $record['name']),
+      expires: self::timestamp($record['expirationDate'] ?? NULL),
+      locked: is_array($statuses) ? in_array('clientTransferProhibited', $statuses, TRUE) : NULL,
+      autoRenew: isset($record['autoRenew']) ? (bool) $record['autoRenew'] : NULL,
+      status: isset($record['lifecycleStatus']) ? (string) $record['lifecycleStatus'] : NULL,
+    );
   }
 
   /**

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Clients;
 
-use Drupal\commerce_domains\ProviderException;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\RequestOptions;
 
@@ -18,9 +17,13 @@ use GuzzleHttp\RequestOptions;
  */
 final class FruitsClient extends ApiClient {
 
+  use ClientCredentialsTrait;
+
   protected const NETWORK = 'fruits';
 
   protected const BASE_URI = 'https://api.fruits.co/';
+
+  protected const TOKEN_PATH = 'oauth2/token';
 
   protected const SCOPES = 'content.domain.read content.domain.write';
 
@@ -32,20 +35,6 @@ final class FruitsClient extends ApiClient {
 
   // Import states after which nothing more happens.
   public const IMPORT_DONE = ['completed', 'failed'];
-
-  /**
-   * The access token, once fetched.
-   *
-   * @var string|null
-   */
-  protected ?string $token = NULL;
-
-  /**
-   * When the access token expires, as a Unix time.
-   *
-   * @var int
-   */
-  protected int $tokenExpires = 0;
 
   public function __construct(
     ClientInterface $httpClient,
@@ -135,43 +124,8 @@ final class FruitsClient extends ApiClient {
   /**
    * {@inheritdoc}
    */
-  protected function authorize(array $options): array {
-    $options[RequestOptions::HEADERS]['Authorization'] = 'Bearer ' . $this->token();
-    return $options;
-  }
-
-  /**
-   * Returns an access token, fetching a new one when it is about to expire.
-   *
-   * @throws \Drupal\commerce_domains\ProviderException
-   */
-  protected function token(): string {
-    if ($this->token !== NULL && time() < $this->tokenExpires - 60) {
-      return $this->token;
-    }
-    try {
-      // Fruits only accepts the credentials in the body; Basic auth gets a
-      // 401 invalid_client.
-      $response = $this->send('POST', 'oauth2/token', [
-        RequestOptions::FORM_PARAMS => [
-          'grant_type' => 'client_credentials',
-          'client_id' => $this->clientId,
-          'client_secret' => $this->clientSecret,
-          'scope' => self::SCOPES,
-        ],
-      ]);
-    }
-    catch (ProviderException $e) {
-      // Bad or revoked credentials come back as 400 or 401; either way the
-      // fix is outside the code, so keep queued work for later.
-      throw new ProviderException($e->getMessage(), TRUE, $e);
-    }
-    if (empty($response['access_token']) || !is_string($response['access_token'])) {
-      throw new ProviderException('fruits returned no access token.', TRUE);
-    }
-    $this->token = $response['access_token'];
-    $this->tokenExpires = time() + (int) ($response['expires_in'] ?? 3600);
-    return $this->token;
+  protected function tokenParameters(): array {
+    return ['scope' => self::SCOPES];
   }
 
   /**

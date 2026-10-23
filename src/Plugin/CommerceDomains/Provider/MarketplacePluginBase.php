@@ -143,6 +143,14 @@ abstract class MarketplacePluginBase extends ProviderPluginBase implements Marke
   }
 
   /**
+   * Reads a numeric string as an int when it is whole.
+   */
+  protected static function number(string|int|float $value): int|float {
+    $value = (float) $value;
+    return floor($value) == $value ? (int) $value : $value;
+  }
+
+  /**
    * Formats a whole amount of money for people reviewing a sync.
    */
   protected function formatMoney(int|float $amount, string $symbol = '$'): string {

@@ -30,9 +30,34 @@ class ProviderTest extends DomainsKernelTestBase {
     $manager = $this->container->get('plugin.manager.commerce_domains_provider');
     $ids = array_keys($manager->getDefinitions());
     sort($ids);
-    $this->assertSame(['afternic', 'atom', 'dynadot', 'fruits', 'spaceship', 'test_marketplace', 'test_registrar'], $ids);
-    $marketplaces = ['afternic', 'atom', 'dynadot', 'fruits', 'spaceship', 'test_marketplace'];
-    $registrars = ['dynadot', 'spaceship', 'test_registrar'];
+    $marketplaces = [
+      'afternic',
+      'atom',
+      'dynadot',
+      'fruits',
+      'gname',
+      'namesilo',
+      'spaceship',
+      'test_marketplace',
+      'unstoppable',
+    ];
+    $registrars = [
+      'atom',
+      'dynadot',
+      'gname',
+      'godaddy',
+      'ionos',
+      'namebright',
+      'namecheap',
+      'namesilo',
+      'porkbun',
+      'spaceship',
+      'test_registrar',
+      'unstoppable',
+    ];
+    $expected = array_unique([...$marketplaces, ...$registrars]);
+    sort($expected);
+    $this->assertSame($expected, $ids);
     $this->assertEqualsCanonicalizing($marketplaces, $manager->getPluginIdsWith(MarketplaceInterface::class));
     $this->assertEqualsCanonicalizing($registrars, $manager->getPluginIdsWith(RegistrarInterface::class));
 
