@@ -9,11 +9,13 @@
         "jeremykendall/php-domain-parser": "^6.4"
     },
     "require-dev": {
+        "drupal/commerce_escrow": "^1",
         "drupal/commerce_exchanger": "^2",
         "drupal/commerce_pricelist": "^2.16",
-        "drush/drush": "^13"
+        "drush/drush": "^13 || ^14"
     },
     "suggest": {
+        "drupal/commerce_escrow": "To let buyers negotiate offers on Escrow.com (Commerce Domains Offers via Escrow.com).",
         "drupal/commerce_pricelist": "To give marketplaces their own prices, or prices in other currencies.",
         "drupal/commerce_exchanger": "To convert prices into the currencies marketplaces list in.",
         "drush/drush": "To review and push marketplace syncs with drush commerce-domains:marketplace-sync."
