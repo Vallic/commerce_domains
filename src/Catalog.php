@@ -46,12 +46,14 @@ class Catalog {
    *
    * @param string[]|null $names
    *   Normalized domain names to load, or NULL for the whole catalog.
+   * @param string|null $price_list
+   *   The UUID of a price list whose prices win for their currency.
    *
    * @return array<string, \Drupal\commerce_domains\CatalogItem>
    *   Items keyed by domain name. When several products share a name (an old
    *   listing and a relist), the one for sale wins.
    */
-  public function load(?array $names = NULL): array {
+  public function load(?array $names = NULL, ?string $price_list = NULL): array {
     $types = $this->productTypes();
     if ($names === [] || !$types) {
       return [];
@@ -74,13 +76,16 @@ class Catalog {
     foreach (array_chunk($ids, self::CHUNK_SIZE) as $chunk) {
       /** @var \Drupal\commerce_product\Entity\ProductInterface $product */
       foreach ($storage->loadMultiple($chunk) as $product) {
-        $item = $this->item($product, $registrars);
+        $item = $this->item($product, $registrars, $price_list);
         if ($item && (!isset($items[$item->name]) || (!$items[$item->name]->forSale && $item->forSale))) {
           $items[$item->name] = $item;
         }
       }
       $storage->resetCache($chunk);
       $this->entityTypeManager->getStorage('commerce_product_variation')->resetCache();
+      if ($price_list !== NULL && $this->entityTypeManager->hasDefinition('commerce_pricelist_item')) {
+        $this->entityTypeManager->getStorage('commerce_pricelist_item')->resetCache();
+      }
     }
     return $items;
   }
@@ -92,8 +97,10 @@ class Catalog {
    *   The domain product.
    * @param array<string, string|null> $registrars
    *   Plugin IDs keyed by provider ID.
+   * @param string|null $price_list
+   *   The UUID of a price list whose prices win for their currency.
    */
-  protected function item(ProductInterface $product, array $registrars): ?CatalogItem {
+  protected function item(ProductInterface $product, array $registrars, ?string $price_list): ?CatalogItem {
     $name = (string) $product->get('domain')->value ?: DomainName::normalize($product->getTitle());
     $variations = $product->getVariations();
     if ($name === '' || !$variations) {
@@ -117,12 +124,13 @@ class Catalog {
       title: $product->getTitle(),
       productId: (int) $product->id(),
       forSale: $for_sale,
-      prices: $this->priceResolver->prices($variation),
+      prices: $this->priceResolver->prices($variation, $price_list),
       registrar: $registrar,
       registrarPlugin: $registrar !== NULL ? ($registrars[$registrar] ?? NULL) : NULL,
       atomPremium: $product->hasField('atom_premium') && (bool) $product->get('atom_premium')->value,
       verified: (bool) $product->get('domain_verified')->value,
       description: $product->hasField('body') ? $product->get('body')->value : NULL,
+      terms: SaleTerms::fromVariation($variation),
     );
   }
 

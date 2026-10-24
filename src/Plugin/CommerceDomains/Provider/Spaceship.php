@@ -61,14 +61,14 @@ final class Spaceship extends MarketplacePluginBase implements RegistrarInterfac
    */
   public function buildListing(CatalogItem $item): ?array {
     $price = (int) round($item->price('USD') * $this->priceFactor($item));
-    if ($price <= 0) {
+    if ($price <= 0 || !$this->sells($item)) {
       return NULL;
     }
     return [
-      'binPriceEnabled' => TRUE,
+      'binPriceEnabled' => $item->terms->buyNow,
       'binPrice' => $price,
-      'minPriceEnabled' => TRUE,
-      'minPrice' => $item->atomPremium ? $price : $this->minimumOffer($price),
+      'minPriceEnabled' => $item->terms->offers,
+      'minPrice' => $this->minimumOfferFor($item, $price, $item->atomPremium ? $price : $this->minimumOffer($price)),
     ];
   }
 

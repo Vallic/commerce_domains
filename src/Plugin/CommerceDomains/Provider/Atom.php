@@ -77,8 +77,9 @@ final class Atom extends MarketplacePluginBase implements RegistrarInterface {
    * {@inheritdoc}
    */
   public function buildListing(CatalogItem $item): ?array {
+    // Standard listings have a price and nothing else.
     $price = (int) round($item->price('USD') * $this->priceFactor($item));
-    return $price > 0 ? ['selling_price' => $price] : NULL;
+    return $price > 0 && $item->terms->buyNow ? ['selling_price' => $price] : NULL;
   }
 
   /**

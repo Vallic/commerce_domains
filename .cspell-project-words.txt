@@ -30,6 +30,7 @@ namesilo
 nontransitional
 notatld
 porkbun
+pricelist
 purchas
 qian
 screenpoint

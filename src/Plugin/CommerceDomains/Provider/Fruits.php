@@ -57,7 +57,8 @@ final class Fruits extends MarketplacePluginBase {
    */
   public function buildListing(CatalogItem $item): ?array {
     $price = (int) round($item->price('EUR') * $this->priceFactor($item));
-    if ($price <= 0) {
+    // Listings have a price and nothing else.
+    if ($price <= 0 || !$item->terms->buyNow) {
       return NULL;
     }
     return [

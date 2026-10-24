@@ -1,6 +1,6 @@
 name: Commerce Domains Marketplace
 type: module
-description: 'Keeps domain listings on provider marketplaces (Afternic, Spaceship, Atom, fruits, Dynadot) in sync with the catalog.'
+description: 'Keeps domain listings on provider marketplaces in sync with the catalog.'
 package: Commerce (contrib)
 core_version_requirement: ^11.4
 php: 8.3

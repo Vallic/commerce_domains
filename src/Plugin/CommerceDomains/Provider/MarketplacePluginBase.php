@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_price\Price;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
@@ -140,6 +141,70 @@ abstract class MarketplacePluginBase extends ProviderPluginBase implements Marke
    */
   protected function minimumOffer(float $price): int {
     return $price < 10000 ? (int) ($price * 0.5) : (int) ($price * 0.25);
+  }
+
+  /**
+   * Returns whether the domain is sold at all: at its price, or by offers.
+   */
+  protected function sells(CatalogItem $item): bool {
+    return $item->terms->buyNow || $item->terms->offers;
+  }
+
+  /**
+   * Returns the minimum offer: the domain's own, or the marketplace's rule.
+   *
+   * @param \Drupal\commerce_domains\CatalogItem $item
+   *   The domain.
+   * @param int $price
+   *   The price here, after the price factor.
+   * @param int $rule
+   *   The minimum offer the marketplace would take at that price.
+   * @param string $currency
+   *   The currency the marketplace lists in.
+   */
+  protected function minimumOfferFor(CatalogItem $item, int $price, int $rule, string $currency = 'USD'): int {
+    return $this->termAmount($item, $item->terms->minimumOffer, $price, $currency) ?? $rule;
+  }
+
+  /**
+   * Returns the floor price: the domain's own, or the marketplace's rule.
+   *
+   * @param \Drupal\commerce_domains\CatalogItem $item
+   *   The domain.
+   * @param int $price
+   *   The price here, after the price factor.
+   * @param int $rule
+   *   The floor the marketplace would use at that price.
+   * @param string $currency
+   *   The currency the marketplace lists in.
+   */
+  protected function floorPriceFor(CatalogItem $item, int $price, int $rule, string $currency = 'USD'): int {
+    return $this->termAmount($item, $item->terms->floorPrice, $price, $currency) ?? $rule;
+  }
+
+  /**
+   * Returns the lease term: the domain's own, or the rule, within a cap.
+   *
+   * @return int
+   *   The longest lease in monthly payments; 0 for none, as one payment is no
+   *   lease.
+   */
+  protected function leaseMonthsFor(CatalogItem $item, int $rule, int $cap): int {
+    $months = min($item->terms->leaseMonths ?? $rule, $cap);
+    return $months >= 2 ? $months : 0;
+  }
+
+  /**
+   * Turns an amount from the domain's terms into whole units here.
+   *
+   * Raised by the price factor, like the price, and never above the price.
+   *
+   * @return int|null
+   *   The amount, or NULL when the domain sets none or it can't be converted.
+   */
+  private function termAmount(CatalogItem $item, ?Price $amount, int $price, string $currency): ?int {
+    $converted = $amount ? $item->amount($amount, $currency) : NULL;
+    return $converted === NULL ? NULL : min((int) ($converted * $this->priceFactor($item)), $price);
   }
 
   /**

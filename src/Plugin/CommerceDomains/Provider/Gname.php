@@ -61,7 +61,8 @@ final class Gname extends MarketplacePluginBase implements RegistrarInterface {
   public function buildListing(CatalogItem $item): ?array {
     // Whole dollars, with the cents dropped rather than rounded.
     $price = (int) ($item->price('USD') * $this->priceFactor($item));
-    if ($price <= 0) {
+    // Buy It Now has a price and nothing else.
+    if ($price <= 0 || !$item->terms->buyNow) {
       return NULL;
     }
     $ends = (new \DateTimeImmutable('+' . self::LISTING_DAYS . ' days', new \DateTimeZone(self::TIMEZONE)))->format('Y-m-d H:i:s');

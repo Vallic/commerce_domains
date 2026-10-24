@@ -30,6 +30,14 @@ final class MarketplaceSettings {
   }
 
   /**
+   * Returns the UUID of the price list whose prices this marketplace gets.
+   */
+  public static function priceList(ProviderInterface $provider): ?string {
+    $uuid = $provider->getThirdPartySetting(self::MODULE, 'price_list');
+    return is_string($uuid) && $uuid !== '' ? $uuid : NULL;
+  }
+
+  /**
    * Returns the provider's marketplace plugin.
    *
    * @throws \Drupal\commerce_domains\ProviderException

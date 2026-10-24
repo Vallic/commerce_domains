@@ -63,12 +63,12 @@ class CatalogTest extends DomainsKernelTestBase {
    * Tests that per-currency price fields win over the variation price.
    */
   public function testPrices(): void {
+    // Other price fields are the site's business, not a price here.
     $this->createDomain('a.com', 1299, [], ['field_price_eur' => new Price('1199', 'EUR')]);
-    $this->createDomain('b.com', 500);
     $items = $this->catalog->load();
-    $this->assertSame(['USD' => 1299.0, 'EUR' => 1199.0], $items['a.com']->prices);
-    $this->assertSame(1199.0, $items['a.com']->price('eur'));
-    $this->assertSame(0.0, $items['b.com']->price('EUR'), 'No euro price is zero.');
+    $this->assertSame(['USD' => 1299.0], $items['a.com']->prices);
+    $this->assertSame(1299.0, $items['a.com']->price('usd'));
+    $this->assertSame(0.0, $items['a.com']->price('EUR'), 'No euro price is zero.');
   }
 
   /**

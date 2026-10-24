@@ -37,6 +37,9 @@ final class Afternic extends MarketplacePluginBase {
   // Afternic rejects a minimum offer below $20.
   protected const MIN_OFFER_FLOOR = 20;
 
+  // The longest lease Afternic offers, in monthly payments.
+  protected const MAX_LEASE_MONTHS = 60;
+
   // Every setting the API lets us write. An upsert replaces the listing, so
   // the ones we don't manage (featured, displayName) are sent back unchanged.
   protected const WRITABLE_FIELDS = [
@@ -94,23 +97,31 @@ final class Afternic extends MarketplacePluginBase {
   public function buildListing(CatalogItem $item): ?array {
     $usd_price = $item->price('USD') * $this->priceFactor($item);
     $price = (int) round($usd_price);
-    if ($price <= 0) {
+    if ($price <= 0 || !$this->sells($item)) {
       return NULL;
     }
+    $buy_now = $item->terms->buyNow;
+    $offers = $item->terms->offers;
 
-    $min_offer = $item->atomPremium ? (int) ($usd_price * 0.8) : $this->minimumOffer($price);
-    $lease_months = $this->leaseMonths($price);
+    // Without offers, nothing below the price is taken, by bid or broker.
+    $min_offer = $offers ? $this->minimumOfferFor($item, $price, $item->atomPremium ? (int) ($usd_price * 0.8) : $this->minimumOffer($price)) : $price;
+    $floor = $offers ? $this->floorPriceFor($item, $price, (int) ($usd_price * 0.8)) : $price;
+    // Lease payments are worked out from the buy-now price.
+    $lease_months = $buy_now ? $this->leaseMonthsFor($item, $this->leaseMonths($price), self::MAX_LEASE_MONTHS) : 0;
 
     $listing = [
-      'buynowPrice' => $price * self::MICROS,
-      'floorPrice' => (int) ($usd_price * 0.8) * self::MICROS,
+      // Zero takes offers only.
+      'buynowPrice' => ($buy_now ? $price : 0) * self::MICROS,
+      'floorPrice' => $floor * self::MICROS,
       'minbidPrice' => max($min_offer, self::MIN_OFFER_FLOOR) * self::MICROS,
       'leasingEnabled' => $lease_months > 0,
       'landingPage' => 'SALES_TYPE',
       'intakeStyle' => 'CUSTOM_LANDER',
-      'showLanderBuynowOption' => TRUE,
+      'showLanderBuynowOption' => $buy_now,
       'showLanderLeaseToOwnOption' => $lease_months > 0,
-      'showLanderMakeOfferOption' => !$item->atomPremium && $price > 10000,
+      // Below $10,000, and for Atom premium names, the lander only offers the
+      // buy-now price.
+      'showLanderMakeOfferOption' => $offers && (!$buy_now || (!$item->atomPremium && $price > 10000)),
       'hidden' => FALSE,
     ];
     // The term only matters with leasing on; otherwise keep whatever is set.

@@ -18,7 +18,10 @@ services:
 
   Drupal\commerce_domains\Availability: ~
 
-  Drupal\commerce_domains\PriceResolver: ~
+  Drupal\commerce_domains\PriceResolver:
+    arguments:
+      # Commerce Exchanger is optional.
+      $exchanger: '@?commerce_exchanger.calculate'
 
   Drupal\commerce_domains\Catalog: ~
 

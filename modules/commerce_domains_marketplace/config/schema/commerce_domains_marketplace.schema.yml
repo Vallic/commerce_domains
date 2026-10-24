@@ -8,3 +8,6 @@ commerce_domains.provider.*.third_party.commerce_domains_marketplace:
     delete_unlisted:
       type: boolean
       label: 'Remove listings for domains no longer for sale'
+    price_list:
+      type: string
+      label: 'Price list UUID'

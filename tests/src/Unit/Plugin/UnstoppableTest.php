@@ -93,7 +93,7 @@ class UnstoppableTest extends ProviderTestBase {
     $this->assertNull($plugin->lockReason($listings['a.com']));
     $this->assertSame('pending', $plugin->lockReason($listings['b.com']));
     $this->assertSame([], $plugin->changedFields(['price' => 1299, 'minimum_offer' => 649], $listings['a.com']));
-    $this->assertSame(['price' => 2000, 'minimum_offer' => 1000], $plugin->buildListing(self::item('d.com', 2000)));
+    $this->assertSame(['price' => 2000, 'minimum_offer' => 1000, 'offers' => TRUE], $plugin->buildListing(self::item('d.com', 2000)));
   }
 
   /**

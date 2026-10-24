@@ -37,6 +37,7 @@ class DynadotTest extends ProviderTestBase {
   public function testBuildListing(): void {
     $plugin = $this->plugin(Dynadot::class, 'dynadot');
     $this->assertSame([
+      'listing_type' => 'buy_now_and_make_offer',
       'price' => 1363,
       'minimum_offer' => 681,
       'installment' => FALSE,
@@ -80,14 +81,16 @@ class DynadotTest extends ProviderTestBase {
     ]);
     $listings = $plugin->fetchListings(['a.com', 'b.com', 'c.com']);
     $this->assertSame([
-      'a.com' => ['price' => 1363, 'type' => 'BIN', 'pending_sale' => FALSE],
+      'a.com' => ['price' => 1363, 'type' => 'BIN', 'listing_type' => 'buy_now', 'pending_sale' => FALSE],
       // Listed but unreadable: unknown price, so the next push resets it.
-      'b.com' => ['price' => NULL, 'type' => NULL, 'pending_sale' => FALSE],
+      'b.com' => ['price' => NULL, 'type' => NULL, 'listing_type' => NULL, 'pending_sale' => FALSE],
     ], $listings);
     $this->assertCount(3, $this->history, 'Prices are only read for requested names that are for sale.');
 
-    $this->assertSame([], $plugin->changedFields(['price' => 1363, 'minimum_offer' => 1], $listings['a.com']), 'Only the reported price is compared.');
+    $wanted = ['listing_type' => 'buy_now', 'price' => 1363, 'minimum_offer' => 1];
+    $this->assertSame([], $plugin->changedFields($wanted, $listings['a.com']), 'Only the reported price and type are compared.');
     $this->assertSame(['price'], $plugin->changedFields(['price' => 1400], $listings['a.com']));
+    $this->assertSame(['listing_type'], $plugin->changedFields(['listing_type' => 'make_offer'], $listings['a.com']));
     $this->assertSame('pending sale', $plugin->lockReason(['pending_sale' => TRUE]));
     $this->assertNull($plugin->lockReason($listings['a.com']));
   }

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_marketplace\EventSubscriber;
 
 use Drupal\commerce_domains_marketplace\SyncScheduler;
+use Drupal\commerce_pricelist\Event\PriceListItemEvent;
 use Drupal\commerce_product\Entity\ProductInterface;
+use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\commerce_product\Event\ProductEvent;
 use Drupal\commerce_product\Event\ProductEvents;
 use Drupal\commerce_product\Event\ProductVariationEvent;
@@ -29,6 +31,10 @@ class CatalogSubscriber implements EventSubscriberInterface {
       ProductEvents::PRODUCT_VARIATION_INSERT => 'onVariationChange',
       ProductEvents::PRODUCT_VARIATION_UPDATE => 'onVariationChange',
       ProductEvents::PRODUCT_VARIATION_DELETE => 'onVariationChange',
+      // Price list items, by name: Commerce Pricelist is optional.
+      'commerce_pricelist.commerce_pricelist_item.insert' => 'onPriceListItemChange',
+      'commerce_pricelist.commerce_pricelist_item.update' => 'onPriceListItemChange',
+      'commerce_pricelist.commerce_pricelist_item.delete' => 'onPriceListItemChange',
     ];
   }
 
@@ -63,6 +69,19 @@ class CatalogSubscriber implements EventSubscriberInterface {
    */
   public function onVariationChange(ProductVariationEvent $event): void {
     if (($product = $event->getProductVariation()->getProduct()) && ($name = $this->domain($product))) {
+      $this->scheduler->changed($name);
+    }
+  }
+
+  /**
+   * Re-checks the domain of a changed price list item.
+   *
+   * Whether a marketplace uses that list is left to the sync, which only
+   * pushes what differs.
+   */
+  public function onPriceListItemChange(PriceListItemEvent $event): void {
+    $variation = $event->getPriceListItem()->getPurchasableEntity();
+    if ($variation instanceof ProductVariationInterface && ($product = $variation->getProduct()) && ($name = $this->domain($product))) {
       $this->scheduler->changed($name);
     }
   }

@@ -64,10 +64,15 @@ final class Unstoppable extends MarketplacePluginBase implements RegistrarInterf
     $usd_price = $item->price('USD') * $this->priceFactor($item);
     // Whole dollars, with the cents dropped rather than rounded.
     $price = (int) $usd_price;
-    if ($price <= 0) {
+    if ($price <= 0 || !$this->sells($item)) {
       return NULL;
     }
-    return ['price' => $price, 'minimum_offer' => $this->minimumOffer($usd_price)];
+    return [
+      // Zero takes offers only.
+      'price' => $item->terms->buyNow ? $price : 0,
+      'minimum_offer' => $this->minimumOfferFor($item, $price, $this->minimumOffer($usd_price)),
+      'offers' => $item->terms->offers,
+    ];
   }
 
   /**
@@ -124,7 +129,7 @@ final class Unstoppable extends MarketplacePluginBase implements RegistrarInterf
       $item = [
         'priceInCents' => $listing['price'] * 100,
         'listingSettings' => [
-          'isOfferFeatureEnabled' => TRUE,
+          'isOfferFeatureEnabled' => $listing['offers'] ?? TRUE,
           'minOfferAmountInCents' => $listing['minimum_offer'] * 100,
         ],
       ];

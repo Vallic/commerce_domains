@@ -11,6 +11,10 @@ it is held at, and the marketplaces it is listed on.
   `example` and `co.uk`), plus a registrar, an expiry date and an ownership
   flag. Titles must be registrable domain names.
 - **An Atom premium trait** for names Atom lists as premium.
+- **A sale terms trait** for variations: buy now, accept offers, minimum
+  offer, floor price and lease-to-own. Empty fields are worked out from the
+  price, the same way for every marketplace; each marketplace lists what it
+  supports, and one that only sells at a price skips offers-only names.
 - **Domain providers**: the companies domains are registered or listed with.
   A provider is a config entity with an optional API plugin. Without one it is
   just a registrar name; with one, the plugin's capabilities apply.
@@ -47,9 +51,17 @@ it is held at, and the marketplaces it is listed on.
 
 Stock comes from wherever the site keeps it: a variation counts as for sale
 when its product is published, it is active, and its `in_stock` field (as
-added by Commerce Escrow) is set when it has one. Prices are read per
-currency from the variation price and any other price field, so per-currency
-fields such as `field_price_eur` win for their currency.
+added by Commerce Escrow) is set when it has one.
+
+Marketplaces get the variation price. In other currencies, or to price a
+marketplace differently, choose a price list on the provider
+([Commerce Pricelist](https://www.drupal.org/project/commerce_pricelist)):
+its items win for their currency. The list needn't apply to a store, so a
+disabled list keeps marketplace prices off the storefront. Currencies with
+neither are converted at
+[Commerce Exchanger](https://www.drupal.org/project/commerce_exchanger)
+rates when it is installed. Amounts in the sale terms follow the price into
+other currencies.
 
 ## Requirements
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains;
 
+use Drupal\commerce_price\Price;
+
 /**
  * A domain in the catalog, as providers see it.
  */
@@ -25,6 +27,8 @@ final class CatalogItem {
     public readonly bool $atomPremium,
     public readonly bool $verified,
     public readonly ?string $description,
+    // How the domain is sold; see SaleTerms.
+    public readonly SaleTerms $terms = new SaleTerms(),
   ) {}
 
   /**
@@ -32,6 +36,26 @@ final class CatalogItem {
    */
   public function price(string $currency): float {
     return $this->prices[strtoupper($currency)] ?? 0.0;
+  }
+
+  /**
+   * Returns an amount, such as a minimum offer, in another currency.
+   *
+   * Amounts move with the price: a minimum offer of half the euro price is
+   * half the dollar price too.
+   *
+   * @return float|null
+   *   The amount, or NULL without prices in both currencies.
+   */
+  public function amount(Price $amount, string $currency): ?float {
+    $from = $amount->getCurrencyCode();
+    $number = (float) $amount->getNumber();
+    if ($from === strtoupper($currency)) {
+      return $number;
+    }
+    $base = $this->price($from);
+    $target = $this->price($currency);
+    return $base > 0 && $target > 0 ? $number * $target / $base : NULL;
   }
 
 }

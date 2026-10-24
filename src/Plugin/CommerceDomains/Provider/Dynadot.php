@@ -42,7 +42,7 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
   protected const MAX_INSTALLMENTS = 12;
 
   // The fields get_listing_item reports, so the only ones a sync can compare.
-  protected const REPORTED_FIELDS = ['price'];
+  protected const REPORTED_FIELDS = ['price', 'listing_type'];
 
   protected const MONEY_FIELDS = ['price', 'minimum_offer'];
 
@@ -98,14 +98,21 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
     $usd_price = $item->price('USD') * $this->priceFactor($item);
     // Whole dollars, with the cents dropped rather than rounded.
     $price = (int) $usd_price;
-    if ($price <= 0) {
+    if ($price <= 0 || !$this->sells($item)) {
       return NULL;
     }
+    $buy_now = $item->terms->buyNow;
+    $offers = $item->terms->offers;
     // Atom premium names get the same minimum offer as the rest here.
-    $min_offer = (int) ($price < 10000 ? $usd_price * 0.5 : $usd_price * 0.25);
-    $installments = $this->leaseMonths($usd_price, self::MAX_INSTALLMENTS);
+    $min_offer = $offers ? $this->minimumOfferFor($item, $price, (int) ($price < 10000 ? $usd_price * 0.5 : $usd_price * 0.25)) : $price;
+    $installments = $buy_now ? $this->leaseMonthsFor($item, $this->leaseMonths($usd_price, self::MAX_INSTALLMENTS), self::MAX_INSTALLMENTS) : 0;
 
     $listing = [
+      'listing_type' => match (TRUE) {
+        !$offers => 'buy_now',
+        !$buy_now => 'make_offer',
+        default => 'buy_now_and_make_offer',
+      },
       'price' => $price,
       'minimum_offer' => $min_offer,
       'installment' => $installments > 0,
@@ -146,6 +153,7 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
         // Unknown when the listing can't be read, so the next push resets it.
         'price' => is_numeric($price) ? self::number($price) : NULL,
         'type' => $listing['Type'] ?? NULL,
+        'listing_type' => self::listingType($listing['Type'] ?? NULL),
         'pending_sale' => strtolower((string) ($listing['PendingSaleLocked'] ?? '')) === 'yes',
       ];
     }
@@ -215,12 +223,31 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
     return $client->eachDomain(array_keys($listings), function (string $name) use ($client, $listings): void {
       $listing = $listings[$name];
       $client->setForSale($name, [
-        'listing_type' => 'buy_now_and_make_offer',
+        'listing_type' => $listing['listing_type'] ?? 'buy_now_and_make_offer',
         'price' => $listing['price'],
         'minimum_offer' => $listing['minimum_offer'],
         'installment' => $listing['installment'] ? 'Yes' : 'No',
       ] + array_intersect_key($listing, array_flip(['maximum_installments', 'category', 'description'])));
     });
+  }
+
+  /**
+   * Maps the type Dynadot reports to the listing type it takes.
+   *
+   * Single listings say "Buy Now + Make Offer"; lists say BIN or MAKE_OFFER.
+   */
+  protected static function listingType(mixed $type): ?string {
+    if (!is_string($type) || $type === '') {
+      return NULL;
+    }
+    $buy_now = (bool) preg_match('/buy\s*now|\bbin\b/i', $type);
+    $offers = (bool) preg_match('/offer/i', $type);
+    return match (TRUE) {
+      $buy_now && $offers => 'buy_now_and_make_offer',
+      $offers => 'make_offer',
+      $buy_now => 'buy_now',
+      default => NULL,
+    };
   }
 
   /**

@@ -44,7 +44,7 @@ class MarketplaceSync {
     }
 
     $plan = new SyncPlan();
-    $items = $this->catalog->load($names);
+    $items = $this->catalog->load($names, MarketplaceSettings::priceList($provider));
     $plan->current = $plugin->fetchListings($names);
 
     // Domains the plugin leaves to the provider count as unknown names.

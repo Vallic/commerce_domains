@@ -62,13 +62,16 @@ final class NameSilo extends MarketplacePluginBase implements RegistrarInterface
     $usd_price = $item->price('USD') * $this->priceFactor($item);
     // Whole dollars, with the cents dropped rather than rounded.
     $price = (int) $usd_price;
-    if ($price <= 0) {
+    if ($price <= 0 || !$this->sells($item)) {
       return NULL;
     }
+    $buy_now = $item->terms->buyNow;
     $listing = [
-      'buy_now' => $price,
-      'reserve' => $this->minimumOffer($usd_price),
-      'payment_plan_months' => $this->leaseMonths($usd_price, self::MAX_PAYMENT_MONTHS),
+      // Zero takes offers only.
+      'buy_now' => $buy_now ? $price : 0,
+      // Without offers, the reserve is the price.
+      'reserve' => $item->terms->offers ? $this->minimumOfferFor($item, $price, $this->minimumOffer($usd_price)) : $price,
+      'payment_plan_months' => $buy_now ? $this->leaseMonthsFor($item, $this->leaseMonths($usd_price, self::MAX_PAYMENT_MONTHS), self::MAX_PAYMENT_MONTHS) : 0,
     ];
     if ($description = trim((string) $item->description)) {
       $listing['description'] = $description;
