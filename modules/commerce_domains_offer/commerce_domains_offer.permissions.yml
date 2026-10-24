@@ -1,0 +1,8 @@
+make domain offers:
+  title: 'Make offers on domains'
+  description: 'Shows the offer form on domains that take offers.'
+
+administer domain offers:
+  title: 'Administer domain offers'
+  description: 'Answer offers: accept, decline or counter them, which creates orders at the agreed price.'
+  restrict access: true

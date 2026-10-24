@@ -1,0 +1,12 @@
+entity.commerce_domains_offer.collection:
+  title: 'Domain offers'
+  description: 'Answer the offers buyers make on domains.'
+  route_name: entity.commerce_domains_offer.collection
+  parent: commerce.admin_commerce
+  weight: 5
+
+commerce_domains_offer.settings:
+  title: 'Domain offers'
+  description: 'How long offers stay open, and who is told about new ones.'
+  route_name: commerce_domains_offer.settings
+  parent: commerce.configuration

@@ -1,0 +1,38 @@
+commerce_domains_offer_default:
+  id: commerce_domains_offer_default
+  group: commerce_domains_offer
+  label: 'Default'
+  states:
+    pending:
+      label: 'Pending'
+    countered:
+      label: 'Countered'
+    accepted:
+      label: 'Accepted'
+    purchased:
+      label: 'Purchased'
+    declined:
+      label: 'Declined'
+    expired:
+      label: 'Expired'
+  transitions:
+    counter:
+      label: 'Counter'
+      from: [pending, countered]
+      to: countered
+    accept:
+      label: 'Accept'
+      from: [pending, countered]
+      to: accepted
+    decline:
+      label: 'Decline'
+      from: [pending, countered]
+      to: declined
+    purchase:
+      label: 'Purchase'
+      from: [accepted]
+      to: purchased
+    expire:
+      label: 'Expire'
+      from: [pending, countered, accepted]
+      to: expired

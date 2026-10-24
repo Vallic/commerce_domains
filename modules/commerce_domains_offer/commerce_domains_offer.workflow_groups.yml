@@ -1,0 +1,3 @@
+commerce_domains_offer:
+  label: 'Domain offer'
+  entity_type: commerce_domains_offer

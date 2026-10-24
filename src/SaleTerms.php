@@ -30,6 +30,16 @@ final class SaleTerms {
   ) {}
 
   /**
+   * Returns the minimum offer worked out from a price.
+   *
+   * Half the price below 10,000, a quarter above: the rule for domains whose
+   * terms set no minimum, on the site and on marketplaces.
+   */
+  public static function defaultMinimumOffer(float $price): float {
+    return $price < 10000 ? $price * 0.5 : $price * 0.25;
+  }
+
+  /**
    * Reads the terms of a variation.
    */
   public static function fromVariation(ProductVariationInterface $variation): self {

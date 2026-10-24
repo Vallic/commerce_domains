@@ -1,0 +1,17 @@
+services:
+  _defaults:
+    autowire: true
+
+  logger.channel.commerce_domains_offer:
+    parent: logger.channel_base
+    arguments: ['commerce_domains_offer']
+
+  Drupal\commerce_domains_offer\OfferPolicy: ~
+
+  Drupal\commerce_domains_offer\OfferManager:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_offer'
+
+  Drupal\commerce_domains_offer\EventSubscriber\OrderSubscriber:
+    tags:
+      - { name: event_subscriber }

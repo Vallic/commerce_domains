@@ -122,6 +122,25 @@ drush cdrs dynadot --fix-registrar
 Turn on *Refresh registration details daily* on the provider to have cron do
 the update once a day.
 
+## Offers
+
+Commerce Domains Offers (submodule) lets buyers make offers on the site:
+
+1. Place the *Domain offer form* block on product pages, and grant *Make
+   offers on domains* to the roles that may use it. The form only shows on
+   domains that are for sale and whose sale terms accept offers, and offers
+   start at the domain's minimum offer, in the currency the buyer sees.
+2. Answer offers at *Commerce → Domain offers*: accept, decline or counter.
+   The buyer gets an email with a link to answer a counter-offer, no account
+   needed.
+3. Accepting creates a draft order for the domain at the agreed amount; the
+   buyer pays it through checkout from the link in their email. Placing the
+   order marks the offer purchased. Offers nobody answers or pays expire
+   after 14 days, which *Commerce → Configuration → Domain offers* changes.
+
+Sites add their own rules, such as no offers below a price, by subscribing
+to `OfferAllowedEvent`.
+
 ## Adding a provider
 
 Write a plugin in `src/Plugin/CommerceDomains/Provider` with the

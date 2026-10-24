@@ -1,0 +1,12 @@
+name: Commerce Domains Offers
+type: module
+description: 'Lets buyers make offers on domains, and turns accepted offers into orders at the agreed price.'
+package: Commerce (contrib)
+core_version_requirement: ^11.4
+php: 8.3
+configure: commerce_domains_offer.settings
+dependencies:
+  - commerce:commerce_cart
+  - commerce:commerce_checkout
+  - commerce_domains:commerce_domains
+  - state_machine:state_machine

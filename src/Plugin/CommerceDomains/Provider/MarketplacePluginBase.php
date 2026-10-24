@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_price\Price;
 use Drupal\Core\Form\FormStateInterface;
 
@@ -140,7 +141,7 @@ abstract class MarketplacePluginBase extends ProviderPluginBase implements Marke
    * premium names differently, so plugins handle those themselves.
    */
   protected function minimumOffer(float $price): int {
-    return $price < 10000 ? (int) ($price * 0.5) : (int) ($price * 0.25);
+    return (int) SaleTerms::defaultMinimumOffer($price);
   }
 
   /**
