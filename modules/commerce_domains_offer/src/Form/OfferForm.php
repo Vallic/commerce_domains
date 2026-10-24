@@ -9,8 +9,6 @@ use Drupal\commerce_domains_offer\OfferManager;
 use Drupal\commerce_domains_offer\OfferPolicy;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
-use Drupal\commerce_store\CurrentStoreInterface;
-use Drupal\commerce_store\Entity\StoreInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Flood\FloodInterface;
 use Drupal\Core\Form\FormBase;
@@ -28,12 +26,15 @@ final class OfferForm extends FormBase {
   // Offers one visitor may make in an hour, to keep spam down.
   protected const FLOOD_LIMIT = 5;
 
-  protected const FLOOD_EVENT = 'commerce_domains_offer.submit';
+  public const FLOOD_EVENT = 'commerce_domains_offer.submit';
+
+  // Set in form state by an integration that takes the offer to another
+  // channel: the amount is then optional, and the form records nothing.
+  public const ELSEWHERE = 'commerce_domains_offer_elsewhere';
 
   public function __construct(
     protected OfferPolicy $offerPolicy,
     protected OfferManager $offerManager,
-    protected CurrentStoreInterface $currentStore,
     protected FloodInterface $flood,
     protected EntityTypeManagerInterface $entityTypeManager,
   ) {}
@@ -45,7 +46,6 @@ final class OfferForm extends FormBase {
     return new static(
       $container->get(OfferPolicy::class),
       $container->get(OfferManager::class),
-      $container->get('commerce_store.current_store'),
       $container->get('flood'),
       $container->get('entity_type.manager'),
     );
@@ -62,7 +62,7 @@ final class OfferForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state, ?ProductVariationInterface $variation = NULL): array {
-    $store = $variation ? $this->store($variation) : NULL;
+    $store = $variation ? $this->offerPolicy->store($variation) : NULL;
     $price = $store && $this->offerPolicy->allows($variation) ? $this->offerPolicy->price($variation, new Context($this->currentUser(), $store)) : NULL;
     if (!$price) {
       return $form;
@@ -125,6 +125,13 @@ final class OfferForm extends FormBase {
       $form_state->setErrorByName('', $this->t('This domain no longer takes offers.'));
       return;
     }
+    if ($form_state->get(self::ELSEWHERE)) {
+      return;
+    }
+    if ((string) $form_state->getValue('amount') === '') {
+      $form_state->setErrorByName('amount', $this->t('Enter your offer.'));
+      return;
+    }
     $amount = (float) $form_state->getValue('amount');
     $minimum = (float) $form_state->get('minimum');
     if ($amount < $minimum) {
@@ -140,7 +147,7 @@ final class OfferForm extends FormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state): void {
     $variation = $this->variation($form_state);
-    if (!$variation) {
+    if (!$variation || $form_state->get(self::ELSEWHERE)) {
       return;
     }
     $this->flood->register(self::FLOOD_EVENT);
@@ -150,7 +157,7 @@ final class OfferForm extends FormBase {
       'name' => $form_state->getValue('name'),
       'phone' => $form_state->getValue('phone'),
       'message' => $form_state->getValue('message'),
-    ], $this->currentUser(), $this->store($variation));
+    ], $this->currentUser(), $this->offerPolicy->store($variation));
     $this->messenger()->addStatus($this->t('Thank you, your offer for @domain has been sent. We will answer by email at @mail.', [
       '@domain' => $offer->getDomain(),
       '@mail' => $offer->getEmail(),
@@ -164,22 +171,6 @@ final class OfferForm extends FormBase {
     $id = $form_state->get('variation');
     $variation = $id ? $this->entityTypeManager->getStorage('commerce_product_variation')->load($id) : NULL;
     return $variation instanceof ProductVariationInterface ? $variation : NULL;
-  }
-
-  /**
-   * Returns the store the buyer shops in.
-   *
-   * The current store when it sells the domain, otherwise the domain's first.
-   */
-  protected function store(ProductVariationInterface $variation): StoreInterface {
-    $stores = $variation->getProduct()?->getStores() ?? [];
-    $current = $this->currentStore->getStore();
-    foreach ($stores as $store) {
-      if ($store->id() === $current->id()) {
-        return $current;
-      }
-    }
-    return $stores ? reset($stores) : $current;
   }
 
 }

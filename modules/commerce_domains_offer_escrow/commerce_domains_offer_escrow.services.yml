@@ -1,0 +1,15 @@
+services:
+  _defaults:
+    autowire: true
+
+  logger.channel.commerce_domains_offer_escrow:
+    parent: logger.channel_base
+    arguments: ['commerce_domains_offer_escrow']
+
+  Drupal\commerce_domains_offer_escrow\EscrowOfferStarter:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_offer_escrow'
+
+  Drupal\commerce_domains_offer_escrow\EventSubscriber\EscrowOfferSubscriber:
+    tags:
+      - { name: event_subscriber }

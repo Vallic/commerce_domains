@@ -52,8 +52,11 @@ class OfferManager {
    *   The buyer's account; anonymous for buyers without one.
    * @param \Drupal\commerce_store\Entity\StoreInterface|null $store
    *   The store the offer was made in.
+   * @param string $source
+   *   Where the offer is negotiated. The buyer only gets the site's
+   *   confirmation for offers made on the site; channels send their own.
    */
-  public function submit(ProductVariationInterface $variation, Price $amount, array $buyer, AccountInterface $account, ?StoreInterface $store = NULL): OfferInterface {
+  public function submit(ProductVariationInterface $variation, ?Price $amount, array $buyer, AccountInterface $account, ?StoreInterface $store = NULL, string $source = OfferInterface::SOURCE_SITE): OfferInterface {
     /** @var \Drupal\commerce_domains_offer\Entity\OfferInterface $offer */
     $offer = $this->entityTypeManager->getStorage('commerce_domains_offer')->create([
       'variation' => $variation,
@@ -64,9 +67,12 @@ class OfferManager {
       'name' => $buyer['name'] ?? '',
       'phone' => $buyer['phone'] ?? '',
       'message' => $buyer['message'] ?? '',
+      'source' => $source,
     ]);
     $offer->save();
-    $this->notifyBuyer($offer, 'received');
+    if ($source === OfferInterface::SOURCE_SITE) {
+      $this->notifyBuyer($offer, 'received');
+    }
     $this->notifySeller($offer, 'new_offer');
     return $offer;
   }
@@ -142,8 +148,10 @@ class OfferManager {
       return 0;
     }
     $storage = $this->entityTypeManager->getStorage('commerce_domains_offer');
+    // Offers negotiated elsewhere end there.
     $ids = $storage->getQuery()->accessCheck(FALSE)
       ->condition('state', ['pending', 'countered', 'accepted'], 'IN')
+      ->condition('source', OfferInterface::SOURCE_SITE)
       ->condition('changed', $this->time->getRequestTime() - $days * 86400, '<')
       ->execute();
     /** @var \Drupal\commerce_domains_offer\Entity\OfferInterface $offer */

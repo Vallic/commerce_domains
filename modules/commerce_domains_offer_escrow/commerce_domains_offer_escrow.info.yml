@@ -1,0 +1,9 @@
+name: Commerce Domains Offers via Escrow.com
+type: module
+description: 'Lets buyers negotiate their offer on Escrow.com (Escrow Offer), and follows the negotiation on the offer.'
+package: Commerce (contrib)
+core_version_requirement: ^11.4
+php: 8.3
+dependencies:
+  - commerce_domains:commerce_domains_offer
+  - commerce_escrow:commerce_escrow

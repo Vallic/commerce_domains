@@ -75,6 +75,10 @@ final class OfferBuyerForm extends FormBase {
       'declined' => $this->t('This offer was declined.'),
       default => $this->t('This offer has expired.'),
     };
+    $elsewhere = $offer->getSource() !== OfferInterface::SOURCE_SITE;
+    if ($elsewhere && in_array($offer->getState()->getId(), ['pending', 'accepted'], TRUE)) {
+      $status = $this->t('This offer is negotiated on @channel.', ['@channel' => $offer->getSource()]);
+    }
     $form['status'] = ['#markup' => '<p>' . $status . '</p>'];
 
     $form['actions'] = ['#type' => 'actions'];
@@ -91,7 +95,7 @@ final class OfferBuyerForm extends FormBase {
         '#submit' => ['::decline'],
       ];
     }
-    elseif ($offer->getState()->getId() === 'accepted' && $offer->getOrder()?->getState()->getId() === 'draft') {
+    elseif ($offer->getSource() === OfferInterface::SOURCE_SITE && $offer->getState()->getId() === 'accepted' && $offer->getOrder()?->getState()->getId() === 'draft') {
       $form['actions']['pay'] = [
         '#type' => 'submit',
         '#value' => $this->t('Pay @agreed', $args),

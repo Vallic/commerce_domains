@@ -22,6 +22,9 @@ use Drupal\user\EntityOwnerInterface;
  */
 interface OfferInterface extends ContentEntityInterface, EntityChangedInterface, EntityOwnerInterface {
 
+  // Offers made through the site's offer form.
+  public const SOURCE_SITE = 'site';
+
   /**
    * Returns the variation the offer is for.
    */
@@ -38,7 +41,14 @@ interface OfferInterface extends ContentEntityInterface, EntityChangedInterface,
   public function getStore(): ?StoreInterface;
 
   /**
-   * Returns the amount the buyer offered.
+   * Returns where the offer was made: "site", or a channel like "escrow".
+   *
+   * Offers made elsewhere are negotiated there; the site only follows them.
+   */
+  public function getSource(): string;
+
+  /**
+   * Returns the amount the buyer offered, if they named one.
    */
   public function getAmount(): ?Price;
 

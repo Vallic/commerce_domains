@@ -73,6 +73,12 @@ final class OfferAdminForm extends FormBase {
     ];
 
     $state = $offer->getState()->getId();
+    if ($offer->getSource() !== OfferInterface::SOURCE_SITE) {
+      $form['elsewhere'] = [
+        '#markup' => '<p>' . $this->t('This offer is negotiated on @channel; answer it there. Its state here follows the order.', ['@channel' => $offer->getSource()]) . '</p>',
+      ];
+      return $form;
+    }
     if (!in_array($state, ['pending', 'countered'], TRUE)) {
       return $form;
     }

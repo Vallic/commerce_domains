@@ -12,6 +12,8 @@ use Drupal\commerce_price\Price;
 use Drupal\commerce_price\Resolver\ChainPriceResolverInterface;
 use Drupal\commerce_price\RounderInterface;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
+use Drupal\commerce_store\CurrentStoreInterface;
+use Drupal\commerce_store\Entity\StoreInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -24,7 +26,24 @@ class OfferPolicy {
     protected EventDispatcherInterface $eventDispatcher,
     protected ChainPriceResolverInterface $chainPriceResolver,
     protected RounderInterface $rounder,
+    protected CurrentStoreInterface $currentStore,
   ) {}
+
+  /**
+   * Returns the store a buyer makes an offer in.
+   *
+   * The current store when it sells the domain, otherwise the domain's first.
+   */
+  public function store(ProductVariationInterface $variation): StoreInterface {
+    $current = $this->currentStore->getStore();
+    $stores = $variation->getProduct()?->getStores() ?? [];
+    foreach ($stores as $store) {
+      if ($store->id() === $current->id()) {
+        return $current;
+      }
+    }
+    return $stores ? reset($stores) : $current;
+  }
 
   /**
    * Returns whether a domain takes offers on the site.

@@ -141,6 +141,15 @@ Commerce Domains Offers (submodule) lets buyers make offers on the site:
 Sites add their own rules, such as no offers below a price, by subscribing
 to `OfferAllowedEvent`.
 
+Commerce Domains Offers via Escrow.com (submodule, needs
+[Commerce Escrow](https://www.drupal.org/project/commerce_escrow)) adds a
+*Negotiate on Escrow.com* choice to the form, for prices in USD, EUR, GBP,
+AUD or CAD while an Escrow Offer gateway is enabled. The buyer goes on to
+Escrow.com to make the offer, and the negotiation, payment and transfer run
+there; the offer on the site follows Escrow.com's webhooks to accepted,
+purchased or declined, and doesn't expire on the site. Choose the gateway,
+and whether the choice starts ticked, on the offer settings page.
+
 ## Adding a provider
 
 Write a plugin in `src/Plugin/CommerceDomains/Provider` with the

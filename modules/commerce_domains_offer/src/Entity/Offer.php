@@ -87,6 +87,13 @@ class Offer extends ContentEntityBase implements OfferInterface {
   /**
    * {@inheritdoc}
    */
+  public function getSource(): string {
+    return (string) $this->get('source')->value ?: OfferInterface::SOURCE_SITE;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getAmount(): ?Price {
     return $this->price('amount');
   }
@@ -211,9 +218,15 @@ class Offer extends ContentEntityBase implements OfferInterface {
       ->setLabel(new TranslatableMarkup('Store'))
       ->setSetting('target_type', 'commerce_store');
 
+    $fields['source'] = BaseFieldDefinition::create('string')
+      ->setLabel(new TranslatableMarkup('Made on'))
+      ->setDescription(new TranslatableMarkup('"site", or the channel the offer is negotiated on, such as "escrow".'))
+      ->setSetting('max_length', 32)
+      ->setDefaultValue(OfferInterface::SOURCE_SITE);
+
+    // Empty for offers negotiated elsewhere until they settle.
     $fields['amount'] = BaseFieldDefinition::create('commerce_price')
-      ->setLabel(new TranslatableMarkup('Offer'))
-      ->setRequired(TRUE);
+      ->setLabel(new TranslatableMarkup('Offer'));
 
     $fields['counter_amount'] = BaseFieldDefinition::create('commerce_price')
       ->setLabel(new TranslatableMarkup('Counter-offer'));

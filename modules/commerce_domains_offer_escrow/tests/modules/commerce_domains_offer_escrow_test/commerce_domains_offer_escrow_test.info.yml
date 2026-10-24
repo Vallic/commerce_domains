@@ -1,0 +1,7 @@
+name: Commerce Domains Offers via Escrow.com test
+type: module
+description: 'An Escrow Offer gateway that answers without calling Escrow.com.'
+package: Testing
+core_version_requirement: ^11.4
+dependencies:
+  - commerce_escrow:commerce_escrow
