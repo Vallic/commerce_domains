@@ -11,3 +11,31 @@ commerce_domains.provider.*.third_party.commerce_domains_marketplace:
     price_list:
       type: string
       label: 'Price list UUID'
+
+views.field.commerce_domains_listing_provider:
+  type: views_field
+  label: 'Listing marketplace'
+
+views.field.commerce_domains_listing_status:
+  type: views_field
+  label: 'Listing status'
+
+views.field.commerce_domains_listing_summary:
+  type: views_field
+  label: 'Listing settings'
+
+views.field.commerce_domains_product_listings:
+  type: views_field
+  label: 'Marketplace listings'
+
+views.field.commerce_domains_registrar_check:
+  type: views_field
+  label: 'Registrar check'
+
+views.filter.commerce_domains_listing_provider:
+  type: views.filter.in_operator
+  label: 'Provider'
+
+views.filter.commerce_domains_listing_status:
+  type: views.filter.in_operator
+  label: 'Listing status'

@@ -13,18 +13,22 @@ use Psr\Log\LoggerInterface;
 /**
  * Brings a provider's marketplace listings in line with the catalog.
  *
- * Nothing is stored about earlier pushes: every sync reads both sides and
- * sends the difference, so a failed or skipped run is fixed by the next one.
+ * Every sync reads both sides and sends the difference, so a failed or
+ * skipped run is fixed by the next one. What each check found and each push
+ * did is recorded for people, but never read back.
  */
 class MarketplaceSync {
 
   public function __construct(
     protected Catalog $catalog,
     protected LoggerInterface $logger,
+    protected ListingRecorder $recorder,
   ) {}
 
   /**
-   * Works out what a sync would change, without changing anything.
+   * Works out what a sync would change, without changing the marketplace.
+   *
+   * What it found is recorded for the domain overview.
    *
    * @param \Drupal\commerce_domains\Entity\ProviderInterface $provider
    *   A provider with a marketplace.
@@ -44,21 +48,29 @@ class MarketplaceSync {
     }
 
     $plan = new SyncPlan();
+    $plan->full = $names === NULL;
     $items = $this->catalog->load($names, MarketplaceSettings::priceList($provider));
     $plan->current = $plugin->fetchListings($names);
+    $plan->catalog = array_map(fn($item) => $item->productId, $items);
 
     // Domains the plugin leaves to the provider count as unknown names.
     $managed = array_filter($items, $plugin->manages(...));
+    $plan->managed = array_map('strval', array_keys($managed));
     foreach ($managed as $name => $item) {
       $plan->forSale += (int) $item->forSale;
       $wanted = $item->forSale ? $plugin->buildListing($item) : NULL;
+      if ($wanted !== NULL) {
+        $plan->wanted[$name] = $wanted;
+      }
       $this->planOne($plan, $plugin, $name, $wanted);
     }
-    foreach (array_diff($removed, array_keys($items)) as $name) {
+    $plan->removed = array_values(array_diff($removed, array_keys($items)));
+    foreach ($plan->removed as $name) {
       $this->planOne($plan, $plugin, $name, NULL);
     }
 
     $plan->unmanaged = array_keys(array_diff_key($plan->current, $managed, array_flip($removed)));
+    $this->recorder->recordCheck($provider, $plan);
     return $plan;
   }
 
@@ -78,12 +90,25 @@ class MarketplaceSync {
     $deletes = MarketplaceSettings::deletesUnlisted($provider);
 
     $errors = [];
-    if ($listings = $plan->create + $plan->update) {
-      $errors += $plugin->saveListings($listings, $plan->current);
+    $listings = $plan->create + $plan->update;
+    $removals = $deletes ? $plan->delete : [];
+    try {
+      if ($listings) {
+        $errors += $plugin->saveListings($listings, $plan->current);
+      }
+      // Saved listings stay recorded as pushed if the removals fail.
+      $listings = [];
+      if ($removals) {
+        $errors += $plugin->deleteListings($removals);
+      }
     }
-    if ($plan->delete && $deletes) {
-      $errors += $plugin->deleteListings($plan->delete);
+    catch (ProviderException $e) {
+      // What the failed call was sending is recorded as failed with it.
+      $failed = array_fill_keys([...array_keys($listings), ...$removals], $e->getMessage());
+      $this->recorder->recordPush($provider, $plan, $errors + $failed, $deletes);
+      throw $e;
     }
+    $this->recorder->recordPush($provider, $plan, $errors, $deletes);
 
     foreach ($errors as $name => $error) {
       $this->logger->warning('@provider rejected @domain: @error', [

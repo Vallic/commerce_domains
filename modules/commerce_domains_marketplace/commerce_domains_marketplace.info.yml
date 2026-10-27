@@ -1,6 +1,6 @@
 name: Commerce Domains Marketplace
 type: module
-description: 'Keeps domain listings on provider marketplaces in sync with the catalog.'
+description: 'Keeps domain listings on provider marketplaces in sync with the catalog, and exports the CSV files they import.'
 package: Commerce (contrib)
 core_version_requirement: ^11.4
 php: 8.3

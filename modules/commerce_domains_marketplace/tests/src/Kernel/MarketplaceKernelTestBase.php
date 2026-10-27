@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains_marketplace\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains_marketplace\ListingRecorder;
 use Drupal\Tests\commerce_domains\Kernel\DomainsKernelTestBase;
 
 /**
@@ -17,6 +18,14 @@ abstract class MarketplaceKernelTestBase extends DomainsKernelTestBase {
    * {@inheritdoc}
    */
   protected static $modules = ['commerce_domains_marketplace'];
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function setUp(): void {
+    parent::setUp();
+    $this->installSchema('commerce_domains_marketplace', [ListingRecorder::TABLE]);
+  }
 
   /**
    * Creates a provider on the test marketplace.

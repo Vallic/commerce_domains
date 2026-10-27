@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains;
 
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
@@ -36,6 +37,7 @@ class ProviderListBuilder extends ConfigEntityListBuilder {
     // Capability interfaces and how the list names them.
     $names = [
       MarketplaceInterface::class => $this->t('Marketplace'),
+      CsvExportInterface::class => $this->t('CSV export'),
       RegistrarInterface::class => $this->t('Registrar'),
       DomainManagementInterface::class => $this->t('Domain management'),
     ];

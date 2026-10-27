@@ -97,7 +97,13 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
    * Tests sorting the account into the plan's buckets.
    */
   public function testPlan(): void {
+    $this->assertNull($this->sync->lastCheck('gname'), 'Never read.');
     $plan = $this->sync->plan($this->createProvider());
+    // A read of the whole account is recorded, for the domain overview.
+    $check = $this->sync->lastCheck('reg');
+    $this->assertIsArray($check);
+    $this->assertSame(['gone.com'], $check['missing']);
+    $this->assertEqualsWithDelta($this->container->get('datetime.time')->getCurrentTime(), $check['time'], 5);
     $this->assertSame(['renewed.com' => [self::NEXT_YEAR, self::LATER]], $plan->expires);
     $this->assertSame(1, $plan->unchanged);
     $this->assertSame(['gone.com'], $plan->missing);
@@ -111,6 +117,7 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $this->assertSame(['renewed.com'], array_keys($few->expires));
     $this->assertSame([], $few->missing, 'Names that were not asked about are not missing.');
     $this->assertSame(['parked.com'], $few->unknown);
+    $this->assertSame($check, $this->sync->lastCheck('reg'), 'Reading a few names is no whole check.');
   }
 
   /**
@@ -191,8 +198,8 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     Provider::create(['id' => 'afternic', 'label' => 'Afternic', 'plugin' => 'afternic'])->save();
 
     $rows = $this->entityTypeManager->getListBuilder('commerce_domains_provider')->render()['table']['#rows'];
-    $this->assertSame('Marketplace, Registrar, Domain management', (string) $rows['dynadot']['capabilities']);
-    $this->assertSame('Marketplace', (string) $rows['afternic']['capabilities']);
+    $this->assertSame('Marketplace, CSV export, Registrar, Domain management', (string) $rows['dynadot']['capabilities']);
+    $this->assertSame('Marketplace, CSV export', (string) $rows['afternic']['capabilities']);
     $this->assertSame('Registrar', (string) $rows['reg']['capabilities']);
 
     $form_builder = $this->container->get('entity.form_builder');

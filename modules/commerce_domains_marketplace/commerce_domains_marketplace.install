@@ -1,0 +1,38 @@
+<?php
+
+/**
+ * @file
+ * Install and update hooks for Commerce Domains Marketplace.
+ */
+
+declare(strict_types=1);
+
+use Drupal\Core\Config\FileStorage;
+use Drupal\Core\Config\InstallStorage;
+use Drupal\commerce_domains_marketplace\ListingRecorder;
+
+/**
+ * Implements hook_schema().
+ */
+function commerce_domains_marketplace_schema(): array {
+  return [ListingRecorder::TABLE => ListingRecorder::schema()];
+}
+
+/**
+ * Adds the table that records each domain's listing on each marketplace.
+ */
+function commerce_domains_marketplace_update_11001(): void {
+  $schema = \Drupal::database()->schema();
+  if (!$schema->tableExists(ListingRecorder::TABLE)) {
+    $schema->createTable(ListingRecorder::TABLE, ListingRecorder::schema());
+  }
+}
+
+/**
+ * Adds the domain overview and the marketplace listings report.
+ */
+function commerce_domains_marketplace_update_11002(): void {
+  $path = \Drupal::service('extension.list.module')->getPath('commerce_domains_marketplace');
+  // Installs each view whose dependencies the site has, e.g. Views itself.
+  \Drupal::service('config.installer')->installOptionalConfig(new FileStorage($path . '/' . InstallStorage::CONFIG_OPTIONAL_DIRECTORY));
+}

@@ -71,6 +71,41 @@ final class SyncPlan {
   public array $current = [];
 
   /**
+   * The listings managed domains should have, keyed by domain name.
+   *
+   * Domains that should not be listed are missing.
+   *
+   * @var array<string, array>
+   */
+  public array $wanted = [];
+
+  /**
+   * The catalog domains the sync checked, with their product IDs.
+   *
+   * @var array<string, int>
+   */
+  public array $catalog = [];
+
+  /**
+   * The catalog domains this marketplace's listings are managed for.
+   *
+   * @var string[]
+   */
+  public array $managed = [];
+
+  /**
+   * Domains that just left the catalog, and are not in $managed.
+   *
+   * @var string[]
+   */
+  public array $removed = [];
+
+  /**
+   * Whether the sync covered the whole catalog and portfolio.
+   */
+  public bool $full = FALSE;
+
+  /**
    * Whether the sync has nothing to push or remove.
    */
   public function isEmpty(): bool {

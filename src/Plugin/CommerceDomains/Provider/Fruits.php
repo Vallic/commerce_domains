@@ -21,7 +21,7 @@ use Drupal\commerce_domains\CatalogItem;
   label: new TranslatableMarkup('fruits'),
   description: new TranslatableMarkup('Pushes listings through the fruits API.'),
 )]
-final class Fruits extends MarketplacePluginBase {
+final class Fruits extends MarketplacePluginBase implements CsvExportInterface {
 
   protected const CREDENTIALS = [
     'client_id' => 'FRUITS_CLIENT_ID',
@@ -163,6 +163,21 @@ final class Fruits extends MarketplacePluginBase {
   protected function client(): FruitsClient {
     $this->assertReady();
     return $this->client ??= new FruitsClient($this->httpClient, (string) $this->configuration['client_id'], (string) $this->configuration['client_secret']);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvHeader(string $file): array {
+    return ['Domain', 'Price', 'Currency', 'Pricing', 'Comment'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvRow(CatalogItem $item, string $file): ?array {
+    $listing = $this->buildListing($item);
+    return $listing ? [$item->title, intdiv($listing['price'], self::MINOR_UNITS), 'EUR', 'net', ''] : NULL;
   }
 
 }

@@ -19,28 +19,36 @@ it is held at, and the marketplaces it is listed on.
   A provider is a config entity with an optional API plugin. Without one it is
   just a registrar name; with one, the plugin's capabilities apply.
 - **Provider plugins** with one or more capabilities: *marketplace* (keeps
-  listings in line with the catalog), *registrar* (reads the domains in the
+  listings in line with the catalog), *CSV export* (writes the file a
+  marketplace's upload page takes), *registrar* (reads the domains in the
   account, with their expiry dates) and *domain management* (changes
   nameservers, locks and renewal at the registrar).
 
-  | Provider            | Marketplace | Registrar |
-  |---------------------|-------------|-----------|
-  | Afternic            | yes         |           |
-  | fruits              | yes         |           |
-  | Atom                | yes         | yes ¹     |
-  | Dynadot             | yes ²       | yes       |
-  | GNAME               | yes ²       | yes ³     |
-  | NameSilo            | yes ²       | yes       |
-  | Spaceship           | yes         | yes       |
-  | Unstoppable Domains | yes ²       | yes       |
-  | GoDaddy             |             | yes       |
-  | IONOS               |             | yes       |
-  | NameBright          |             | yes       |
-  | Namecheap           |             | yes       |
-  | Porkbun             |             | yes       |
+  | Provider            | Marketplace | CSV export | Registrar |
+  |---------------------|-------------|------------|-----------|
+  | Afternic            | yes         | yes        |           |
+  | fruits              | yes         | yes        |           |
+  | Atom                | yes         | yes        | yes ¹     |
+  | Dynadot             | yes ²       | yes ⁴      | yes       |
+  | GNAME               | yes ²       |            | yes ³     |
+  | NameSilo            | yes ²       |            | yes       |
+  | Spaceship           | yes         | yes        | yes       |
+  | Unstoppable Domains | yes ²       | yes ²      | yes       |
+  | BrandStore          |             | yes        |           |
+  | DaaZ                |             | yes        |           |
+  | DNX                 |             | yes        |           |
+  | NameClub            |             | yes ⁵      |           |
+  | Sedo                |             | yes        |           |
+  | GoDaddy             |             |            | yes       |
+  | IONOS               |             |            | yes       |
+  | NameBright          |             |            | yes       |
+  | Namecheap           |             |            | yes       |
+  | Porkbun             |             |            | yes       |
 
   ¹ With a separate Registrar API token. ² Only for domains registered there.
-  ³ Needs a GNAME reseller account.
+  ³ Needs a GNAME reseller account. ⁴ Two files: domains at Dynadot, and
+  domains registered elsewhere. ⁵ Domains registered elsewhere; Dynadot's
+  marketplace listings appear on NameClub already.
 
   A provider without a plugin, such as Hover, is a registrar without an API:
   domains can be recorded there, and nothing is synced. A domain's registrar
@@ -48,7 +56,8 @@ it is held at, and the marketplaces it is listed on.
   provider such as Afternic.
 - **Commerce Domains Marketplace** (submodule): keeps listings on those
   marketplaces in line with the catalog, with a Drush command for reviewing
-  and pushing, and optional automatic pushes from cron.
+  and pushing, and optional automatic pushes from cron; and writes the CSV
+  files marketplaces import.
 
 Stock comes from wherever the site keeps it: a variation counts as for sale
 when its product is published, it is active, and its `in_stock` field (as
@@ -72,7 +81,8 @@ other currencies.
 
 ## Setup
 
-1. Install the module, and Commerce Domains Marketplace for syncing.
+1. Install the module, and Commerce Domains Marketplace for syncing and CSV
+   files.
 2. Turn on the *Domain name* trait (and *Atom premium listing*, if needed) in
    your product type's settings.
 3. Add providers at *Commerce → Configuration → Domain providers*: registrars
@@ -105,6 +115,34 @@ drush cdms afternic --domains=example.com,example.net
 A dry run works while the provider is disabled. Once the output looks right,
 enable the provider and, if wanted, *Push catalog changes automatically*:
 changed domains are then queued and pushed on cron.
+
+## Domain overview
+
+With Views, *Commerce → Domains* lists every catalog domain: its registrar,
+when that registrar's account was last read (and whether it still held the
+domain), the expiry date, the price, and its status on each marketplace.
+The *Marketplace listings* tab has one row per domain and marketplace, with
+what is out of date, why a listing is left alone, or the marketplace's
+error, and when it was last checked and pushed; filter it by marketplace and
+status.
+
+Every sync records what it found, dry runs included, and every push what it
+did. Syncs never read these records back: they always compare the catalog
+with the marketplace. A domain that isn't listed and needn't be has no row.
+Files from the CSV export aren't tracked.
+
+## CSV files
+
+Some marketplaces only take a file, and some sellers would rather upload one
+than hand over API keys. A provider's *CSV export* tab shows the file its
+upload page takes, with the domains for sale priced the same way a sync
+would (price list, price factor and sale terms), and downloads it. Nothing
+is sent to the marketplace.
+
+```sh
+drush commerce-domains:csv-export sedo > sedo.csv
+drush cdcsv dynadot --file=external > dynadot-external.csv
+```
 
 ## Registrar details
 
@@ -197,6 +235,10 @@ credentials in `CREDENTIALS`. Give the API's rate limit in
 - For a marketplace, extend `MarketplacePluginBase` and implement
   `buildListing()`, `fetchListings()`, `saveListings()` and
   `deleteListings()`.
+- For a CSV file, implement `CsvExportInterface`: `csvHeader()` and
+  `csvRow()`, plus `csvFiles()` when the marketplace takes several. A
+  marketplace without an API extends `ListingPluginBase`, which has the price
+  factors and the shared pricing rules.
 - For a registrar, implement `RegistrarInterface` with `RegistrarTrait`:
   fetch the account's records in `registrationRecords()` and map one to a
   `Registration` in `registration()`. A registrar-only plugin extends

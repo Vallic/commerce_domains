@@ -1,0 +1,202 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - commerce_domains_marketplace
+    - commerce_product
+    - user
+id: commerce_domains_listings
+label: 'Domain listings'
+module: views
+description: "Each catalog domain's listing on each marketplace, as the last sync found it."
+tag: 'Commerce Domains'
+base_table: commerce_domains_listing
+base_field: domain
+display:
+  default:
+    id: default
+    display_title: Default
+    display_plugin: default
+    position: 0
+    display_options:
+      title: 'Marketplace listings'
+      fields:
+        domain:
+          id: domain
+          table: commerce_domains_listing
+          field: domain
+          plugin_id: standard
+          label: Domain
+          alter:
+            alter_text: false
+            make_link: true
+            path: 'product/{{ product_id }}/edit'
+        product_id:
+          id: product_id
+          table: commerce_domains_listing
+          field: product_id
+          plugin_id: numeric
+          label: Product
+          exclude: true
+          separator: ''
+        provider:
+          id: provider
+          table: commerce_domains_listing
+          field: provider
+          plugin_id: commerce_domains_listing_provider
+          label: Marketplace
+        status:
+          id: status
+          table: commerce_domains_listing
+          field: status
+          plugin_id: commerce_domains_listing_status
+          label: Status
+        note:
+          id: note
+          table: commerce_domains_listing
+          field: note
+          plugin_id: standard
+          label: Note
+        listing:
+          id: listing
+          table: commerce_domains_listing
+          field: listing
+          plugin_id: commerce_domains_listing_summary
+          label: Listing
+        checked:
+          id: checked
+          table: commerce_domains_listing
+          field: checked
+          plugin_id: date
+          label: Checked
+          date_format: short
+        pushed:
+          id: pushed
+          table: commerce_domains_listing
+          field: pushed
+          plugin_id: date
+          label: Pushed
+          date_format: short
+      pager:
+        type: full
+        options:
+          items_per_page: 50
+      exposed_form:
+        type: basic
+        options:
+          submit_button: Filter
+          reset_button: true
+          reset_button_label: Reset
+      access:
+        type: perm
+        options:
+          perm: 'access commerce_product overview'
+      cache:
+        type: none
+        options: {  }
+      empty:
+        area_text_custom:
+          id: area_text_custom
+          table: views
+          field: area_text_custom
+          plugin_id: text_custom
+          empty: true
+          content: 'No listings recorded. Listings are recorded by each marketplace sync, including dry runs.'
+      sorts:
+        changed:
+          id: changed
+          table: commerce_domains_listing
+          field: changed
+          plugin_id: date
+          order: DESC
+      arguments: {  }
+      filters:
+        domain:
+          id: domain
+          table: commerce_domains_listing
+          field: domain
+          plugin_id: string
+          operator: contains
+          value: ''
+          group: 1
+          exposed: true
+          expose:
+            operator_id: domain_op
+            label: Domain
+            identifier: domain
+        provider:
+          id: provider
+          table: commerce_domains_listing
+          field: provider
+          plugin_id: commerce_domains_listing_provider
+          operator: in
+          value: {  }
+          group: 1
+          exposed: true
+          expose:
+            operator_id: provider_op
+            label: Marketplace
+            identifier: marketplace
+            reduce: false
+        status:
+          id: status
+          table: commerce_domains_listing
+          field: status
+          plugin_id: commerce_domains_listing_status
+          operator: in
+          value: {  }
+          group: 1
+          exposed: true
+          expose:
+            operator_id: status_op
+            label: Status
+            identifier: status
+            reduce: false
+      style:
+        type: table
+        options:
+          columns:
+            domain: domain
+            product_id: product_id
+            provider: provider
+            status: status
+            note: note
+            listing: listing
+            checked: checked
+            pushed: pushed
+          default: '-1'
+          info:
+            domain:
+              sortable: true
+              default_sort_order: asc
+            provider:
+              sortable: true
+              default_sort_order: asc
+            status:
+              sortable: true
+              default_sort_order: asc
+            checked:
+              sortable: true
+              default_sort_order: desc
+            pushed:
+              sortable: true
+              default_sort_order: desc
+          sticky: true
+          empty_table: true
+      row:
+        type: fields
+      query:
+        type: views_query
+        options: {  }
+  page_1:
+    id: page_1
+    display_title: Page
+    display_plugin: page
+    position: 1
+    display_options:
+      path: admin/commerce/domains/listings
+      menu:
+        type: tab
+        title: 'Marketplace listings'
+        weight: 0
+        menu_name: admin

@@ -36,7 +36,7 @@ final class MarketplaceCommands extends DrushCommands {
   #[CLI\Command(name: 'commerce-domains:marketplace-sync', aliases: ['cdms'])]
   #[CLI\Argument(name: 'provider', description: 'The provider ID, e.g. afternic.')]
   #[CLI\Option(name: 'domains', description: 'Comma-separated domains to sync instead of the whole catalog.')]
-  #[CLI\Option(name: 'dry-run', description: 'Show what would change without changing anything. Works while the provider is disabled.')]
+  #[CLI\Option(name: 'dry-run', description: 'Show what would change without changing the marketplace. Works while the provider is disabled.')]
   #[CLI\Option(name: 'details', description: 'List every domain that would change, with old and new values.')]
   #[CLI\Usage(name: 'drush cdms afternic --dry-run --details', description: 'Review a full Afternic sync.')]
   #[CLI\Usage(name: 'drush cdms afternic --domains=example.com', description: 'Push one domain.')]

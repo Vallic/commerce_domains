@@ -28,7 +28,7 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('Dynadot'),
   description: new TranslatableMarkup('Lists domains registered at Dynadot in its marketplace through the Dynadot API.'),
 )]
-final class Dynadot extends MarketplacePluginBase implements DomainManagementInterface {
+final class Dynadot extends MarketplacePluginBase implements DomainManagementInterface, CsvExportInterface {
 
   use RegistrarTrait;
 
@@ -312,6 +312,83 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
   protected function client(): DynadotClient {
     $this->assertReady();
     return $this->client ??= new DynadotClient($this->httpClient, (string) $this->configuration['api_key'], $this->requestsPerMinute());
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Dynadot takes two files: one for domains in the account, and one for
+   * domains registered elsewhere, which the API can't list.
+   */
+  public function csvFiles(): array {
+    return [
+      'listings' => (string) $this->t('Domains at Dynadot'),
+      'external' => (string) $this->t('Domains at other registrars'),
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvHeader(string $file): array {
+    if ($file === 'external') {
+      return [
+        'Domain',
+        'Currency',
+        'Buy Now Price',
+        'Enable Offers',
+        'Minimum Offer',
+        'Description',
+        'Enable For-Sale Landing Page',
+      ];
+    }
+    return [
+      'Domain',
+      'Currency',
+      'Buy Now Price',
+      'Enable Offers',
+      'Minimum Offer',
+      'Category',
+      'Sub-Category',
+      'Includes Website (Yes/No)',
+      "Description(can't use comma)",
+      'Enable Installments',
+      'Maximum Installments (2-12months)',
+      'Enable For-Sale Landing Page',
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvRow(CatalogItem $item, string $file): ?array {
+    $external = $file === 'external';
+    $listing = $this->manages($item) !== $external ? $this->buildListing($item) : NULL;
+    if ($listing === NULL) {
+      return NULL;
+    }
+    $yes_no = fn(bool $value) => $value ? 'Yes' : 'No';
+    $buy_now = $listing['listing_type'] === 'make_offer' ? '' : '$' . $listing['price'];
+    $offers = $listing['listing_type'] !== 'buy_now';
+    // Descriptions go without full stops.
+    $description = self::csvText($listing['description'] ?? NULL, ['.']);
+    if ($external) {
+      return [$item->title, 'USD', $buy_now, $yes_no($offers), '$' . $listing['minimum_offer'], $description, 'No'];
+    }
+    return [
+      $item->title,
+      'USD',
+      $buy_now,
+      $yes_no($offers),
+      '$' . $listing['minimum_offer'],
+      ucfirst($listing['category']),
+      '',
+      'No',
+      $description,
+      $yes_no($listing['installment']),
+      $listing['maximum_installments'] ?? 0,
+      'No',
+    ];
   }
 
 }

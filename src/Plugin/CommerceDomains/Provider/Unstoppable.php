@@ -23,7 +23,7 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('Unstoppable Domains'),
   description: new TranslatableMarkup('Lists DNS domains registered at Unstoppable Domains for sale, and reads their registrations.'),
 )]
-final class Unstoppable extends MarketplacePluginBase implements RegistrarInterface {
+final class Unstoppable extends MarketplacePluginBase implements RegistrarInterface, CsvExportInterface {
 
   use RegistrarTrait;
 
@@ -232,6 +232,23 @@ final class Unstoppable extends MarketplacePluginBase implements RegistrarInterf
   protected function client(): UnstoppableClient {
     $this->assertReady();
     return $this->client ??= new UnstoppableClient($this->httpClient, (string) $this->configuration['api_key']);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvHeader(string $file): array {
+    return ['Domain', 'Price (USD)'];
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * The file has a price only, so offers-only names are left out.
+   */
+  public function csvRow(CatalogItem $item, string $file): ?array {
+    $listing = $this->manages($item) ? $this->buildListing($item) : NULL;
+    return $listing && $listing['price'] > 0 ? [$item->title, $listing['price']] : NULL;
   }
 
 }

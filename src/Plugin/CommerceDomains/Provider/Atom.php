@@ -28,7 +28,7 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('Atom'),
   description: new TranslatableMarkup('Pushes standard listings through the Atom Seller API, and reads registrations through its Registrar API.'),
 )]
-final class Atom extends MarketplacePluginBase implements RegistrarInterface {
+final class Atom extends MarketplacePluginBase implements RegistrarInterface, CsvExportInterface {
 
   use RegistrarTrait;
 
@@ -200,6 +200,21 @@ final class Atom extends MarketplacePluginBase implements RegistrarInterface {
     $this->assertReady();
     $this->assertCredential('registrar_token');
     return $this->registrarClient ??= new AtomRegistrarClient($this->httpClient, (string) $this->configuration['registrar_token']);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvHeader(string $file): array {
+    return ['Domain Name', 'Selling Price'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvRow(CatalogItem $item, string $file): ?array {
+    $listing = $this->manages($item) ? $this->buildListing($item) : NULL;
+    return $listing ? [$item->title, $listing['selling_price']] : NULL;
   }
 
 }

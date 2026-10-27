@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
@@ -57,14 +58,29 @@ class ProviderTest extends DomainsKernelTestBase {
       'test_registrar',
       'unstoppable',
     ];
+    // Providers that write the CSV file their upload page takes.
+    $csv = [
+      'afternic',
+      'atom',
+      'brandstore',
+      'daaz',
+      'dnx',
+      'dynadot',
+      'fruits',
+      'nameclub',
+      'sedo',
+      'spaceship',
+      'unstoppable',
+    ];
     // Registrars whose API can also change domains.
     $managers = ['dynadot', 'namebright', 'namecheap', 'namesilo', 'porkbun', 'spaceship', 'test_managed_registrar'];
-    $expected = array_unique([...$marketplaces, ...$registrars]);
+    $expected = array_unique([...$marketplaces, ...$registrars, ...$csv]);
     sort($expected);
     $this->assertSame($expected, $ids);
     $this->assertEqualsCanonicalizing($marketplaces, $manager->getPluginIdsWith(MarketplaceInterface::class));
     $this->assertEqualsCanonicalizing($registrars, $manager->getPluginIdsWith(RegistrarInterface::class));
     $this->assertEqualsCanonicalizing($managers, $manager->getPluginIdsWith(DomainManagementInterface::class));
+    $this->assertEqualsCanonicalizing($csv, $manager->getPluginIdsWith(CsvExportInterface::class));
 
     foreach ($ids as $id) {
       Provider::create(['id' => $id, 'label' => ucfirst($id), 'plugin' => $id])->save();
@@ -72,6 +88,7 @@ class ProviderTest extends DomainsKernelTestBase {
       $this->assertSame($id, $provider->getPluginId());
       $this->assertSame(in_array($id, $marketplaces, TRUE), $provider->hasCapability(MarketplaceInterface::class), $id);
       $this->assertSame(in_array($id, $registrars, TRUE), $provider->hasCapability(RegistrarInterface::class), $id);
+      $this->assertSame(in_array($id, $csv, TRUE), $provider->hasCapability(CsvExportInterface::class), $id);
       $this->assertSame($provider->getPlugin()->defaultConfiguration(), $provider->getPlugin()->getConfiguration());
     }
   }

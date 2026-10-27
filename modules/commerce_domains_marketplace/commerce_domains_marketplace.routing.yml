@@ -1,0 +1,13 @@
+entity.commerce_domains_provider.csv_export:
+  path: '/admin/commerce/config/domain-providers/{commerce_domains_provider}/csv'
+  defaults:
+    _form: '\Drupal\commerce_domains_marketplace\Form\CsvExportForm'
+    _title_callback: '\Drupal\commerce_domains_marketplace\Form\CsvExportForm::title'
+  requirements:
+    _permission: 'administer commerce_domains providers'
+    _custom_access: '\Drupal\commerce_domains_marketplace\Form\CsvExportForm::access'
+  options:
+    _admin_route: TRUE
+    parameters:
+      commerce_domains_provider:
+        type: entity:commerce_domains_provider

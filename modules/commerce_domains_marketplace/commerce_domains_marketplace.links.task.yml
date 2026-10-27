@@ -1,0 +1,5 @@
+entity.commerce_domains_provider.csv_export:
+  title: 'CSV export'
+  route_name: entity.commerce_domains_provider.csv_export
+  base_route: entity.commerce_domains_provider.edit_form
+  weight: 20

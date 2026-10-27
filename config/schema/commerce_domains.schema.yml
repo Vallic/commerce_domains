@@ -107,6 +107,58 @@ commerce_domains.provider_plugin.dynadot:
       type: integer
       label: 'API rate limit (requests per minute)'
 
+commerce_domains.provider_plugin.brandstore:
+  type: mapping
+  label: 'BrandStore settings'
+  mapping:
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'
+
+commerce_domains.provider_plugin.daaz:
+  type: mapping
+  label: 'DaaZ settings'
+  mapping:
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'
+
+commerce_domains.provider_plugin.dnx:
+  type: mapping
+  label: 'DNX settings'
+  mapping:
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'
+
+commerce_domains.provider_plugin.nameclub:
+  type: mapping
+  label: 'NameClub settings'
+  mapping:
+    price_factor:
+      type: float
+      label: 'Price factor'
+    premium_price_factor:
+      type: float
+      label: 'Atom premium price factor'
+
+commerce_domains.provider_plugin.sedo:
+  type: mapping
+  label: 'Sedo settings'
+  mapping:
+    price_factor:
+      type: float
+      label: 'Price factor'
+
 commerce_domains.provider_plugin.ionos:
   type: mapping
   label: 'IONOS settings'

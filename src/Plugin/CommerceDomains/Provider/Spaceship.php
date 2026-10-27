@@ -24,7 +24,7 @@ use Drupal\commerce_domains\Clients\SpaceshipClient;
   label: new TranslatableMarkup('Spaceship'),
   description: new TranslatableMarkup('Pushes listings to SellerHub through the Spaceship API.'),
 )]
-final class Spaceship extends MarketplacePluginBase implements DomainManagementInterface {
+final class Spaceship extends MarketplacePluginBase implements DomainManagementInterface, CsvExportInterface {
 
   use RegistrarTrait;
 
@@ -245,6 +245,36 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
   protected function client(): SpaceshipClient {
     $this->assertReady();
     return $this->client ??= new SpaceshipClient($this->httpClient, (string) $this->configuration['api_key'], (string) $this->configuration['api_secret']);
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * The file also takes the lease-to-own terms the API can't set: the term
+   * from $2,000 and a 25% down payment.
+   */
+  public function csvHeader(string $file): array {
+    return ['Domain', 'Offer Minimum', 'Buy Now Price', 'LTO Period', 'Downpayment %', 'For Sale Page'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvRow(CatalogItem $item, string $file): ?array {
+    $listing = $this->buildListing($item);
+    if ($listing === NULL) {
+      return NULL;
+    }
+    $price = $listing['binPrice'];
+    $lease_months = $listing['binPriceEnabled'] ? $this->leaseMonthsFor($item, $this->leaseMonths($price), 36) : 0;
+    return [
+      $item->title,
+      $listing['minPriceEnabled'] ? $listing['minPrice'] : '',
+      $listing['binPriceEnabled'] ? $price : '',
+      $lease_months,
+      25,
+      'on',
+    ];
   }
 
 }

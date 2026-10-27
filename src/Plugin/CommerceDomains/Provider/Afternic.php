@@ -24,7 +24,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   label: new TranslatableMarkup('Afternic'),
   description: new TranslatableMarkup('Pushes listings through the Afternic Portfolio API.'),
 )]
-final class Afternic extends MarketplacePluginBase {
+final class Afternic extends MarketplacePluginBase implements CsvExportInterface {
 
   protected const CREDENTIALS = [
     'api_key' => 'AFTERNIC_API_KEY',
@@ -210,6 +210,51 @@ final class Afternic extends MarketplacePluginBase {
   protected function client(): AfternicClient {
     $this->assertReady();
     return $this->client ??= new AfternicClient($this->httpClient, $this->uuid, (string) $this->configuration['api_key'], (string) $this->configuration['api_secret']);
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * The columns of Afternic's bulk upload template, with the API's values.
+   */
+  public function csvHeader(string $file): array {
+    return [
+      'Domain',
+      'Buy Now Price',
+      'Floor Price',
+      'Min Offer',
+      'Lease to Own',
+      'Max Lease Period',
+      'Sale Lander',
+      'Show Buy Now Option',
+      'Show Lease to Own Option',
+      'Show Make Offer Option',
+      'Hidden',
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function csvRow(CatalogItem $item, string $file): ?array {
+    $listing = $this->buildListing($item);
+    if ($listing === NULL) {
+      return NULL;
+    }
+    $yes_no = fn(bool $value) => $value ? 'Y' : 'N';
+    return [
+      $item->title,
+      intdiv($listing['buynowPrice'], self::MICROS),
+      intdiv($listing['floorPrice'], self::MICROS),
+      intdiv($listing['minbidPrice'], self::MICROS),
+      $yes_no($listing['leasingEnabled']),
+      $listing['maxLeasePeriod'] ?? '',
+      'Custom Lander',
+      $yes_no($listing['showLanderBuynowOption']),
+      $yes_no($listing['showLanderLeaseToOwnOption']),
+      $yes_no($listing['showLanderMakeOfferOption']),
+      $yes_no($listing['hidden']),
+    ];
   }
 
 }

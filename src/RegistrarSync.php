@@ -27,6 +27,9 @@ class RegistrarSync {
   // Domains looked up in the catalog at once.
   protected const CHUNK_SIZE = 200;
 
+  // The state key, plus the provider ID, of the last read of a whole account.
+  public const CHECKED_KEY = 'commerce_domains.registrations_checked.';
+
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
     protected Catalog $catalog,
@@ -102,7 +105,25 @@ class RegistrarSync {
     $plan->unchanged = count(array_diff_key($unchanged, $plan->expires));
     $plan->missing = array_values($plan->missing);
     $plan->unknown = array_keys(array_diff_key($plan->registrations, $seen));
+    if ($names === NULL) {
+      $this->state->set(self::CHECKED_KEY . $provider->id(), [
+        'time' => $this->time->getCurrentTime(),
+        'missing' => $plan->missing,
+      ]);
+    }
     return $plan;
+  }
+
+  /**
+   * Returns when a provider's whole account was last read.
+   *
+   * @return array{time: int, missing: string[]}|null
+   *   The time, and the domains recorded there that the account didn't hold;
+   *   NULL when the account was never read whole.
+   */
+  public function lastCheck(string $provider_id): ?array {
+    $check = $this->state->get(self::CHECKED_KEY . $provider_id);
+    return is_array($check) ? $check : NULL;
   }
 
   /**
