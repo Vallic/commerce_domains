@@ -7,6 +7,7 @@ buynow
 cdms
 cdrs
 domainitems
+donot
 dqsj
 drush
 dynadot

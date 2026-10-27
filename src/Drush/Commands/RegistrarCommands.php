@@ -30,19 +30,18 @@ final class RegistrarCommands extends DrushCommands {
   }
 
   /**
-   * Updates the catalog's expiry dates from a registrar account.
+   * Updates the catalog's registrars and expiry dates from a registrar account.
    */
   #[CLI\Command(name: 'commerce-domains:registrar-sync', aliases: ['cdrs'])]
   #[CLI\Argument(name: 'provider', description: 'The provider ID, e.g. dynadot.')]
   #[CLI\Option(name: 'domains', description: 'Comma-separated domains to check instead of the whole account.')]
   #[CLI\Option(name: 'dry-run', description: 'Show what would change without changing anything. Works while the provider is disabled.')]
   #[CLI\Option(name: 'details', description: 'List every domain that would change or needs a look.')]
-  #[CLI\Option(name: 'fix-registrar', description: 'Also record this registrar on catalog domains the account holds but the catalog records elsewhere.')]
   #[CLI\Usage(name: 'drush cdrs dynadot --dry-run --details', description: 'Review what the Dynadot account would change.')]
-  #[CLI\Usage(name: 'drush cdrs dynadot --fix-registrar', description: 'Update expiry dates and correct registrars.')]
+  #[CLI\Usage(name: 'drush cdrs dynadot', description: 'Record Dynadot on the domains its account holds, and update their expiry dates.')]
   public function sync(
     string $provider,
-    array $options = ['domains' => self::REQ, 'dry-run' => FALSE, 'details' => FALSE, 'fix-registrar' => FALSE],
+    array $options = ['domains' => self::REQ, 'dry-run' => FALSE, 'details' => FALSE],
   ): int {
     /** @var \Drupal\commerce_domains\Entity\ProviderInterface|null $entity */
     $entity = $this->entityTypeManager->getStorage('commerce_domains_provider')->load($provider);
@@ -55,12 +54,11 @@ final class RegistrarCommands extends DrushCommands {
       return self::EXIT_FAILURE;
     }
 
-    $fix = (bool) $options['fix-registrar'];
     $names = $options['domains'] ? array_map(DomainName::normalize(...), StringUtils::csvToArray($options['domains'])) : NULL;
     $plan = $this->sync->plan($entity, $names);
-    $this->report($entity, $plan, (bool) $options['details'], $fix);
+    $this->report($entity, $plan, (bool) $options['details']);
 
-    if ($options['dry-run'] || $plan->isEmpty($fix)) {
+    if ($options['dry-run'] || $plan->isEmpty()) {
       return self::EXIT_SUCCESS;
     }
     if (!$entity->status()) {
@@ -70,7 +68,7 @@ final class RegistrarCommands extends DrushCommands {
     if (!$this->io()->confirm(dt('Update the catalog from @label?', ['@label' => $entity->label()]))) {
       return self::EXIT_SUCCESS;
     }
-    $updated = $this->sync->apply($entity, $plan, $fix);
+    $updated = $this->sync->apply($entity, $plan);
     $this->io()->success(dt('Updated @count products from @label.', ['@count' => $updated, '@label' => $entity->label()]));
     return self::EXIT_SUCCESS;
   }
@@ -78,13 +76,13 @@ final class RegistrarCommands extends DrushCommands {
   /**
    * Prints a plan.
    */
-  protected function report(ProviderInterface $provider, RegistrarPlan $plan, bool $details, bool $fix): void {
+  protected function report(ProviderInterface $provider, RegistrarPlan $plan, bool $details): void {
     $label = $provider->label();
     $this->io()->text(dt('@count domains in the @label account.', [
       '@count' => count($plan->registrations),
       '@label' => $label,
     ]));
-    $elsewhere = $fix ? dt('registrar will be set to @label', ['@label' => $label]) : dt('recorded at another registrar; --fix-registrar corrects them');
+    $elsewhere = dt('registrar will be set to @label', ['@label' => $label]);
     $this->io()->table([dt('Catalog domains'), dt('Count'), dt('Notes')], [
       [dt('Expiry to update'), count($plan->expires), ''],
       [dt('Up to date'), $plan->unchanged, ''],

@@ -8,17 +8,23 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\NamecheapClient;
 use Drupal\commerce_domains\DomainName;
+use Drupal\commerce_domains\DomainNameParser;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Reads registrations from a Namecheap account.
+ * Reads registrations from a Namecheap account, and manages them.
+ *
+ * The API has no commands for auto-renew or the auth code; those stay in the
+ * Namecheap account.
  */
 #[CommerceDomainsProvider(
   id: 'namecheap',
   label: new TranslatableMarkup('Namecheap'),
-  description: new TranslatableMarkup('Reads registrations through the Namecheap API.'),
+  description: new TranslatableMarkup('Reads and manages registrations through the Namecheap API.'),
 )]
-final class Namecheap extends ProviderPluginBase implements RegistrarInterface {
+final class Namecheap extends ProviderPluginBase implements DomainManagementInterface {
 
   use RegistrarTrait;
 
@@ -40,11 +46,38 @@ final class Namecheap extends ProviderPluginBase implements RegistrarInterface {
   protected ?NamecheapClient $client = NULL;
 
   /**
+   * Splits names into the SLD and TLD the DNS commands take.
+   *
+   * @var \Drupal\commerce_domains\DomainNameParser
+   */
+  protected DomainNameParser $parser;
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition): static {
+    $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
+    $instance->parser = $container->get(DomainNameParser::class);
+    return $instance;
+  }
+
+  /**
    * {@inheritdoc}
    */
   protected function registrationRecords(?array $names): iterable {
     // A page holds 100 domains, so the list is cheap even for a few names.
-    return $this->client()->listDomains();
+    $client = $this->client();
+    $records = $client->listDomains();
+    if (!self::fewNames($names)) {
+      return $records;
+    }
+    // The list has no transfer lock, so ask for it per domain.
+    $wanted = array_flip($names);
+    $records = array_filter($records, fn(array $record) => isset($wanted[DomainName::normalize($record['Name'] ?? '')]));
+    foreach ($records as &$record) {
+      $record['RegistrarLockStatus'] = $client->getRegistrarLock($record['Name']) ? 'true' : 'false';
+    }
+    return $records;
   }
 
   /**
@@ -59,11 +92,57 @@ final class Namecheap extends ProviderPluginBase implements RegistrarInterface {
       name: DomainName::normalize($record['Name']),
       // Dates are MM/DD/YYYY.
       expires: self::timestamp($record['Expires'] ?? NULL),
-      // Namecheap documents IsLocked as "domain changes are not allowed".
-      locked: $flag('IsLocked'),
+      // Only for a few names: the list's IsLocked is not the transfer lock.
+      locked: $flag('RegistrarLockStatus'),
       autoRenew: $flag('AutoRenew'),
       status: $flag('IsExpired') ? 'expired' : NULL,
     );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getNameservers(string $name): array {
+    $domain = $this->parse($name);
+    return array_map('strtolower', $this->client()->getNameservers($domain->label, $domain->extension));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $domain = $this->parse($name);
+    $this->client()->setNameservers($domain->label, $domain->extension, $nameservers);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setTransferLock(string $name, bool $locked): void {
+    $this->client()->setRegistrarLock($name, $locked);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setAutoRenew(string $name, bool $auto_renew): void {
+    throw new ProviderException('The Namecheap API cannot change auto-renew; change it in the Namecheap account.');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAuthCode(string $name): string {
+    throw new ProviderException('The Namecheap API cannot give auth codes; request one in the Namecheap account, which emails it.');
+  }
+
+  /**
+   * Splits a name into label and extension.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  protected function parse(string $name): DomainName {
+    return $this->parser->parse($name) ?? throw new ProviderException("$name is not a registrable domain.");
   }
 
   /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Spaceship;
 use Drupal\commerce_domains\Registration;
@@ -120,6 +121,38 @@ class SpaceshipTest extends ProviderTestBase {
       'b.com' => new Registration('b.com', NULL, FALSE, NULL, NULL),
     ], $registrations);
     $this->assertSame('GET https://spaceship.dev/api/v1/domains/elsewhere.com', $this->call(2));
+  }
+
+  /**
+   * Tests changing domains in the account.
+   */
+  public function testManagement(): void {
+    $plugin = $this->registrar(Spaceship::class, 'spaceship', self::KEYS, [
+      self::json([
+        'name' => 'a.com',
+        'nameservers' => ['provider' => 'custom', 'hosts' => ['NS1.Host.com', 'ns2.host.com']],
+      ]),
+      self::json(['name' => 'b.com', 'nameservers' => ['provider' => 'basic', 'hosts' => ['launch1.spaceship.net']]]),
+      self::json(['provider' => 'custom', 'hosts' => ['ns1.x.com', 'ns2.x.com']]),
+      self::json(['isLocked' => FALSE]),
+      self::json(['isEnabled' => TRUE]),
+      self::json(['authCode' => 'c0de', 'expires' => '2026-11-01T00:00:00Z']),
+    ]);
+    $this->assertInstanceOf(DomainManagementInterface::class, $plugin);
+    $this->assertSame(['ns1.host.com', 'ns2.host.com'], $plugin->getNameservers('a.com'));
+    $this->assertSame([], $plugin->getNameservers('b.com'), "Spaceship's own nameservers are not listed.");
+
+    $plugin->setNameservers('a.com', ['ns1.x.com', 'ns2.x.com']);
+    $this->assertSame('PUT https://spaceship.dev/api/v1/domains/a.com/nameservers', $this->call(2));
+    $this->assertSame(['provider' => 'custom', 'hosts' => ['ns1.x.com', 'ns2.x.com']], $this->body(2));
+    $plugin->setTransferLock('a.com', FALSE);
+    $this->assertSame('PUT https://spaceship.dev/api/v1/domains/a.com/transfer/lock', $this->call(3));
+    $this->assertSame(['isLocked' => FALSE], $this->body(3));
+    $plugin->setAutoRenew('a.com', TRUE);
+    $this->assertSame('PUT https://spaceship.dev/api/v1/domains/a.com/autorenew', $this->call(4));
+    $this->assertSame(['isEnabled' => TRUE], $this->body(4));
+    $this->assertSame('c0de', $plugin->getAuthCode('a.com'));
+    $this->assertSame('GET https://spaceship.dev/api/v1/domains/a.com/transfer/auth-code', $this->call(5));
   }
 
   /**

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Dynadot;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
 use Drupal\Core\Form\FormState;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -117,8 +119,65 @@ class DynadotTest extends ProviderTestBase {
     $this->assertEquals([
       'a.com' => new Registration('a.com', 1804136767, TRUE, TRUE, 'active'),
       'b.com' => new Registration('b.com', 1804136767, FALSE, FALSE, NULL),
-    ], $plugin->fetchRegistrations(['a.com', 'b.com']));
-    $this->assertCount(1, $this->history, 'One account list serves every name.');
+      'c.com' => new Registration('c.com', NULL),
+    ], $plugin->fetchRegistrations());
+    $this->assertCount(1, $this->history, 'One account list serves the whole account.');
+  }
+
+  /**
+   * Tests reading a few domains one by one.
+   */
+  public function testFetchFewRegistrations(): void {
+    $info = [
+      'Name' => 'a.com',
+      'Expiration' => '1804136767000',
+      'Locked' => 'no',
+      'RenewOption' => 'do not renew',
+      'Status' => 'active',
+    ];
+    $plugin = $this->registrar(Dynadot::class, 'dynadot', self::KEYS, [
+      self::json(['DomainInfoResponse' => ['ResponseCode' => 0, 'Status' => 'success', 'DomainInfo' => $info]]),
+      self::json(['DomainInfoResponse' => ['ResponseCode' => -1, 'Status' => 'error', 'Error' => 'domain not found']]),
+    ]);
+    $expected = ['a.com' => new Registration('a.com', 1804136767, FALSE, FALSE, 'active')];
+    $this->assertEquals($expected, $plugin->fetchRegistrations(['a.com', 'gone.com']));
+    $query = array_diff_key($this->query(1), ['key' => TRUE]);
+    $this->assertSame(['command' => 'domain_info', 'domain' => 'gone.com'], $query);
+  }
+
+  /**
+   * Tests changing domains in the account.
+   */
+  public function testManagement(): void {
+    $success = ['ResponseCode' => 0, 'Status' => 'success'];
+    $ok = fn(string $response, array $extra = []) => self::json([$response => $success + $extra]);
+    $nameservers = ['Host1' => 'NS2.Example.net', 'Host0' => 'ns1.example.net', 'NsName' => 'x'];
+    $plugin = $this->registrar(Dynadot::class, 'dynadot', self::KEYS, [
+      $ok('GetNsResponse', ['NsContent' => $nameservers]),
+      $ok('SetNsResponse'),
+      $ok('LockDomainResponse'),
+      $ok('SetRenewOptionResponse'),
+      $ok('GetTransferAuthCodeResponse', ['AuthCode' => 'c0de']),
+    ]);
+    $this->assertInstanceOf(DomainManagementInterface::class, $plugin);
+    $this->assertSame(['ns1.example.net', 'ns2.example.net'], $plugin->getNameservers('a.com'));
+    $plugin->setNameservers('a.com', ['ns1.host.com', 'ns2.host.com']);
+    $query = array_diff_key($this->query(1), ['key' => TRUE]);
+    $this->assertSame(['command' => 'set_ns', 'domain' => 'a.com', 'ns0' => 'ns1.host.com', 'ns1' => 'ns2.host.com'], $query);
+    $plugin->setTransferLock('a.com', TRUE);
+    $this->assertSame('lock_domain', $this->query(2)['command']);
+    $plugin->setAutoRenew('a.com', FALSE);
+    $this->assertSame('donot', $this->query(3)['renew_option']);
+    $this->assertSame('c0de', $plugin->getAuthCode('a.com'));
+
+    try {
+      $plugin->setTransferLock('a.com', FALSE);
+      $this->fail('api3 cannot unlock.');
+    }
+    catch (ProviderException $e) {
+      $this->assertStringContainsString('unlock it in the Dynadot account', $e->getMessage());
+    }
+    $this->assertCount(5, $this->history, 'An unlock is refused without a call.');
   }
 
   /**

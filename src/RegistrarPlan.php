@@ -40,6 +40,8 @@ final class RegistrarPlan {
   /**
    * Domains in the account that the catalog records elsewhere.
    *
+   * Applying the plan records this registrar on them.
+   *
    * The catalog's registrar provider ID, or NULL when it has none.
    *
    * @var array<string, string|null>
@@ -62,12 +64,9 @@ final class RegistrarPlan {
 
   /**
    * Whether applying the plan would change nothing.
-   *
-   * @param bool $fix_registrar
-   *   Whether domains recorded elsewhere would be moved to this registrar.
    */
-  public function isEmpty(bool $fix_registrar = FALSE): bool {
-    return !$this->expires && (!$fix_registrar || !$this->elsewhere);
+  public function isEmpty(): bool {
+    return !$this->expires && !$this->elsewhere;
   }
 
 }

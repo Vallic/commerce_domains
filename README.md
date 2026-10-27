@@ -18,9 +18,10 @@ it is held at, and the marketplaces it is listed on.
 - **Domain providers**: the companies domains are registered or listed with.
   A provider is a config entity with an optional API plugin. Without one it is
   just a registrar name; with one, the plugin's capabilities apply.
-- **Provider plugins** with one or both capabilities: *marketplace* (keeps
-  listings in line with the catalog) and *registrar* (reads the domains in the
-  account, with their expiry dates).
+- **Provider plugins** with one or more capabilities: *marketplace* (keeps
+  listings in line with the catalog), *registrar* (reads the domains in the
+  account, with their expiry dates) and *domain management* (changes
+  nameservers, locks and renewal at the registrar).
 
   | Provider            | Marketplace | Registrar |
   |---------------------|-------------|-----------|
@@ -108,19 +109,55 @@ changed domains are then queued and pushed on cron.
 ## Registrar details
 
 Providers whose plugin is a registrar can update the catalog from the
-account: every domain recorded at that registrar gets its expiry date.
+account. The account is the record of where a domain is: every catalog domain
+it holds is recorded at that registrar, so a domain transferred in moves on
+the next sync, and gets the account's expiry date. A domain recorded there
+that the account no longer has is only reported, for a person to look at.
 Nothing is written to the registrar.
+
+The *Registrations* tab on the provider compares the account with the catalog
+and applies the result; Drush does the same:
 
 ```sh
 # See what would change, and which domains need a look: recorded here but
 # missing from the account, or in the account but recorded elsewhere.
 drush commerce-domains:registrar-sync dynadot --dry-run --details
-# Update expiry dates; --fix-registrar also corrects recorded registrars.
-drush cdrs dynadot --fix-registrar
+# Record Dynadot on the domains it holds, and update expiry dates.
+drush cdrs dynadot
 ```
 
 Turn on *Refresh registration details daily* on the provider to have cron do
 the update once a day.
+
+## Domain management
+
+Registrars whose API can change domains add a *Registrar* tab to the domain's
+product, for people with *Manage domains at registrars*: the registration as
+the registrar has it, the nameservers, the transfer lock, automatic renewal,
+and the transfer auth code. The page reads the registrar each time it is
+shown, and every button acts on the registrar at once. Changes are logged
+with who made them; an auth code is shown on the page and never logged.
+
+| Registrar | Nameservers | Lock | Unlock | Auto-renew | Auth code |
+|-----------|-------------|------|--------|------------|-----------|
+| Dynadot   | yes         | yes  | ¹      | yes        | yes ²     |
+| NameBright | yes        | yes  | yes    | yes        | yes       |
+| Namecheap | yes         | yes  | yes    | ³          | ³         |
+| NameSilo  | yes         | yes  | yes    | yes        | emailed ⁴ |
+| Porkbun   | yes         | ⁵    | ⁵      | yes        | ⁵         |
+| Spaceship | yes         | yes  | yes    | yes        | yes       |
+
+¹ Dynadot's API cannot unlock a domain: unlock it in the account.
+² Dynadot gives one only for an unlocked domain.
+³ Namecheap's API has no command for these: use the account, which emails
+  the auth code.
+⁴ NameSilo emails the code to the domain's administrative contact.
+⁵ Porkbun's API has no endpoint for these: use the account. Porkbun also
+  needs API access turned on for each domain.
+
+Dynadot nameservers must already be added to the account before a domain can
+use them. The Spaceship key needs the domains write scope for nameservers and
+auto-renew, and domains transfer for the lock and the auth code.
 
 ## Offers
 

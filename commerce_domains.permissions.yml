@@ -2,3 +2,7 @@ administer commerce_domains providers:
   title: 'Administer domain providers'
   description: 'Add registrars and marketplaces, and change their API settings.'
   restrict access: true
+manage domains at registrars:
+  title: 'Manage domains at registrars'
+  description: 'Change nameservers, transfer locks and renewal, and read transfer auth codes, through the registrar API.'
+  restrict access: true

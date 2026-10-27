@@ -59,6 +59,43 @@ final class PorkbunClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's nameservers, in no particular order.
+   *
+   * @return string[]
+   *   The host names.
+   */
+  public function getNameservers(string $name): array {
+    $hosts = $this->call('GET', 'domain/getNs/' . rawurlencode($name))['ns'] ?? [];
+    return array_values(array_filter(is_array($hosts) ? $hosts : [], 'is_string'));
+  }
+
+  /**
+   * Replaces a domain's nameservers.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string[] $nameservers
+   *   The host names.
+   */
+  public function updateNameservers(string $name, array $nameservers): void {
+    $this->call('POST', 'domain/updateNs/' . rawurlencode($name), [RequestOptions::JSON => ['ns' => array_values($nameservers)]]);
+  }
+
+  /**
+   * Turns automatic renewal on or off.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function updateAutoRenew(string $name, bool $enabled): void {
+    $response = $this->call('POST', 'domain/updateAutoRenew/' . rawurlencode($name), [RequestOptions::JSON => ['status' => $enabled ? 'on' : 'off']]);
+    // The outcome is per domain.
+    $result = $response['results'][$name] ?? NULL;
+    if (is_array($result) && ($result['status'] ?? NULL) === 'ERROR') {
+      throw new ProviderException(sprintf('%s updateAutoRenew %s: %s', static::NETWORK, $name, $result['message'] ?? 'refused'));
+    }
+  }
+
+  /**
    * Sends a request, failing on an error status in the body too.
    *
    * @throws \Drupal\commerce_domains\ProviderException

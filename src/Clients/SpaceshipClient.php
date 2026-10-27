@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Clients;
 
+use Drupal\commerce_domains\ProviderException;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\RequestOptions;
 use Psr\Http\Message\ResponseInterface;
@@ -75,6 +76,46 @@ final class SpaceshipClient extends ApiClient {
    */
   public function getRegistration(string $name): ?array {
     return $this->request('GET', 'domains/' . rawurlencode($name), [], [404]) ?: NULL;
+  }
+
+  /**
+   * Replaces a domain's nameservers.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string[] $hosts
+   *   2 to 12 host names, or none for Spaceship's own nameservers.
+   */
+  public function setNameservers(string $name, array $hosts): void {
+    $body = $hosts ? ['provider' => 'custom', 'hosts' => array_values($hosts)] : ['provider' => 'basic'];
+    $this->request('PUT', 'domains/' . rawurlencode($name) . '/nameservers', [RequestOptions::JSON => $body]);
+  }
+
+  /**
+   * Turns automatic renewal on or off.
+   */
+  public function setAutoRenew(string $name, bool $enabled): void {
+    $this->request('PUT', 'domains/' . rawurlencode($name) . '/autorenew', [RequestOptions::JSON => ['isEnabled' => $enabled]]);
+  }
+
+  /**
+   * Locks a domain against transfers, or unlocks it.
+   */
+  public function setTransferLock(string $name, bool $locked): void {
+    $this->request('PUT', 'domains/' . rawurlencode($name) . '/transfer/lock', [RequestOptions::JSON => ['isLocked' => $locked]]);
+  }
+
+  /**
+   * Fetches a domain's transfer auth code.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function getAuthCode(string $name): string {
+    $code = $this->request('GET', 'domains/' . rawurlencode($name) . '/transfer/auth-code')['authCode'] ?? NULL;
+    if (!is_string($code) || $code === '') {
+      throw new ProviderException("Spaceship returned no auth code for $name.");
+    }
+    return $code;
   }
 
   /**

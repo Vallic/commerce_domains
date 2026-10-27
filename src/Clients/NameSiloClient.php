@@ -68,6 +68,43 @@ final class NameSiloClient extends ApiClient {
   }
 
   /**
+   * Replaces a domain's nameservers; NameSilo takes up to 13.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string[] $nameservers
+   *   The host names.
+   */
+  public function changeNameServers(string $name, array $nameservers): void {
+    $parameters = ['domain' => $name];
+    foreach (array_values(array_slice($nameservers, 0, 13)) as $i => $host) {
+      $parameters['ns' . ($i + 1)] = $host;
+    }
+    $this->operation('changeNameServers', $parameters);
+  }
+
+  /**
+   * Locks a domain against transfers, or unlocks it.
+   */
+  public function setLock(string $name, bool $locked): void {
+    $this->operation($locked ? 'domainLock' : 'domainUnlock', ['domain' => $name]);
+  }
+
+  /**
+   * Turns automatic renewal on or off.
+   */
+  public function setAutoRenewal(string $name, bool $enabled): void {
+    $this->operation($enabled ? 'addAutoRenewal' : 'removeAutoRenewal', ['domain' => $name]);
+  }
+
+  /**
+   * Has NameSilo email the auth code to the domain's administrative contact.
+   */
+  public function retrieveAuthCode(string $name): void {
+    $this->operation('retrieveAuthCode', ['domain' => $name]);
+  }
+
+  /**
    * Fetches the account's active marketplace sales.
    *
    * @return array[]

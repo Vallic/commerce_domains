@@ -10,10 +10,11 @@ use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\DynadotClient;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
 
 /**
- * Lists Dynadot-registered domains in its marketplace; reads registrations.
+ * Lists Dynadot-registered domains in its marketplace; manages registrations.
  *
  * The API only lists domains in the account itself, so this provider manages
  * the domains whose registrar is a Dynadot provider; names registered
@@ -27,7 +28,7 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('Dynadot'),
   description: new TranslatableMarkup('Lists domains registered at Dynadot in its marketplace through the Dynadot API.'),
 )]
-final class Dynadot extends MarketplacePluginBase implements RegistrarInterface {
+final class Dynadot extends MarketplacePluginBase implements DomainManagementInterface {
 
   use RegistrarTrait;
 
@@ -164,8 +165,46 @@ final class Dynadot extends MarketplacePluginBase implements RegistrarInterface 
    * {@inheritdoc}
    */
   protected function registrationRecords(?array $names): iterable {
-    // There is no single-domain call with these details.
-    return $this->client()->listDomains();
+    $client = $this->client();
+    return self::fewNames($names) ? array_filter(array_map($client->getDomainInfo(...), array_values($names))) : $client->listDomains();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getNameservers(string $name): array {
+    return array_map('strtolower', $this->client()->getNameservers($name));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $this->client()->setNameservers($name, $nameservers);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setTransferLock(string $name, bool $locked): void {
+    if (!$locked) {
+      throw new ProviderException('The Dynadot API cannot unlock domains; unlock it in the Dynadot account.');
+    }
+    $this->client()->lockDomain($name);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setAutoRenew(string $name, bool $auto_renew): void {
+    $this->client()->setRenewOption($name, $auto_renew ? 'auto' : 'donot');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAuthCode(string $name): string {
+    return $this->client()->getTransferAuthCode($name);
   }
 
   /**

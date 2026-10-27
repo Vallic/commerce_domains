@@ -12,7 +12,7 @@ use Drupal\commerce_domains\Registration;
 use Drupal\commerce_domains\Clients\SpaceshipClient;
 
 /**
- * Lists domains on Spaceship SellerHub, and reads registration details.
+ * Lists domains on Spaceship SellerHub, and reads and manages registrations.
  *
  * Buy Now at the catalog price times the price factor, with offers from the
  * base minimum (the full price for Atom premium names). The API has no
@@ -24,7 +24,7 @@ use Drupal\commerce_domains\Clients\SpaceshipClient;
   label: new TranslatableMarkup('Spaceship'),
   description: new TranslatableMarkup('Pushes listings to SellerHub through the Spaceship API.'),
 )]
-final class Spaceship extends MarketplacePluginBase implements RegistrarInterface {
+final class Spaceship extends MarketplacePluginBase implements DomainManagementInterface {
 
   use RegistrarTrait;
 
@@ -125,6 +125,46 @@ final class Spaceship extends MarketplacePluginBase implements RegistrarInterfac
   /**
    * {@inheritdoc}
    */
+  public function getNameservers(string $name): array {
+    $nameservers = $this->client()->getRegistration($name)['nameservers'] ?? [];
+    // "basic" is Spaceship's own nameservers.
+    if (($nameservers['provider'] ?? NULL) !== 'custom') {
+      return [];
+    }
+    return array_values(array_map('strtolower', array_filter($nameservers['hosts'] ?? [], 'is_string')));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $this->client()->setNameservers($name, array_slice($nameservers, 0, 12));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setTransferLock(string $name, bool $locked): void {
+    $this->client()->setTransferLock($name, $locked);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setAutoRenew(string $name, bool $auto_renew): void {
+    $this->client()->setAutoRenew($name, $auto_renew);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAuthCode(string $name): string {
+    return $this->client()->getAuthCode($name);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function describeValue(string $field, mixed $value): string {
     if (in_array($field, self::MONEY_FIELDS, TRUE) && (is_int($value) || is_float($value))) {
       return $this->formatMoney($value);
@@ -173,7 +213,7 @@ final class Spaceship extends MarketplacePluginBase implements RegistrarInterfac
    * {@inheritdoc}
    */
   protected function credentialsHelp(): string {
-    return (string) $this->t('Create a key in the Spaceship API Manager with the SellerHub read and write scopes, plus domains read for registration details.');
+    return (string) $this->t('Create a key in the Spaceship API Manager with the SellerHub read and write scopes, plus domains read for registration details, domains write for nameservers and auto-renew, and domains transfer for the transfer lock and auth code.');
   }
 
   /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\NameSiloClient;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\NameSilo;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
@@ -155,6 +156,36 @@ class NameSiloTest extends ProviderTestBase {
       $this->assertSame('NameSilo listDomains: Invalid API Key (code 110)', $e->getMessage());
       $this->assertTrue($e->retryable);
     }
+  }
+
+  /**
+   * Tests changing domains in the account.
+   */
+  public function testManagement(): void {
+    $ok = self::json(self::reply([]));
+    $nameservers = [
+      ['nameserver' => 'NS2.Example.net', 'position' => 2],
+      ['nameserver' => 'ns1.example.net', 'position' => 1],
+    ];
+    $plugin = $this->registrar(NameSilo::class, 'namesilo', self::KEYS, [
+      self::json(self::reply(['nameservers' => $nameservers])),
+      $ok,
+      $ok,
+      $ok,
+      $ok,
+    ]);
+    $this->assertInstanceOf(DomainManagementInterface::class, $plugin);
+    $this->assertSame(['ns1.example.net', 'ns2.example.net'], $plugin->getNameservers('a.com'));
+    $plugin->setNameservers('a.com', ['ns1.x.com', 'ns2.x.com']);
+    $query = array_diff_key($this->query(1), ['key' => TRUE, 'version' => TRUE, 'type' => TRUE]);
+    $this->assertSame(['domain' => 'a.com', 'ns1' => 'ns1.x.com', 'ns2' => 'ns2.x.com'], $query);
+    $this->assertSame('GET https://www.namesilo.com/api/changeNameServers', $this->call(1));
+    $plugin->setTransferLock('a.com', FALSE);
+    $this->assertSame('GET https://www.namesilo.com/api/domainUnlock', $this->call(2));
+    $plugin->setAutoRenew('a.com', TRUE);
+    $this->assertSame('GET https://www.namesilo.com/api/addAutoRenewal', $this->call(3));
+    $this->assertSame('', $plugin->getAuthCode('a.com'), 'NameSilo emails the code.');
+    $this->assertSame('GET https://www.namesilo.com/api/retrieveAuthCode', $this->call(4));
   }
 
 }

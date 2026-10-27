@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\NamecheapClient;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Namecheap;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
@@ -67,7 +68,7 @@ class NamecheapTest extends ProviderTestBase {
     ]);
     $registrations = $plugin->fetchRegistrations();
     $this->assertCount(102, $registrations);
-    $this->assertEquals(new Registration('a.com', 1802649600, TRUE, FALSE), $registrations['a.com']);
+    $this->assertEquals(new Registration('a.com', 1802649600, NULL, FALSE), $registrations['a.com'], 'IsLocked is not the transfer lock.');
     $this->assertSame('expired', $registrations['b.com']->status);
     $this->assertTrue($registrations['b.com']->autoRenew);
 
@@ -82,6 +83,63 @@ class NamecheapTest extends ProviderTestBase {
       'PageSize' => '100',
     ], $this->query(0));
     $this->assertSame('2', $this->query(1)['Page']);
+  }
+
+  /**
+   * Tests that a few names get their transfer lock asked for.
+   */
+  public function testFetchFewRegistrations(): void {
+    $plugin = $this->registrar(Namecheap::class, 'namecheap', self::KEYS, [
+      self::page('<Domain ID="1" Name="a.com" Expires="02/15/2027" IsLocked="false" AutoRenew="true" /><Domain ID="2" Name="b.com" />', 2),
+      self::xml('<Errors /><CommandResponse Type="namecheap.domains.getRegistrarLock"><DomainGetRegistrarLockResult Domain="a.com" RegistrarLockStatus="true" /></CommandResponse>'),
+    ]);
+    $expected = ['a.com' => new Registration('a.com', 1802649600, TRUE, TRUE)];
+    $this->assertEquals($expected, $plugin->fetchRegistrations(['a.com', 'gone.com']));
+    $this->assertSame('namecheap.domains.getRegistrarLock', $this->query(1)['Command']);
+    $this->assertSame('a.com', $this->query(1)['DomainName']);
+    $this->assertCount(2, $this->history);
+  }
+
+  /**
+   * Tests changing domains in the account.
+   */
+  public function testManagement(): void {
+    $result = fn(string $command, string $element) => self::xml("<Errors /><CommandResponse Type=\"$command\">$element</CommandResponse>");
+    $plugin = $this->registrar(Namecheap::class, 'namecheap', self::KEYS, [
+      $result('namecheap.domains.dns.getList', '<DomainDNSGetListResult Domain="a.co.uk" IsUsingOurDNS="false"><Nameserver>NS1.Host.com</Nameserver><Nameserver>ns2.host.com</Nameserver></DomainDNSGetListResult>'),
+      $result('namecheap.domains.dns.getList', '<DomainDNSGetListResult Domain="b.com" IsUsingOurDNS="true"><Nameserver>dns1.registrar-servers.com</Nameserver></DomainDNSGetListResult>'),
+      $result('namecheap.domains.dns.setCustom', '<DomainDNSSetCustomResult Domain="a.co.uk" Updated="true" />'),
+      $result('namecheap.domains.setRegistrarLock', '<DomainSetRegistrarLockResult Domain="a.co.uk" IsSuccess="true" />'),
+      $result('namecheap.domains.setRegistrarLock', '<DomainSetRegistrarLockResult Domain="a.co.uk" IsSuccess="false" />'),
+    ]);
+    $this->assertInstanceOf(DomainManagementInterface::class, $plugin);
+    $this->assertSame(['ns1.host.com', 'ns2.host.com'], $plugin->getNameservers('a.co.uk'));
+    $this->assertSame(['SLD' => 'a', 'TLD' => 'co.uk'], array_intersect_key($this->query(0), ['SLD' => 1, 'TLD' => 1]));
+    $this->assertSame([], $plugin->getNameservers('b.com'), "Namecheap's own DNS has no nameservers to show.");
+
+    $plugin->setNameservers('a.co.uk', ['ns1.x.com', 'ns2.x.com']);
+    $this->assertSame('ns1.x.com,ns2.x.com', $this->query(2)['Nameservers']);
+    $plugin->setTransferLock('a.co.uk', FALSE);
+    $this->assertSame('a.co.uk', $this->query(3)['DomainName']);
+    $this->assertSame('UNLOCK', $this->query(3)['LockAction']);
+    try {
+      $plugin->setTransferLock('a.co.uk', TRUE);
+      $this->fail('A change Namecheap did not make is an error.');
+    }
+    catch (ProviderException $e) {
+      $this->assertSame('Namecheap namecheap.domains.setRegistrarLock: IsSuccess is not true.', $e->getMessage());
+    }
+
+    foreach (['setAutoRenew' => ['a.co.uk', TRUE], 'getAuthCode' => ['a.co.uk']] as $method => $arguments) {
+      try {
+        $plugin->$method(...$arguments);
+        $this->fail("$method has no API command.");
+      }
+      catch (ProviderException $e) {
+        $this->assertStringContainsString('in the Namecheap account', $e->getMessage());
+      }
+    }
+    $this->assertCount(5, $this->history, 'Unsupported operations make no call.');
   }
 
   /**

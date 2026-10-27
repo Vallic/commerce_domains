@@ -99,7 +99,7 @@ class ProviderForm extends EntityForm {
         $form['registration_sync'] = [
           '#type' => 'checkbox',
           '#title' => $this->t('Refresh registration details daily'),
-          '#description' => $this->t('Cron updates the expiry date of every catalog domain registered here.'),
+          '#description' => $this->t('Cron records this registrar on every catalog domain its account holds, and updates their expiry dates.'),
           '#default_value' => $this->entity->syncsRegistrations(),
         ];
       }

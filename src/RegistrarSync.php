@@ -14,8 +14,10 @@ use Psr\Log\LoggerInterface;
 /**
  * Brings the catalog's registration details in line with a registrar.
  *
- * Reads the account and updates the expiry date of every catalog domain
- * recorded at that registrar. Nothing is written to the registrar.
+ * Reads the account, records the registrar on every catalog domain the
+ * account holds, and updates their expiry dates. The account is the record of
+ * where a domain is: one transferred in is moved to this registrar on the next
+ * sync. Nothing is written to the registrar.
  */
 class RegistrarSync {
 
@@ -110,23 +112,17 @@ class RegistrarSync {
    *   The provider the plan was made for.
    * @param \Drupal\commerce_domains\RegistrarPlan $plan
    *   The plan.
-   * @param bool $fix_registrar
-   *   Also record this registrar on domains the account holds but the
-   *   catalog records elsewhere.
    *
    * @return int
    *   How many products were updated.
    *
    * @throws \Drupal\commerce_domains\ProviderException
    */
-  public function apply(ProviderInterface $provider, RegistrarPlan $plan, bool $fix_registrar = FALSE): int {
+  public function apply(ProviderInterface $provider, RegistrarPlan $plan): int {
     if (!$provider->status()) {
       throw new ProviderException(sprintf('%s is disabled.', $provider->label()));
     }
-    $names = array_keys($plan->expires);
-    if ($fix_registrar) {
-      $names = array_merge($names, array_keys($plan->elsewhere));
-    }
+    $names = array_merge(array_keys($plan->expires), array_keys($plan->elsewhere));
 
     $storage = $this->entityTypeManager->getStorage('commerce_product');
     $updated = 0;
@@ -134,9 +130,7 @@ class RegistrarSync {
       $registration = $plan->registrations[$name];
       /** @var \Drupal\commerce_product\Entity\ProductInterface $product */
       foreach ($storage->loadMultiple($plan->products[$name] ?? []) as $product) {
-        if ($fix_registrar) {
-          $product->set('domain_registrar', $provider->id());
-        }
+        $product->set('domain_registrar', $provider->id());
         if ($registration->expires !== NULL) {
           $product->set('domain_expires', $registration->expires);
         }

@@ -83,6 +83,85 @@ final class DynadotClient extends ApiClient {
   }
 
   /**
+   * Fetches one domain's details.
+   *
+   * @return array|null
+   *   The domain record, shaped like a list_domain one, or NULL when the
+   *   account doesn't hold it.
+   */
+  public function getDomainInfo(string $name): ?array {
+    try {
+      $response = $this->command('domain_info', ['domain' => $name]);
+    }
+    catch (ProviderException $e) {
+      if ($e->retryable) {
+        throw $e;
+      }
+      return NULL;
+    }
+    return is_array($response['DomainInfo'] ?? NULL) ? $response['DomainInfo'] : NULL;
+  }
+
+  /**
+   * Fetches a domain's nameservers.
+   *
+   * @return string[]
+   *   The host names, in order.
+   */
+  public function getNameservers(string $name): array {
+    $content = $this->command('get_ns', ['domain' => $name])['NsContent'] ?? [];
+    $hosts = [];
+    foreach (is_array($content) ? $content : [] as $key => $host) {
+      if (is_string($key) && preg_match('/^Host(\d+)$/', $key, $match) && is_string($host) && $host !== '') {
+        $hosts[(int) $match[1]] = $host;
+      }
+    }
+    ksort($hosts);
+    return array_values($hosts);
+  }
+
+  /**
+   * Replaces a domain's nameservers; Dynadot takes up to 13.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string[] $nameservers
+   *   The host names, which must already be in the account.
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $params = ['domain' => $name];
+    foreach (array_values(array_slice($nameservers, 0, 13)) as $i => $host) {
+      $params["ns$i"] = $host;
+    }
+    $this->command('set_ns', $params);
+  }
+
+  /**
+   * Locks a domain against transfers. api3 has no command to unlock one.
+   */
+  public function lockDomain(string $name): void {
+    $this->command('lock_domain', ['domain' => $name]);
+  }
+
+  /**
+   * Sets a domain's renew option: "auto" or "donot".
+   */
+  public function setRenewOption(string $name, string $option): void {
+    $this->command('set_renew_option', ['domain' => $name, 'renew_option' => $option]);
+  }
+
+  /**
+   * Fetches a domain's transfer auth code.
+   */
+  public function getTransferAuthCode(string $name): string {
+    $code = $this->command('get_transfer_auth_code', ['domain' => $name])['AuthCode'] ?? NULL;
+    if (!is_string($code) || $code === '') {
+      throw new ProviderException("Dynadot get_transfer_auth_code: no code for $name.");
+    }
+    return $code;
+  }
+
+  /**
    * Fetches a domain's marketplace listing.
    *
    * @return array|null

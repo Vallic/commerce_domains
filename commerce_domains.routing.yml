@@ -1,0 +1,28 @@
+entity.commerce_domains_provider.registrations:
+  path: '/admin/commerce/config/domain-providers/{commerce_domains_provider}/registrations'
+  defaults:
+    _form: '\Drupal\commerce_domains\Form\RegistrationsForm'
+    _title_callback: '\Drupal\commerce_domains\Form\RegistrationsForm::title'
+  requirements:
+    _permission: 'administer commerce_domains providers'
+    _custom_access: '\Drupal\commerce_domains\Form\RegistrationsForm::access'
+  options:
+    _admin_route: TRUE
+    parameters:
+      commerce_domains_provider:
+        type: entity:commerce_domains_provider
+
+commerce_domains.product_registrar:
+  path: '/product/{commerce_product}/registrar'
+  defaults:
+    _form: '\Drupal\commerce_domains\Form\DomainRegistrarForm'
+    _title: 'Registrar'
+  requirements:
+    _permission: 'manage domains at registrars'
+    _custom_access: '\Drupal\commerce_domains\Form\DomainRegistrarForm::access'
+    commerce_product: \d+
+  options:
+    _admin_route: TRUE
+    parameters:
+      commerce_product:
+        type: entity:commerce_product

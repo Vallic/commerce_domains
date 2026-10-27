@@ -45,7 +45,7 @@ class RegistrarCommandsTest extends DomainsKernelTestBase {
   protected function runCommand(string $provider, array $options = []): int {
     $command = new RegistrarCommands($this->entityTypeManager, $this->container->get(RegistrarSync::class));
     $this->prepareCommand($command);
-    $defaults = ['domains' => NULL, 'dry-run' => FALSE, 'details' => FALSE, 'fix-registrar' => FALSE];
+    $defaults = ['domains' => NULL, 'dry-run' => FALSE, 'details' => FALSE];
     return $command->sync($provider, $options + $defaults);
   }
 
@@ -90,13 +90,14 @@ class RegistrarCommandsTest extends DomainsKernelTestBase {
     $this->assertSame(['Reg is disabled; enable it before syncing.'], $this->messages('error'));
 
     Provider::load('reg')->enable()->save();
-    $this->assertSame(DrushCommands::EXIT_SUCCESS, $this->runCommand('reg', ['fix-registrar' => TRUE]));
+    $this->assertSame(DrushCommands::EXIT_SUCCESS, $this->runCommand('reg'));
     $this->assertStringContainsString('[OK] Updated 2 products from Reg.', $this->output->fetch());
     $this->assertSame(1_830_000_000, $this->expires('renewed.com'));
     $this->assertSame(1_830_000_000, $this->expires('moved.com'));
+    $this->assertSame([], $this->container->get(RegistrarSync::class)->plan(Provider::load('reg'))->elsewhere, 'The account corrects the registrar.');
 
     // Nothing left to do: no confirmation, no update.
-    $this->assertSame(DrushCommands::EXIT_SUCCESS, $this->runCommand('reg', ['fix-registrar' => TRUE]));
+    $this->assertSame(DrushCommands::EXIT_SUCCESS, $this->runCommand('reg'));
     $this->assertStringNotContainsString('Updated', $this->output->fetch());
   }
 

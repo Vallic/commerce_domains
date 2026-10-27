@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\NameBrightClient;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\NameBright;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
@@ -65,6 +67,46 @@ class NameBrightTest extends ProviderTestBase {
     $expected = ['a.com' => new Registration('a.com', NULL, FALSE)];
     $this->assertEquals($expected, $plugin->fetchRegistrations(['a.com', 'gone.com']));
     $this->assertSame('GET https://api.namebright.com/domains/gone.com', $this->call(2));
+  }
+
+  /**
+   * Tests changing domains in the account.
+   */
+  public function testManagement(): void {
+    $domain = [
+      'domainName' => 'a.com',
+      'locked' => TRUE,
+      'autoRenew' => FALSE,
+      'whoIsPrivacy' => TRUE,
+      'status' => 'Active',
+    ];
+    $plugin = $this->registrar(NameBright::class, 'namebright', self::KEYS, [
+      self::json(['access_token' => 'nb-tok']),
+      self::json(['domainName' => 'a.com', 'nameServers' => ['NS1.Host.com', 'ns2.host.com']]),
+      self::json(['domainName' => 'a.com', 'nameServers' => ['ns1.x.com', 'ns2.x.com']]),
+      self::json($domain),
+      self::json(['locked' => FALSE] + $domain),
+      self::json(['authCode' => 'c0de'] + $domain),
+      self::json(['authCode' => NULL] + $domain),
+    ]);
+    $this->assertInstanceOf(DomainManagementInterface::class, $plugin);
+    $this->assertSame(['ns1.host.com', 'ns2.host.com'], $plugin->getNameservers('a.com'));
+    $plugin->setNameservers('a.com', ['ns1.x.com', 'ns2.x.com']);
+    $this->assertSame('PUT https://api.namebright.com/domains/a.com/nameservers', $this->call(2));
+    $this->assertSame(['nameServers' => ['ns1.x.com', 'ns2.x.com']], $this->body(2));
+
+    $plugin->setTransferLock('a.com', FALSE);
+    $this->assertSame('PUT https://api.namebright.com/domains/a.com', $this->call(4));
+    $this->assertSame(['locked' => FALSE, 'autoRenew' => FALSE, 'whoIsPrivacy' => TRUE], $this->body(4), 'The other settings are kept.');
+
+    $this->assertSame('c0de', $plugin->getAuthCode('a.com'));
+    try {
+      $plugin->getAuthCode('a.com');
+      $this->fail('A missing code is an error.');
+    }
+    catch (ProviderException $e) {
+      $this->assertSame('NameBright returned no auth code for a.com.', $e->getMessage());
+    }
   }
 
 }

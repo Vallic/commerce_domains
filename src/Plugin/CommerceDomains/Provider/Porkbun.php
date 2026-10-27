@@ -8,17 +8,21 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\PorkbunClient;
 use Drupal\commerce_domains\DomainName;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
 
 /**
- * Reads registrations from a Porkbun account.
+ * Reads registrations from a Porkbun account, and manages them.
+ *
+ * The API has no commands for the transfer lock or the auth code; those stay
+ * in the Porkbun account.
  */
 #[CommerceDomainsProvider(
   id: 'porkbun',
   label: new TranslatableMarkup('Porkbun'),
-  description: new TranslatableMarkup('Reads registrations through the Porkbun API.'),
+  description: new TranslatableMarkup('Reads and manages registrations through the Porkbun API.'),
 )]
-final class Porkbun extends ProviderPluginBase implements RegistrarInterface {
+final class Porkbun extends ProviderPluginBase implements DomainManagementInterface {
 
   use RegistrarTrait;
 
@@ -66,8 +70,46 @@ final class Porkbun extends ProviderPluginBase implements RegistrarInterface {
   /**
    * {@inheritdoc}
    */
+  public function getNameservers(string $name): array {
+    // Registries return the set in any order, so sort it for a stable form.
+    $hosts = array_map('strtolower', $this->client()->getNameservers($name));
+    sort($hosts);
+    return $hosts;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $this->client()->updateNameservers($name, $nameservers);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setTransferLock(string $name, bool $locked): void {
+    throw new ProviderException('The Porkbun API cannot change the transfer lock; change it in the Porkbun account.');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setAutoRenew(string $name, bool $auto_renew): void {
+    $this->client()->updateAutoRenew($name, $auto_renew);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAuthCode(string $name): string {
+    throw new ProviderException('The Porkbun API cannot give auth codes; get one in the Porkbun account.');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   protected function credentialsHelp(): string {
-    return (string) $this->t('Create the API key and secret at porkbun.com/account/api; reading registrations needs only the read scope.');
+    return (string) $this->t('Create the API key and secret at porkbun.com/account/api, and turn on API access for each domain; reading registrations needs only the read scope, and managing them the write scope.');
   }
 
   /**

@@ -58,6 +58,73 @@ final class NamecheapClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's nameservers.
+   *
+   * @return string[]
+   *   The host names, or none when the domain uses Namecheap's own DNS.
+   */
+  public function getNameservers(string $sld, string $tld): array {
+    $result = $this->command('namecheap.domains.dns.getList', ['SLD' => $sld, 'TLD' => $tld])->DomainDNSGetListResult;
+    if (strtolower((string) $result['IsUsingOurDNS']) === 'true') {
+      return [];
+    }
+    $hosts = [];
+    foreach ($result->Nameserver ?? [] as $host) {
+      $hosts[] = (string) $host;
+    }
+    return array_values(array_filter($hosts));
+  }
+
+  /**
+   * Points a domain at custom nameservers.
+   *
+   * @param string $sld
+   *   The label, "example" in example.co.uk.
+   * @param string $tld
+   *   The extension, "co.uk" in example.co.uk.
+   * @param string[] $hosts
+   *   The host names.
+   */
+  public function setNameservers(string $sld, string $tld, array $hosts): void {
+    $result = $this->command('namecheap.domains.dns.setCustom', [
+      'SLD' => $sld,
+      'TLD' => $tld,
+      'Nameservers' => implode(',', $hosts),
+    ]);
+    $this->assertDone($result->DomainDNSSetCustomResult, 'Updated', 'namecheap.domains.dns.setCustom');
+  }
+
+  /**
+   * Fetches whether a domain is locked against transfers.
+   */
+  public function getRegistrarLock(string $name): bool {
+    $result = $this->command('namecheap.domains.getRegistrarLock', ['DomainName' => $name])->DomainGetRegistrarLockResult;
+    return strtolower((string) ($result['RegistrarLockStatus'] ?? '')) === 'true';
+  }
+
+  /**
+   * Locks a domain against transfers, or unlocks it.
+   */
+  public function setRegistrarLock(string $name, bool $locked): void {
+    $result = $this->command('namecheap.domains.setRegistrarLock', [
+      'DomainName' => $name,
+      'LockAction' => $locked ? 'LOCK' : 'UNLOCK',
+    ]);
+    $this->assertDone($result->DomainSetRegistrarLockResult, 'IsSuccess', 'namecheap.domains.setRegistrarLock');
+  }
+
+  /**
+   * Throws when a command answered OK but reports it changed nothing.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  protected function assertDone(?\SimpleXMLElement $result, string $flag, string $command): void {
+    if (strtolower((string) ($result[$flag] ?? '')) !== 'true') {
+      throw new ProviderException(sprintf('%s %s: %s is not true.', static::NETWORK, $command, $flag));
+    }
+  }
+
+  /**
    * Runs an API command.
    *
    * @return \SimpleXMLElement

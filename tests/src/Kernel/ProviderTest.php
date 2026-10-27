@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\ProviderPluginManager;
@@ -52,14 +53,18 @@ class ProviderTest extends DomainsKernelTestBase {
       'namesilo',
       'porkbun',
       'spaceship',
+      'test_managed_registrar',
       'test_registrar',
       'unstoppable',
     ];
+    // Registrars whose API can also change domains.
+    $managers = ['dynadot', 'namebright', 'namecheap', 'namesilo', 'porkbun', 'spaceship', 'test_managed_registrar'];
     $expected = array_unique([...$marketplaces, ...$registrars]);
     sort($expected);
     $this->assertSame($expected, $ids);
     $this->assertEqualsCanonicalizing($marketplaces, $manager->getPluginIdsWith(MarketplaceInterface::class));
     $this->assertEqualsCanonicalizing($registrars, $manager->getPluginIdsWith(RegistrarInterface::class));
+    $this->assertEqualsCanonicalizing($managers, $manager->getPluginIdsWith(DomainManagementInterface::class));
 
     foreach ($ids as $id) {
       Provider::create(['id' => $id, 'label' => ucfirst($id), 'plugin' => $id])->save();

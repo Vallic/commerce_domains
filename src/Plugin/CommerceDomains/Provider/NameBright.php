@@ -8,17 +8,18 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\NameBrightClient;
 use Drupal\commerce_domains\DomainName;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
 
 /**
- * Reads registrations from a NameBright account.
+ * Reads registrations from a NameBright account, and manages them.
  */
 #[CommerceDomainsProvider(
   id: 'namebright',
   label: new TranslatableMarkup('NameBright'),
-  description: new TranslatableMarkup('Reads registrations through the NameBright API.'),
+  description: new TranslatableMarkup('Reads and manages registrations through the NameBright API.'),
 )]
-final class NameBright extends ProviderPluginBase implements RegistrarInterface {
+final class NameBright extends ProviderPluginBase implements DomainManagementInterface {
 
   use RegistrarTrait;
 
@@ -59,6 +60,45 @@ final class NameBright extends ProviderPluginBase implements RegistrarInterface 
       autoRenew: isset($record['autoRenew']) ? (bool) $record['autoRenew'] : NULL,
       status: isset($record['status']) ? (string) $record['status'] : NULL,
     );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getNameservers(string $name): array {
+    return array_map('strtolower', $this->client()->getNameservers($name));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $this->client()->setNameservers($name, $nameservers);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setTransferLock(string $name, bool $locked): void {
+    $this->client()->updateDomain($name, ['locked' => $locked]);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setAutoRenew(string $name, bool $auto_renew): void {
+    $this->client()->updateDomain($name, ['autoRenew' => $auto_renew]);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAuthCode(string $name): string {
+    $code = $this->client()->getDomain($name)['authCode'] ?? NULL;
+    if (!is_string($code) || $code === '') {
+      throw new ProviderException("NameBright returned no auth code for $name.");
+    }
+    return $code;
   }
 
   /**

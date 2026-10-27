@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\DomainName;
+use Drupal\commerce_domains\DomainNameParser;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
@@ -70,6 +72,10 @@ abstract class ProviderTestBase extends ClientTestBase {
     $container->set('http_client', $this->http($responses));
     $container->set('uuid', new Php());
     $container->set('string_translation', $this->getStringTranslationStub());
+    // Splits at the first dot; the Public Suffix List has its own test.
+    $parser = $this->createMock(DomainNameParser::class);
+    $parser->method('parse')->willReturnCallback(fn(string $name) => new DomainName($name, $name, ...explode('.', $name, 2)));
+    $container->set(DomainNameParser::class, $parser);
     \Drupal::setContainer($container);
     $definition = ['id' => $id, 'label' => ucfirst($id), 'class' => $class, 'provider' => 'commerce_domains'];
     return $class::create($container, $configuration, $id, $definition);

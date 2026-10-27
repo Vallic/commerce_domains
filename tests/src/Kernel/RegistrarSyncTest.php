@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains\Form\RegistrationsForm;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\RegistrarPlan;
 use Drupal\commerce_domains\RegistrarSync;
@@ -20,6 +21,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  */
 #[CoversClass(RegistrarSync::class)]
 #[CoversClass(RegistrarPlan::class)]
+#[CoversClass(RegistrationsForm::class)]
 #[Group('commerce_domains')]
 #[RunTestsInSeparateProcesses]
 class RegistrarSyncTest extends DomainsKernelTestBase {
@@ -112,26 +114,22 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
   }
 
   /**
-   * Tests writing expiry dates, and optionally correcting registrars.
+   * Tests writing expiry dates and correcting registrars.
    */
   public function testApply(): void {
     $provider = $this->createProvider();
     $changed = $this->product('renewed.com')->getChangedTime();
-    $this->assertSame(1, $this->sync->apply($provider, $this->sync->plan($provider)));
+    $this->assertSame(3, $this->sync->apply($provider, $this->sync->plan($provider)));
     $renewed = $this->product('renewed.com');
     $this->assertSame(self::LATER, (int) $renewed->get('domain_expires')->value);
     $this->assertSame($changed, $renewed->getChangedTime(), 'Registration details are not an edit.');
-    $this->assertSame('gname', $this->product('moved.com')->get('domain_registrar')->target_id);
-
-    $plan = $this->sync->plan($provider);
-    $this->assertTrue($plan->isEmpty());
-    $this->assertFalse($plan->isEmpty(TRUE));
-    $this->assertSame(2, $this->sync->apply($provider, $plan, TRUE));
     $moved = $this->product('moved.com');
-    $this->assertSame('reg', $moved->get('domain_registrar')->target_id);
+    $this->assertSame('reg', $moved->get('domain_registrar')->target_id, 'The account holding a domain is its registrar.');
     $this->assertSame(self::LATER, (int) $moved->get('domain_expires')->value);
     $this->assertSame('reg', $this->product('unrecorded.com')->get('domain_registrar')->target_id);
-    $this->assertSame([], $this->sync->plan($provider)->elsewhere);
+    $this->assertSame(['gone.com'], $this->sync->plan($provider)->missing, 'A domain gone from the account is left for a person.');
+    $this->assertSame('reg', $this->product('gone.com')->get('domain_registrar')->target_id);
+    $this->assertTrue($this->sync->plan($provider)->isEmpty());
   }
 
   /**
@@ -167,6 +165,7 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $this->container->get('cron')->run();
     $this->assertSame(1, $calls(), 'Only the enabled provider that asked for it is read.');
     $this->assertSame(self::LATER, (int) $this->product('renewed.com')->get('domain_expires')->value);
+    $this->assertSame('reg', $this->product('moved.com')->get('domain_registrar')->target_id, 'Cron corrects registrars too.');
 
     $this->sync->cron();
     $this->assertSame(1, $calls(), 'Not again within a day.');
@@ -192,7 +191,7 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     Provider::create(['id' => 'afternic', 'label' => 'Afternic', 'plugin' => 'afternic'])->save();
 
     $rows = $this->entityTypeManager->getListBuilder('commerce_domains_provider')->render()['table']['#rows'];
-    $this->assertSame('Marketplace, Registrar', (string) $rows['dynadot']['capabilities']);
+    $this->assertSame('Marketplace, Registrar, Domain management', (string) $rows['dynadot']['capabilities']);
     $this->assertSame('Marketplace', (string) $rows['afternic']['capabilities']);
     $this->assertSame('Registrar', (string) $rows['reg']['capabilities']);
 
@@ -211,6 +210,57 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $this->assertSame([], $form_state->getErrors());
     $this->assertTrue(Provider::load('reg')->syncsRegistrations());
     $this->assertTrue($this->config('commerce_domains.provider.reg')->get('registration_sync'));
+  }
+
+  /**
+   * Tests comparing and applying from the Registrations page.
+   */
+  public function testRegistrationsForm(): void {
+    $provider = $this->createProvider();
+    Provider::create(['id' => 'afternic', 'label' => 'Afternic', 'plugin' => 'afternic'])->save();
+    $this->assertTrue(RegistrationsForm::access($provider)->isAllowed());
+    $this->assertFalse(RegistrationsForm::access(Provider::load('afternic'))->isAllowed(), 'Only registrars have the page.');
+    $this->assertFalse(RegistrationsForm::access(Provider::load('gname'))->isAllowed(), 'Nor a provider without an API.');
+
+    $state = $this->container->get('state');
+    $calls = fn() => $state->get('commerce_domains_test.registrar_calls', 0);
+    $form_builder = $this->container->get('form_builder');
+    $form_state = new FormState();
+    $form_state->addBuildInfo('args', [$provider]);
+    $form = $form_builder->buildForm(RegistrationsForm::class, $form_state);
+    $this->assertSame(0, $calls(), 'The account is read only when asked.');
+    $this->assertArrayNotHasKey('apply', $form['actions']);
+
+    // Compare: the plan is shown, and nothing changes yet.
+    $form_state = (new FormState())->setValues(['domains' => '', 'op' => 'Compare with the account']);
+    $form_state->addBuildInfo('args', [$provider]);
+    $form_builder->submitForm(RegistrationsForm::class, $form_state);
+    $this->assertSame([], $form_state->getErrors());
+    $this->assertSame(1, $calls());
+    $plan = $form_state->get('plan');
+    $this->assertInstanceOf(RegistrarPlan::class, $plan);
+    $this->assertSame(['moved.com' => 'gname', 'unrecorded.com' => NULL], $plan->elsewhere);
+    $this->assertSame('gname', $this->product('moved.com')->get('domain_registrar')->target_id);
+    $form = $form_builder->retrieveForm(RegistrationsForm::class, $form_state);
+    $this->assertTrue($form['actions']['apply']['#access']);
+    $this->assertSame(['gone.com'], array_column(array_filter($form['plan']['details']['table']['#rows'], fn(array $row) => (string) $row[1] === 'not in the account'), 0));
+
+    // Apply: the comparison as shown, without reading the account again.
+    $plan = $form_state->get('plan');
+    $form_state = (new FormState())->setValues(['domains' => '', 'op' => 'Apply'])->set('plan', $plan);
+    $form_state->addBuildInfo('args', [$provider]);
+    $form_builder->submitForm(RegistrationsForm::class, $form_state);
+    $this->assertSame([], $form_state->getErrors());
+    $this->assertSame(1, $calls());
+    $this->assertSame('reg', $this->product('moved.com')->get('domain_registrar')->target_id);
+    $this->assertSame(self::LATER, (int) $this->product('renewed.com')->get('domain_expires')->value);
+
+    // A few names.
+    $values = ['domains' => "Renewed.com, parked.com\ngone.com", 'op' => 'Compare with the account'];
+    $form_state = (new FormState())->setValues($values);
+    $form_state->addBuildInfo('args', [$provider]);
+    $form_builder->submitForm(RegistrationsForm::class, $form_state);
+    $this->assertSame(['renewed.com', 'parked.com'], array_keys($form_state->get('plan')->registrations));
   }
 
 }

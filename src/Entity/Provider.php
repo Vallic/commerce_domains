@@ -46,6 +46,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
     'add-form' => '/admin/commerce/config/domain-providers/add',
     'edit-form' => '/admin/commerce/config/domain-providers/{commerce_domains_provider}',
     'delete-form' => '/admin/commerce/config/domain-providers/{commerce_domains_provider}/delete',
+    'registrations' => '/admin/commerce/config/domain-providers/{commerce_domains_provider}/registrations',
   ],
   admin_permission: 'administer commerce_domains providers',
   label_count: [

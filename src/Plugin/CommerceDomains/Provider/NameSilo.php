@@ -9,10 +9,11 @@ use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\Clients\NameSiloClient;
 use Drupal\commerce_domains\DomainName;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
 
 /**
- * Lists NameSilo-registered domains in its marketplace; reads registrations.
+ * Lists NameSilo-registered domains in its marketplace; manages registrations.
  *
  * Listings are offer/counter-offer sales with a buy-now price, a hidden
  * reserve as the minimum offer, a payment plan of up to 12 months on dearer
@@ -24,7 +25,7 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('NameSilo'),
   description: new TranslatableMarkup('Lists domains registered at NameSilo in its marketplace, and reads their registrations.'),
 )]
-final class NameSilo extends MarketplacePluginBase implements RegistrarInterface {
+final class NameSilo extends MarketplacePluginBase implements DomainManagementInterface {
 
   use RegistrarTrait;
 
@@ -189,6 +190,53 @@ final class NameSilo extends MarketplacePluginBase implements RegistrarInterface
       autoRenew: $yes('auto_renew'),
       status: isset($record['status']) ? strtolower((string) $record['status']) : NULL,
     );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getNameservers(string $name): array {
+    $info = $this->client()->getDomainInfo($name) ?? throw new ProviderException("The NameSilo account does not hold $name.");
+    // A list of {nameserver, position}.
+    $hosts = [];
+    foreach (is_array($info['nameservers'] ?? NULL) ? $info['nameservers'] : [] as $i => $entry) {
+      $host = is_array($entry) ? ($entry['nameserver'] ?? NULL) : $entry;
+      if (is_string($host) && $host !== '') {
+        $hosts[(int) (is_array($entry) ? ($entry['position'] ?? $i) : $i)] = strtolower($host);
+      }
+    }
+    ksort($hosts);
+    return array_values($hosts);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $this->client()->changeNameServers($name, $nameservers);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setTransferLock(string $name, bool $locked): void {
+    $this->client()->setLock($name, $locked);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setAutoRenew(string $name, bool $auto_renew): void {
+    $this->client()->setAutoRenewal($name, $auto_renew);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAuthCode(string $name): string {
+    // The API never returns the code.
+    $this->client()->retrieveAuthCode($name);
+    return '';
   }
 
   /**

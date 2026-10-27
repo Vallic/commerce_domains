@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\PorkbunClient;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Porkbun;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
@@ -73,6 +74,47 @@ class PorkbunTest extends ProviderTestBase {
       $this->assertSame('Porkbun GET domain/get/b.com: HTTP 200: Opt in *** first. (API_ACCESS_DISABLED)', $e->getMessage());
       $this->assertFalse($e->retryable);
     }
+  }
+
+  /**
+   * Tests changing domains in the account.
+   */
+  public function testManagement(): void {
+    $plugin = $this->registrar(Porkbun::class, 'porkbun', self::KEYS, [
+      self::json(['status' => 'SUCCESS', 'ns' => ['Ns2.Host.com', 'ns1.host.com']]),
+      self::json(['status' => 'SUCCESS']),
+      self::json(['status' => 'SUCCESS', 'results' => ['a.com' => ['status' => 'SUCCESS']]]),
+      self::json([
+        'status' => 'SUCCESS',
+        'results' => ['a.com' => ['status' => 'ERROR', 'message' => 'API access is off']],
+      ]),
+    ]);
+    $this->assertInstanceOf(DomainManagementInterface::class, $plugin);
+    $this->assertSame(['ns1.host.com', 'ns2.host.com'], $plugin->getNameservers('a.com'));
+    $this->assertSame('GET https://api.porkbun.com/api/json/v3/domain/getNs/a.com', $this->call(0));
+    $plugin->setNameservers('a.com', ['ns1.x.com', 'ns2.x.com']);
+    $this->assertSame('POST https://api.porkbun.com/api/json/v3/domain/updateNs/a.com', $this->call(1));
+    $this->assertSame(['ns' => ['ns1.x.com', 'ns2.x.com']], $this->body(1));
+    $plugin->setAutoRenew('a.com', FALSE);
+    $this->assertSame(['status' => 'off'], $this->body(2));
+    try {
+      $plugin->setAutoRenew('a.com', TRUE);
+      $this->fail('A refused domain is an error.');
+    }
+    catch (ProviderException $e) {
+      $this->assertSame('Porkbun updateAutoRenew a.com: API access is off', $e->getMessage());
+    }
+
+    foreach (['setTransferLock' => ['a.com', FALSE], 'getAuthCode' => ['a.com']] as $method => $arguments) {
+      try {
+        $plugin->$method(...$arguments);
+        $this->fail("$method has no API endpoint.");
+      }
+      catch (ProviderException $e) {
+        $this->assertStringContainsString('in the Porkbun account', $e->getMessage());
+      }
+    }
+    $this->assertCount(4, $this->history, 'Unsupported operations make no call.');
   }
 
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Clients;
 
+use Drupal\commerce_domains\ProviderException;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\RequestOptions;
 
@@ -65,6 +66,48 @@ final class NameBrightClient extends ApiClient {
    */
   public function getDomain(string $name): ?array {
     return $this->request('GET', 'domains/' . rawurlencode($name), [], [404]) ?: NULL;
+  }
+
+  /**
+   * Fetches a domain's nameservers.
+   *
+   * @return string[]
+   *   The host names; none when the domain is delegated nowhere.
+   */
+  public function getNameservers(string $name): array {
+    $hosts = $this->request('GET', 'domains/' . rawurlencode($name) . '/nameservers')['nameServers'] ?? [];
+    return array_values(array_filter(is_array($hosts) ? $hosts : [], 'is_string'));
+  }
+
+  /**
+   * Replaces a domain's nameservers, in one registry change.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string[] $nameservers
+   *   The host names.
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $this->request('PUT', 'domains/' . rawurlencode($name) . '/nameservers', [RequestOptions::JSON => ['nameServers' => array_values($nameservers)]]);
+  }
+
+  /**
+   * Changes a domain's lock, auto-renew or privacy.
+   *
+   * The update takes all three, so the ones not changing are sent as they
+   * are now.
+   *
+   * @param string $name
+   *   The domain.
+   * @param array $changes
+   *   Any of locked, autoRenew and whoIsPrivacy, as booleans.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function updateDomain(string $name, array $changes): void {
+    $domain = $this->getDomain($name) ?? throw new ProviderException("The NameBright account does not hold $name.");
+    $current = array_map('boolval', array_intersect_key($domain, array_flip(['locked', 'autoRenew', 'whoIsPrivacy'])));
+    $this->request('PUT', 'domains/' . rawurlencode($name), [RequestOptions::JSON => $changes + $current]);
   }
 
   /**

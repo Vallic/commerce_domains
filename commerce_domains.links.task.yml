@@ -1,0 +1,14 @@
+entity.commerce_domains_provider.edit_form:
+  title: 'Edit'
+  route_name: entity.commerce_domains_provider.edit_form
+  base_route: entity.commerce_domains_provider.edit_form
+entity.commerce_domains_provider.registrations:
+  title: 'Registrations'
+  route_name: entity.commerce_domains_provider.registrations
+  base_route: entity.commerce_domains_provider.edit_form
+  weight: 10
+commerce_domains.product_registrar:
+  title: 'Registrar'
+  route_name: commerce_domains.product_registrar
+  base_route: entity.commerce_product.canonical
+  weight: 20
