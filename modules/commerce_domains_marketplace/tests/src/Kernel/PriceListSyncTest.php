@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains_marketplace\Kernel;
 
+use Drupal\advancedqueue\Entity\Queue;
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains_marketplace\EventSubscriber\CatalogSubscriber;
 use Drupal\commerce_domains_marketplace\Hook\MarketplaceHooks;
@@ -95,14 +96,15 @@ class PriceListSyncTest extends MarketplaceKernelTestBase {
     $this->createProvider('auto');
     $scheduler = $this->container->get(SyncScheduler::class);
     $scheduler->destruct();
-    $queue = $this->container->get('queue')->get(SyncScheduler::QUEUE);
-    $queue->deleteQueue();
+    /** @var \Drupal\advancedqueue\Plugin\AdvancedQueue\Backend\Database $backend */
+    $backend = Queue::load(SyncScheduler::QUEUE)->getBackend();
+    $backend->deleteQueue();
 
     $this->item->setPrice(new Price('1600', 'USD'))->save();
     $scheduler->destruct();
-    $item = $queue->claimItem();
-    $this->assertIsObject($item);
-    $this->assertSame(['repriced.com'], $item->data['names']);
+    $job = $backend->claimJob();
+    $this->assertNotNull($job);
+    $this->assertSame(['repriced.com'], $job->getPayload()['names']);
   }
 
   /**

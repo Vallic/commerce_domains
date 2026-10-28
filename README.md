@@ -54,10 +54,17 @@ it is held at, and the marketplaces it is listed on.
   domains can be recorded there, and nothing is synced. A domain's registrar
   can be any registrar, with or without an API, but not a marketplace-only
   provider such as Afternic.
+- **Conditions** for promotions, payment gateways and shipping methods, under
+  *Domains*: the registrar, Atom premium (or not), and the sale terms (buy
+  now, offers, lease-to-own; each required, ruled out or either). Each comes
+  for order items, as promotion offers use, and for orders, which match when
+  any of their domains does. Lease-to-own counts the domain's own term, or
+  the one worked out from its price.
 - **Commerce Domains Marketplace** (submodule): keeps listings on those
   marketplaces in line with the catalog, with a Drush command for reviewing
-  and pushing, and optional automatic pushes from cron; and writes the CSV
-  files marketplaces import.
+  and pushing, and optional automatic pushes from cron through
+  [Advanced Queue](https://www.drupal.org/project/advancedqueue); and writes
+  the CSV files marketplaces import.
 
 Stock comes from wherever the site keeps it: a variation counts as for sale
 when its product is published, it is active, and its `in_stock` field (as
@@ -77,6 +84,8 @@ other currencies.
 
 - Drupal 11.4 or later, PHP 8.3 or later
 - Commerce 3 (Commerce Product)
+- [Advanced Queue](https://www.drupal.org/project/advancedqueue), for
+  Commerce Domains Marketplace
 - [jeremykendall/php-domain-parser](https://github.com/jeremykendall/php-domain-parser)
 
 ## Setup
@@ -114,7 +123,14 @@ drush cdms afternic --domains=example.com,example.net
 
 A dry run works while the provider is disabled. Once the output looks right,
 enable the provider and, if wanted, *Push catalog changes automatically*:
-changed domains are then queued and pushed on cron.
+changed domains are then queued in the *Marketplace sync* queue of
+[Advanced Queue](https://www.drupal.org/project/advancedqueue) and pushed
+on cron. An outage or bad keys are retried every 15 minutes for a day; the
+queue's job list shows what waits and what failed. To push sooner than cron:
+
+```sh
+drush advancedqueue:queue:process commerce_domains_marketplace
+```
 
 ## Domain overview
 

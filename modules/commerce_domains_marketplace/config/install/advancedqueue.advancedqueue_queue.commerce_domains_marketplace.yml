@@ -1,0 +1,20 @@
+langcode: en
+status: true
+dependencies:
+  enforced:
+    module:
+      - commerce_domains_marketplace
+id: commerce_domains_marketplace
+label: 'Marketplace sync'
+backend: database
+backend_configuration:
+  # A push of a few hundred names can take minutes on a slow API.
+  lease_time: 900
+processor: cron
+processing_time: 60
+locked: false
+stop_when_empty: true
+threshold:
+  type: 0
+  limit: 0
+  state: all

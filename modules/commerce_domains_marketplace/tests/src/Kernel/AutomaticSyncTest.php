@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains_marketplace\Kernel;
 
+use Drupal\advancedqueue\Entity\Queue;
+use Drupal\advancedqueue\Job;
+use Drupal\advancedqueue\JobResult;
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains_marketplace\EventSubscriber\CatalogSubscriber;
 use Drupal\commerce_domains_marketplace\Hook\MarketplaceHooks;
-use Drupal\commerce_domains_marketplace\Plugin\QueueWorker\MarketplaceSyncWorker;
+use Drupal\commerce_domains_marketplace\Plugin\AdvancedQueue\JobType\MarketplaceSyncJob;
 use Drupal\commerce_domains_marketplace\SyncScheduler;
 use Drupal\commerce_product\Entity\Product;
 use Drupal\commerce_product\Entity\ProductType;
 use Drupal\Core\Form\FormState;
-use Drupal\Core\Queue\DelayedRequeueException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -22,7 +24,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  */
 #[CoversClass(SyncScheduler::class)]
 #[CoversClass(CatalogSubscriber::class)]
-#[CoversClass(MarketplaceSyncWorker::class)]
+#[CoversClass(MarketplaceSyncJob::class)]
 #[CoversClass(MarketplaceHooks::class)]
 #[Group('commerce_domains')]
 #[RunTestsInSeparateProcesses]
@@ -43,17 +45,19 @@ class AutomaticSyncTest extends MarketplaceKernelTestBase {
    * Ends the request the way the kernel does, queueing collected changes.
    *
    * @return list<array>
-   *   The queued items' data.
+   *   The queued jobs' payloads.
    */
   protected function queued(): array {
     $this->container->get(SyncScheduler::class)->destruct();
-    $queue = $this->container->get('queue')->get(SyncScheduler::QUEUE);
-    $items = [];
-    while (is_object($item = $queue->claimItem())) {
-      $items[] = $item->data;
-      $queue->deleteItem($item);
+    /** @var \Drupal\advancedqueue\Plugin\AdvancedQueue\Backend\Database $backend */
+    $backend = Queue::load(SyncScheduler::QUEUE)->getBackend();
+    $payloads = [];
+    while ($job = $backend->claimJob()) {
+      $this->assertSame(SyncScheduler::JOB_TYPE, $job->getType());
+      $payloads[] = $job->getPayload();
+      $backend->deleteJob($job->getId());
     }
-    return $items;
+    return $payloads;
   }
 
   /**
@@ -80,30 +84,57 @@ class AutomaticSyncTest extends MarketplaceKernelTestBase {
   }
 
   /**
-   * Tests the worker pushing an item, and postponing on outages.
+   * Tests the job pushing changes, and retrying on outages.
    */
-  public function testWorker(): void {
+  public function testJob(): void {
     $this->createDomain('New.com', 1500);
-    $worker = $this->container->get('plugin.manager.queue_worker')->createInstance(SyncScheduler::QUEUE);
+    $job_type = $this->container->get('plugin.manager.advancedqueue_job_type')->createInstance(SyncScheduler::JOB_TYPE);
+    $process = fn(string $provider): JobResult => $job_type->process(Job::create(SyncScheduler::JOB_TYPE, [
+      'provider' => $provider,
+      'names' => ['new.com'],
+      'removed' => [],
+    ]));
 
-    $worker->processItem(['provider' => 'auto', 'names' => ['new.com'], 'removed' => []]);
+    $this->assertSame(Job::STATE_SUCCESS, $process('auto')->getState());
     $this->assertSame(['new.com' => ['price' => 1500]], $this->listings());
 
-    // Providers turned off since the item was queued are skipped.
+    // Providers turned off since the job was queued are skipped.
     $this->container->get('state')->delete('commerce_domains_test.calls');
-    $worker->processItem(['provider' => 'manual', 'names' => ['new.com'], 'removed' => []]);
-    $worker->processItem(['provider' => 'off', 'names' => ['new.com'], 'removed' => []]);
-    $worker->processItem(['provider' => 'missing', 'names' => ['new.com'], 'removed' => []]);
+    foreach (['manual', 'off', 'missing'] as $provider) {
+      $this->assertSame(Job::STATE_SUCCESS, $process($provider)->getState());
+    }
     $this->assertSame([], $this->calls());
 
-    // A permanent failure is logged and the item dropped.
-    $this->container->get('state')->set('commerce_domains_test.fail', 'permanent');
-    $worker->processItem(['provider' => 'auto', 'names' => ['new.com'], 'removed' => []]);
+    // A refused domain is reported on the job.
+    $this->setListings([]);
+    $this->container->get('state')->set('commerce_domains_test.reject', ['new.com']);
+    $this->assertSame('1 of the domains refused.', $process('auto')->getMessage());
+    $this->container->get('state')->set('commerce_domains_test.reject', []);
 
-    // An outage keeps the item for later.
+    // A permanent failure isn't retried.
+    $this->container->get('state')->set('commerce_domains_test.fail', 'permanent');
+    $result = $process('auto');
+    $this->assertSame(Job::STATE_FAILURE, $result->getState());
+    $this->assertSame(0, $result->getMaxRetries());
+
+    // An outage is, with the job type's retries.
     $this->container->get('state')->set('commerce_domains_test.fail', 'retryable');
-    $this->expectException(DelayedRequeueException::class);
-    $worker->processItem(['provider' => 'auto', 'names' => ['new.com'], 'removed' => []]);
+    $result = $process('auto');
+    $this->assertSame(Job::STATE_FAILURE, $result->getState());
+    $this->assertNull($result->getMaxRetries());
+    $this->assertSame(96, $job_type->getMaxRetries());
+  }
+
+  /**
+   * Tests moving waiting pushes from the core queue.
+   */
+  public function testUpdate(): void {
+    $old = $this->container->get('queue')->get('commerce_domains_marketplace_sync');
+    $old->createItem(['provider' => 'auto', 'names' => ['waiting.com'], 'removed' => []]);
+    $this->container->get('module_handler')->loadInclude('commerce_domains_marketplace', 'install');
+    commerce_domains_marketplace_update_11003();
+    $this->assertSame(0, $old->numberOfItems());
+    $this->assertSame([['provider' => 'auto', 'names' => ['waiting.com'], 'removed' => []]], $this->queued());
   }
 
   /**

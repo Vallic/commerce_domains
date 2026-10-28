@@ -185,7 +185,6 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
    * Tests the domain overview and the listings report.
    */
   public function testViews(): void {
-    $this->installConfig(['commerce_domains_marketplace']);
     // Product queries are access-checked.
     $this->setUpCurrentUser([], ['administer commerce_product']);
     $this->sync->plan(Provider::load('test'));

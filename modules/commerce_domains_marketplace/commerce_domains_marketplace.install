@@ -7,9 +7,12 @@
 
 declare(strict_types=1);
 
+use Drupal\advancedqueue\Entity\Queue;
+use Drupal\advancedqueue\Job;
 use Drupal\Core\Config\FileStorage;
 use Drupal\Core\Config\InstallStorage;
 use Drupal\commerce_domains_marketplace\ListingRecorder;
+use Drupal\commerce_domains_marketplace\SyncScheduler;
 
 /**
  * Implements hook_schema().
@@ -35,4 +38,29 @@ function commerce_domains_marketplace_update_11002(): void {
   $path = \Drupal::service('extension.list.module')->getPath('commerce_domains_marketplace');
   // Installs each view whose dependencies the site has, e.g. Views itself.
   \Drupal::service('config.installer')->installOptionalConfig(new FileStorage($path . '/' . InstallStorage::CONFIG_OPTIONAL_DIRECTORY));
+}
+
+/**
+ * Moves automatic pushes to Advanced Queue.
+ */
+function commerce_domains_marketplace_update_11003(): void {
+  \Drupal::service('module_installer')->install(['advancedqueue']);
+  $path = \Drupal::service('extension.list.module')->getPath('commerce_domains_marketplace');
+  $config = (new FileStorage($path . '/' . InstallStorage::CONFIG_INSTALL_DIRECTORY))->read('advancedqueue.advancedqueue_queue.' . SyncScheduler::QUEUE);
+  if (!$queue = Queue::load(SyncScheduler::QUEUE)) {
+    $queue = Queue::create($config);
+    $queue->save();
+  }
+
+  // Carry over pushes still waiting in the core queue.
+  $old = \Drupal::queue('commerce_domains_marketplace_sync');
+  $jobs = [];
+  while (is_object($item = $old->claimItem())) {
+    $jobs[] = Job::create(SyncScheduler::JOB_TYPE, $item->data);
+    $old->deleteItem($item);
+  }
+  if ($jobs) {
+    $queue->enqueueJobs($jobs);
+  }
+  $old->deleteQueue();
 }

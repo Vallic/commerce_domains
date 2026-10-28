@@ -270,3 +270,45 @@ commerce_domains.provider_plugin.unstoppable:
     premium_price_factor:
       type: float
       label: 'Atom premium price factor'
+
+commerce.commerce_condition.plugin.commerce_domains_order_item_registrar:
+  type: commerce_condition_configuration
+  mapping:
+    registrars:
+      type: sequence
+      label: 'Registrars'
+      sequence:
+        type: string
+        label: 'Provider ID'
+
+commerce.commerce_condition.plugin.commerce_domains_order_registrar:
+  type: commerce.commerce_condition.plugin.commerce_domains_order_item_registrar
+
+commerce.commerce_condition.plugin.commerce_domains_order_item_atom_premium:
+  type: commerce_condition_configuration
+  mapping:
+    premium:
+      type: boolean
+      label: 'Atom premium names, rather than the other names'
+
+commerce.commerce_condition.plugin.commerce_domains_order_atom_premium:
+  type: commerce.commerce_condition.plugin.commerce_domains_order_item_atom_premium
+
+commerce.commerce_condition.plugin.commerce_domains_order_item_sale_terms:
+  type: commerce_condition_configuration
+  mapping:
+    buy_now:
+      type: boolean
+      label: 'Buy now: required, ruled out, or NULL for either'
+      nullable: true
+    offers:
+      type: boolean
+      label: 'Accepts offers'
+      nullable: true
+    lease:
+      type: boolean
+      label: 'Lease-to-own'
+      nullable: true
+
+commerce.commerce_condition.plugin.commerce_domains_order_sale_terms:
+  type: commerce.commerce_condition.plugin.commerce_domains_order_item_sale_terms

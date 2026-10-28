@@ -5,6 +5,7 @@
     "license": "GPL-2.0-or-later",
     "require": {
         "php": ">=8.3",
+        "drupal/advancedqueue": "^1.4",
         "drupal/commerce": "^3",
         "jeremykendall/php-domain-parser": "^6.4"
     },

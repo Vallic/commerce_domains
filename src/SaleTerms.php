@@ -40,6 +40,36 @@ final class SaleTerms {
   }
 
   /**
+   * Returns the lease-to-own term worked out from a price.
+   *
+   * Nothing below 2,000, then 6/12/24/36 months as the price grows: the rule
+   * for domains whose terms set no term.
+   *
+   * @return int
+   *   The term in months, 0 when the price is too low for lease-to-own.
+   */
+  public static function defaultLeaseMonths(float $price): int {
+    return match (TRUE) {
+      $price < 2000 => 0,
+      $price < 8000 => 6,
+      $price < 20000 => 12,
+      $price < 50000 => 24,
+      default => 36,
+    };
+  }
+
+  /**
+   * Returns the longest lease at a price: the domain's own term, or the rule.
+   *
+   * @return int
+   *   The term in monthly payments; 0 for none, as one payment is no lease.
+   */
+  public function leaseMonthsAt(float $price): int {
+    $months = $this->leaseMonths ?? self::defaultLeaseMonths($price);
+    return $months >= 2 ? $months : 0;
+  }
+
+  /**
    * Reads the terms of a variation.
    */
   public static function fromVariation(ProductVariationInterface $variation): self {

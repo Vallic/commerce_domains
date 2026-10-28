@@ -2,8 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Drupal\commerce_domains_marketplace\Plugin\QueueWorker;
+namespace Drupal\commerce_domains_marketplace\Plugin\AdvancedQueue\JobType;
 
+use Drupal\advancedqueue\Attribute\AdvancedQueueJobType;
+use Drupal\advancedqueue\Job;
+use Drupal\advancedqueue\JobResult;
+use Drupal\advancedqueue\Plugin\AdvancedQueue\JobType\JobTypeBase;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains_marketplace\MarketplaceSettings;
@@ -11,9 +15,6 @@ use Drupal\commerce_domains_marketplace\MarketplaceSync;
 use Drupal\commerce_domains_marketplace\SyncScheduler;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
-use Drupal\Core\Queue\Attribute\QueueWorker;
-use Drupal\Core\Queue\DelayedRequeueException;
-use Drupal\Core\Queue\QueueWorkerBase;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -21,19 +22,18 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Pushes queued catalog changes to a marketplace.
  *
- * Items come from SyncScheduler: one provider and the domains to re-check.
+ * Jobs come from SyncScheduler: one provider and the domains to re-check.
  * All providers share the queue, so one that is down only delays its own
- * items.
+ * jobs. An outage or bad keys are retried every 15 minutes for a day; after
+ * that the job is marked failed, and a full sync catches up.
  */
-#[QueueWorker(
-  id: SyncScheduler::QUEUE,
-  title: new TranslatableMarkup('Marketplace sync'),
-  cron: ['time' => 60],
+#[AdvancedQueueJobType(
+  id: SyncScheduler::JOB_TYPE,
+  label: new TranslatableMarkup('Marketplace sync'),
+  max_retries: 96,
+  retry_delay: 900,
 )]
-final class MarketplaceSyncWorker extends QueueWorkerBase implements ContainerFactoryPluginInterface {
-
-  // Seconds before an item that hit an outage or bad keys is tried again.
-  protected const RETRY_DELAY = 900;
+final class MarketplaceSyncJob extends JobTypeBase implements ContainerFactoryPluginInterface {
 
   public function __construct(
     array $configuration,
@@ -63,25 +63,25 @@ final class MarketplaceSyncWorker extends QueueWorkerBase implements ContainerFa
   /**
    * {@inheritdoc}
    */
-  public function processItem($data): void {
+  public function process(Job $job): JobResult {
+    $data = $job->getPayload() + ['names' => [], 'removed' => []];
     /** @var \Drupal\commerce_domains\Entity\ProviderInterface|null $provider */
     $provider = $this->entityTypeManager->getStorage('commerce_domains_provider')->load($data['provider']);
-    // Turned off since the item was queued: the next manual sync catches up.
+    // Turned off since the job was queued: the next manual sync catches up.
     if (!$provider || !$provider->status() || !MarketplaceSettings::isAutoSync($provider) || !$provider->hasCapability(MarketplaceInterface::class)) {
-      return;
+      return JobResult::success('Skipped: the provider no longer pushes automatically.');
     }
-
     try {
-      $this->sync->sync($provider, $data['names'], $data['removed']);
+      $errors = $this->sync->sync($provider, $data['names'], $data['removed']);
     }
     catch (ProviderException $e) {
-      // Keep the item for a later cron run; the API or the keys need time.
+      // Retry later; the API or the keys need time.
       if ($e->retryable) {
         $this->logger->warning('@provider sync postponed: @error', [
           '@provider' => $provider->label(),
           '@error' => $e->getMessage(),
         ]);
-        throw new DelayedRequeueException(self::RETRY_DELAY, $e->getMessage(), 0, $e);
+        return JobResult::failure($e->getMessage());
       }
       // A rejected request won't pass on retry either; a full sync, which
       // re-reads both sides, picks these domains up once the cause is fixed.
@@ -90,7 +90,10 @@ final class MarketplaceSyncWorker extends QueueWorkerBase implements ContainerFa
         '@count' => count($data['names']) + count($data['removed']),
         '@error' => $e->getMessage(),
       ]);
+      return JobResult::failure($e->getMessage(), 0);
     }
+    // Refused domains are on the Marketplace listings report.
+    return JobResult::success($errors ? sprintf('%d of the domains refused.', count($errors)) : '');
   }
 
 }

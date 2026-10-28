@@ -5,4 +5,5 @@ package: Commerce (contrib)
 core_version_requirement: ^11.4
 php: 8.3
 dependencies:
+  - advancedqueue:advancedqueue
   - commerce_domains:commerce_domains

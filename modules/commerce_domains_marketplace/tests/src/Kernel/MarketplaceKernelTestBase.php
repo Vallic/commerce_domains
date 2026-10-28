@@ -17,14 +17,17 @@ abstract class MarketplaceKernelTestBase extends DomainsKernelTestBase {
   /**
    * {@inheritdoc}
    */
-  protected static $modules = ['commerce_domains_marketplace'];
+  protected static $modules = ['advancedqueue', 'commerce_domains_marketplace'];
 
   /**
    * {@inheritdoc}
    */
   protected function setUp(): void {
     parent::setUp();
+    $this->installSchema('advancedqueue', ['advancedqueue']);
     $this->installSchema('commerce_domains_marketplace', [ListingRecorder::TABLE]);
+    // The sync queue, and the views where Views is enabled.
+    $this->installConfig(['commerce_domains_marketplace']);
   }
 
   /**

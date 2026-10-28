@@ -82,22 +82,13 @@ abstract class ListingPluginBase extends ProviderPluginBase {
   }
 
   /**
-   * Returns the lease-to-own term offered at a price.
-   *
-   * Nothing below 2,000, then 6/12/24/36 months as the price grows.
+   * Returns the lease-to-own term offered at a price, within a cap.
    *
    * @return int
    *   The term in months, 0 when the price is too low for lease-to-own.
    */
   protected function leaseMonths(float $price, int $cap = 36): int {
-    $months = match (TRUE) {
-      $price < 2000 => 0,
-      $price < 8000 => 6,
-      $price < 20000 => 12,
-      $price < 50000 => 24,
-      default => 36,
-    };
-    return min($months, $cap);
+    return min(SaleTerms::defaultLeaseMonths($price), $cap);
   }
 
   /**
