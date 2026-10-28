@@ -69,7 +69,13 @@ class MarketplaceSync {
       }
       $this->planOne($plan, $plugin, $name, $wanted);
     }
-    $plan->removed = array_values(array_diff($removed, array_keys($items)));
+    // A whole check also removes what earlier syncs listed for products that
+    // were deleted since: the record says those names were ours.
+    if ($plan->full) {
+      $recorded = array_flip($this->recorder->names($provider->id()));
+      $removed = [...$removed, ...array_keys(array_intersect_key($recorded, $plan->current))];
+    }
+    $plan->removed = array_values(array_diff(array_unique($removed), array_keys($items)));
     foreach ($plan->removed as $name) {
       $this->planOne($plan, $plugin, $name, NULL);
     }

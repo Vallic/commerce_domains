@@ -182,6 +182,29 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
   }
 
   /**
+   * Tests that a whole check removes listings of deleted products.
+   */
+  public function testDeletedProduct(): void {
+    $provider = Provider::load('test');
+    $this->sync->plan($provider);
+    $products = $this->entityTypeManager->getStorage('commerce_product')->loadByProperties(['domain' => 'same.com']);
+    reset($products)->delete();
+
+    // Foreign.com was never ours: it stays.
+    $plan = $this->sync->plan($provider);
+    $this->assertContains('same.com', $plan->delete);
+    $this->assertNotContains('foreign.com', $plan->delete);
+    $this->assertSame(['outdated', 'No longer in the catalog; to be removed.'], $this->statuses()['same.com']);
+
+    $this->sync->apply($provider, $plan);
+    $this->assertArrayNotHasKey('same.com', $this->listings());
+    $this->assertArrayHasKey('foreign.com', $this->listings());
+    // Once gone from both sides, its row goes too.
+    $this->sync->plan($provider);
+    $this->assertArrayNotHasKey('same.com', $this->rows());
+  }
+
+  /**
    * Tests the domain overview and the listings report.
    */
   public function testViews(): void {

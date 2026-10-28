@@ -6,6 +6,7 @@ namespace Drupal\commerce_domains;
 
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
+use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\State\StateInterface;
@@ -124,6 +125,26 @@ class RegistrarSync {
   public function lastCheck(string $provider_id): ?array {
     $check = $this->state->get(self::CHECKED_KEY . $provider_id);
     return is_array($check) ? $check : NULL;
+  }
+
+  /**
+   * Returns the registrar whose registration details a domain follows.
+   *
+   * That is the domain's registrar when its API is enabled and has read the
+   * whole account, finding the domain there. Its expiry then comes from the
+   * registrar rather than from edits.
+   */
+  public function registrationSource(ProductInterface $product): ?ProviderInterface {
+    if (!$product->hasField('domain_registrar') || !$product->hasField('domain')) {
+      return NULL;
+    }
+    $provider = $product->get('domain_registrar')->entity;
+    if (!$provider instanceof ProviderInterface || !$provider->status() || !$provider->hasCapability(RegistrarInterface::class)) {
+      return NULL;
+    }
+    $check = $this->lastCheck((string) $provider->id());
+    $name = DomainName::normalize((string) $product->get('domain')->value);
+    return $check && !in_array($name, $check['missing'], TRUE) ? $provider : NULL;
   }
 
   /**

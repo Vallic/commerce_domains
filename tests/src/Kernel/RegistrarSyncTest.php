@@ -7,11 +7,14 @@ namespace Drupal\Tests\commerce_domains\Kernel;
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Form\RegistrationsForm;
+use Drupal\commerce_domains\Hook\ProductFormHooks;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\RegistrarPlan;
 use Drupal\commerce_domains\RegistrarSync;
 use Drupal\commerce_product\Entity\Product;
+use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Form\FormState;
+use Drupal\Tests\user\Traits\UserCreationTrait;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -22,9 +25,12 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[CoversClass(RegistrarSync::class)]
 #[CoversClass(RegistrarPlan::class)]
 #[CoversClass(RegistrationsForm::class)]
+#[CoversClass(ProductFormHooks::class)]
 #[Group('commerce_domains')]
 #[RunTestsInSeparateProcesses]
 class RegistrarSyncTest extends DomainsKernelTestBase {
+
+  use UserCreationTrait;
 
   // Expiry dates the test account reports.
   protected const NEXT_YEAR = 1_820_000_000;
@@ -118,6 +124,37 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $this->assertSame([], $few->missing, 'Names that were not asked about are not missing.');
     $this->assertSame(['parked.com'], $few->unknown);
     $this->assertSame($check, $this->sync->lastCheck('reg'), 'Reading a few names is no whole check.');
+  }
+
+  /**
+   * Tests locking the expiry once the registrar's details are in.
+   */
+  public function testExpiryLock(): void {
+    // The product form needs a store the user can see, and date formats.
+    $this->installConfig(['system']);
+    $this->setUpCurrentUser([], [], TRUE);
+    $this->createProvider();
+    $load = function (string $name): ProductInterface {
+      $products = $this->entityTypeManager->getStorage('commerce_product')->loadByProperties(['domain' => $name]);
+      $product = reset($products);
+      assert($product instanceof ProductInterface);
+      return $product;
+    };
+    $locked = fn(string $name): bool => !empty($this->container->get('entity.form_builder')->getForm($load($name), 'edit')['domain_expires']['#disabled']);
+
+    $this->assertFalse($locked('current.com'), 'Editable until the account is read.');
+    $this->sync->plan(Provider::load('reg'));
+    $this->assertSame('reg', $this->sync->registrationSource($load('current.com'))->id());
+    $this->assertTrue($locked('current.com'));
+    $this->assertNull($this->sync->registrationSource($load('gone.com')), 'Not in the account.');
+    $this->assertNull($this->sync->registrationSource($load('moved.com')), 'GNAME has no API here.');
+
+    // Without a stored date there is nothing to protect yet.
+    $load('current.com')->set('domain_expires', NULL)->save();
+    $this->assertFalse($locked('current.com'));
+
+    Provider::load('reg')->disable()->save();
+    $this->assertNull($this->sync->registrationSource($load('renewed.com')));
   }
 
   /**

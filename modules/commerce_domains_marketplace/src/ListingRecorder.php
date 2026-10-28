@@ -162,6 +162,8 @@ class ListingRecorder {
       elseif (isset($delete[$name])) {
         $row['status'] = self::OUTDATED;
         $row['note'] = (string) match (TRUE) {
+          !isset($plan->catalog[$name]) && $removal_off => new TranslatableMarkup('No longer in the catalog; removal is turned off.'),
+          !isset($plan->catalog[$name]) => new TranslatableMarkup('No longer in the catalog; to be removed.'),
           isset($excluded[$name]) && $removal_off => new TranslatableMarkup('Not to be listed here; removal is turned off.'),
           isset($excluded[$name]) => new TranslatableMarkup('Not to be listed here; to be removed.'),
           $removal_off => new TranslatableMarkup('No longer for sale; removal is turned off.'),
@@ -243,6 +245,20 @@ class ListingRecorder {
       }
     }
     return $rows;
+  }
+
+  /**
+   * Returns the domains recorded for a provider: the names syncs managed.
+   *
+   * @return string[]
+   *   The domains.
+   */
+  public function names(string $provider_id): array {
+    return $this->database->select(self::TABLE, 'l')
+      ->fields('l', ['domain'])
+      ->condition('provider', $provider_id)
+      ->execute()
+      ->fetchCol();
   }
 
   /**

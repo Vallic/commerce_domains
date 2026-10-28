@@ -3,3 +3,8 @@ entity.commerce_domains_provider.csv_export:
   route_name: entity.commerce_domains_provider.csv_export
   base_route: entity.commerce_domains_provider.edit_form
   weight: 20
+commerce_domains_marketplace.product_marketplaces:
+  title: 'Marketplaces'
+  route_name: commerce_domains_marketplace.product_marketplaces
+  base_route: entity.commerce_product.canonical
+  weight: 21

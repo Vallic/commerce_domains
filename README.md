@@ -147,8 +147,13 @@ status.
 
 Every sync records what it found, dry runs included, and every push what it
 did. Syncs never read these records back: they always compare the catalog
-with the marketplace. A domain that isn't listed and needn't be has no row.
-Files from the CSV export aren't tracked.
+with the marketplace, except that a whole sync also removes listings it
+recorded for products deleted since. A domain that isn't listed and needn't
+be has no row. Files from the CSV export aren't tracked.
+
+Each domain has a *Marketplaces* tab beside *Registrar*: its status on every
+marketplace and whether the CSV files include it, with buttons to check the
+marketplaces again for that domain or push it.
 
 ## CSV files
 
@@ -185,6 +190,10 @@ drush cdrs dynadot
 
 Turn on *Refresh registration details daily* on the provider to have cron do
 the update once a day.
+
+Once an enabled registrar API has read the whole account, found the domain
+there and set its expiry date, the date is locked on the product form: it
+follows the registrar.
 
 ## Domain management
 
