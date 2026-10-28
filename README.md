@@ -15,6 +15,9 @@ it is held at, and the marketplaces it is listed on.
   offer, floor price and lease-to-own. Empty fields are worked out from the
   price, the same way for every marketplace; each marketplace lists what it
   supports, and one that only sells at a price skips offers-only names.
+  *List on marketplaces* and *Not listed on* keep a domain for sale on the
+  site but off all or some marketplaces: the next sync removes its listings
+  there, and CSV files leave it out.
 - **Domain providers**: the companies domains are registered or listed with.
   A provider is a config entity with an optional API plugin. Without one it is
   just a registrar name; with one, the plugin's capabilities apply.

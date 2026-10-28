@@ -63,7 +63,7 @@ class CsvExport {
       $rows[$id] = [$plugin->csvHeader($id)];
     }
     foreach ($this->catalog->load(NULL, MarketplaceSettings::priceList($provider)) as $item) {
-      if (!$item->forSale) {
+      if (!$item->forSale || !$item->terms->listsOn($provider->id())) {
         continue;
       }
       foreach ($files as $id) {

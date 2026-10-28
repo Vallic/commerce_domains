@@ -1,0 +1,36 @@
+<?php
+
+/**
+ * @file
+ * Install and update hooks for Commerce Domains.
+ */
+
+declare(strict_types=1);
+
+use Drupal\field\Entity\FieldConfig;
+
+/**
+ * Adds "List on marketplaces" and "Not listed on" to the sale terms.
+ */
+function commerce_domains_update_11001(): void {
+  $trait_manager = \Drupal::service('plugin.manager.commerce_entity_trait');
+  $field_manager = \Drupal::service('commerce.configurable_field_manager');
+  $trait = $trait_manager->createInstance('commerce_domains_sale_terms');
+  $new = array_intersect_key($trait->buildFieldDefinitions(), array_flip(['sale_marketplaces', 'sale_not_listed_on']));
+  /** @var \Drupal\commerce_product\Entity\ProductVariationTypeInterface $type */
+  foreach (\Drupal::entityTypeManager()->getStorage('commerce_product_variation_type')->loadMultiple() as $type) {
+    if (!in_array('commerce_domains_sale_terms', $type->getTraits(), TRUE)) {
+      continue;
+    }
+    foreach ($new as $field_name => $definition) {
+      if (FieldConfig::loadByName('commerce_product_variation', $type->id(), $field_name)) {
+        continue;
+      }
+      $definition = clone $definition;
+      $definition->setTargetEntityTypeId('commerce_product_variation');
+      $definition->setTargetBundle($type->id());
+      $definition->setName($field_name);
+      $field_manager->createField($definition);
+    }
+  }
+}

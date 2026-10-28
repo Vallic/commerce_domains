@@ -58,7 +58,12 @@ class MarketplaceSync {
     $plan->managed = array_map('strval', array_keys($managed));
     foreach ($managed as $name => $item) {
       $plan->forSale += (int) $item->forSale;
-      $wanted = $item->forSale ? $plugin->buildListing($item) : NULL;
+      $listed = $item->forSale && $item->terms->listsOn($provider->id());
+      // Kept off this marketplace by the seller, while for sale elsewhere.
+      if ($item->forSale && !$listed) {
+        $plan->excluded[] = (string) $name;
+      }
+      $wanted = $listed ? $plugin->buildListing($item) : NULL;
       if ($wanted !== NULL) {
         $plan->wanted[$name] = $wanted;
       }

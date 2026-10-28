@@ -101,6 +101,13 @@ final class SyncPlan {
   public array $removed = [];
 
   /**
+   * Domains for sale that the seller keeps off this marketplace.
+   *
+   * @var string[]
+   */
+  public array $excluded = [];
+
+  /**
    * Whether the sync covered the whole catalog and portfolio.
    */
   public bool $full = FALSE;

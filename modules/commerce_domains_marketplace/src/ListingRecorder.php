@@ -136,6 +136,7 @@ class ListingRecorder {
     $describe = fn(string $field, mixed $value) => $plugin->describeValue($field, $value);
     $removal_off = !MarketplaceSettings::deletesUnlisted($provider);
     $delete = array_flip($plan->delete);
+    $excluded = array_flip($plan->excluded);
 
     $rows = [];
     foreach ([...$plan->managed, ...$plan->removed] as $name) {
@@ -160,9 +161,12 @@ class ListingRecorder {
       }
       elseif (isset($delete[$name])) {
         $row['status'] = self::OUTDATED;
-        $row['note'] = (string) ($removal_off
-          ? new TranslatableMarkup('No longer for sale; removal is turned off.')
-          : new TranslatableMarkup('No longer for sale; to be removed.'));
+        $row['note'] = (string) match (TRUE) {
+          isset($excluded[$name]) && $removal_off => new TranslatableMarkup('Not to be listed here; removal is turned off.'),
+          isset($excluded[$name]) => new TranslatableMarkup('Not to be listed here; to be removed.'),
+          $removal_off => new TranslatableMarkup('No longer for sale; removal is turned off.'),
+          default => new TranslatableMarkup('No longer for sale; to be removed.'),
+        };
         $row['listing'] = $current;
       }
       else {

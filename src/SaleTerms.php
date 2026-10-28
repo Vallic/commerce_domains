@@ -27,7 +27,18 @@ final class SaleTerms {
     // The longest lease in monthly payments, 0 for none, or NULL to work it
     // out from the price.
     public readonly ?int $leaseMonths = NULL,
+    // Whether marketplaces list the domain, or only this site sells it.
+    public readonly bool $marketplaces = TRUE,
+    // The IDs of providers that must not list the domain.
+    public readonly array $notListedOn = [],
   ) {}
+
+  /**
+   * Whether a provider may list the domain, by the seller's choice.
+   */
+  public function listsOn(string $provider_id): bool {
+    return $this->marketplaces && !in_array($provider_id, $this->notListedOn, TRUE);
+  }
 
   /**
    * Returns the minimum offer worked out from a price.
@@ -89,6 +100,8 @@ final class SaleTerms {
       minimumOffer: $price('sale_minimum_offer'),
       floorPrice: $price('sale_floor_price'),
       leaseMonths: $months === NULL || $months === '' ? NULL : (int) $months,
+      marketplaces: $flag('sale_marketplaces'),
+      notListedOn: $variation->hasField('sale_not_listed_on') ? array_values(array_filter(array_column($variation->get('sale_not_listed_on')->getValue(), 'target_id'))) : [],
     );
   }
 

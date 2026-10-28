@@ -13,7 +13,8 @@ use Drupal\entity\BundleFieldDefinition;
  * Adds how a domain is sold: buy now, offers and lease-to-own.
  *
  * On the variation, next to its price. Empty amounts and terms are worked
- * out from the price, the same way for every marketplace.
+ * out from the price, the same way for every marketplace. Two more fields
+ * keep a domain for sale on the site but off some or all marketplaces.
  */
 #[CommerceEntityTrait(
   id: 'commerce_domains_sale_terms',
@@ -73,6 +74,27 @@ class SaleTerms extends EntityTraitBase {
       ->setDisplayOptions('form', [
         'type' => 'number',
         'weight' => 24,
+      ]);
+
+    $fields['sale_marketplaces'] = BundleFieldDefinition::create('boolean')
+      ->setLabel(new TranslatableMarkup('List on marketplaces'))
+      ->setDescription(new TranslatableMarkup('Without it, the domain is sold on this site only: marketplace listings are removed and CSV files leave it out.'))
+      ->setDefaultValue(TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'boolean_checkbox',
+        'weight' => 25,
+        'settings' => ['display_label' => TRUE],
+      ]);
+
+    $fields['sale_not_listed_on'] = BundleFieldDefinition::create('entity_reference')
+      ->setLabel(new TranslatableMarkup('Not listed on'))
+      ->setDescription(new TranslatableMarkup('Marketplaces to keep the domain off, while the others list it.'))
+      ->setCardinality(BundleFieldDefinition::CARDINALITY_UNLIMITED)
+      ->setSetting('target_type', 'commerce_domains_provider')
+      ->setSetting('handler', 'commerce_domains_listing:provider')
+      ->setDisplayOptions('form', [
+        'type' => 'options_buttons',
+        'weight' => 26,
       ]);
     return $fields;
   }
