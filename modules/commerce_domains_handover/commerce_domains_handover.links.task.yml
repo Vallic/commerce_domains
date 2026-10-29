@@ -1,0 +1,5 @@
+commerce_domains_handover.order:
+  title: 'Handover'
+  route_name: commerce_domains_handover.order
+  base_route: entity.commerce_order.canonical
+  weight: 30

@@ -1,0 +1,29 @@
+<?php
+
+/**
+ * @file
+ * Install and uninstall functions for Commerce Domains Handover.
+ */
+
+declare(strict_types=1);
+
+/**
+ * Implements hook_uninstall().
+ *
+ * Takes the handover steps out of orders' activity: Commerce Log can't show
+ * an entry whose template is gone, and the order's Activity would break.
+ */
+function commerce_domains_handover_uninstall(): void {
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if (!$entity_type_manager->hasDefinition('commerce_log')) {
+    return;
+  }
+  $storage = $entity_type_manager->getStorage('commerce_log');
+  $ids = $storage->getQuery()
+    ->accessCheck(FALSE)
+    ->condition('category_id', 'commerce_domains_handover')
+    ->execute();
+  foreach (array_chunk($ids, 100) as $chunk) {
+    $storage->delete($storage->loadMultiple($chunk));
+  }
+}

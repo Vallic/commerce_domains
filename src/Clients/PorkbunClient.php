@@ -91,7 +91,7 @@ final class PorkbunClient extends ApiClient {
     // The outcome is per domain.
     $result = $response['results'][$name] ?? NULL;
     if (is_array($result) && ($result['status'] ?? NULL) === 'ERROR') {
-      throw new ProviderException(sprintf('%s updateAutoRenew %s: %s', static::NETWORK, $name, $result['message'] ?? 'refused'));
+      throw new ProviderException($this->redact(sprintf('%s updateAutoRenew %s: %s', static::NETWORK, $name, $result['message'] ?? 'refused')));
     }
   }
 

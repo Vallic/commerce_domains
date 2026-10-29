@@ -1,0 +1,7 @@
+commerce_domains_import.import:
+  title: 'Import domains'
+  route_name: commerce_domains_import.import
+  appears_on:
+    # The domain overview of Commerce Domains Marketplace, and the products.
+    - view.commerce_domains_overview.page_1
+    - entity.commerce_product.collection

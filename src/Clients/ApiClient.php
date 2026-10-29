@@ -140,7 +140,10 @@ abstract class ApiClient {
           $this->pause(2 ** $attempt);
           continue;
         }
-        throw new ProviderException($this->redact(sprintf('%s %s %s failed: %s', static::NETWORK, $method, $path, $e->getMessage())), TRUE, $e);
+        // Guzzle's exception isn't chained: its message quotes the URL with
+        // any credentials in the query string, its request holds the auth
+        // headers, and Drush prints every exception in a chain.
+        throw new ProviderException($this->redact(sprintf('%s %s %s failed: %s', static::NETWORK, $method, $path, $e->getMessage())), TRUE);
       }
 
       $status = $response->getStatusCode();
@@ -236,10 +239,26 @@ abstract class ApiClient {
 
   /**
    * Removes credentials from a message.
+   *
+   * Each secret also goes as a URL and a JSON body spell it, since messages
+   * quote URLs and response bodies.
    */
   protected function redact(string $message): string {
-    $secrets = array_filter($this->secrets(), fn(string $secret) => $secret !== '');
-    return $secrets ? str_replace($secrets, '***', $message) : $message;
+    $secrets = [];
+    foreach ($this->secrets() as $secret) {
+      if ($secret === '') {
+        continue;
+      }
+      $json = json_encode($secret);
+      array_push($secrets, $secret, rawurlencode($secret), urlencode($secret), ...(is_string($json) ? [substr($json, 1, -1)] : []));
+    }
+    if (!$secrets) {
+      return $message;
+    }
+    // Longest first, so a secret inside another can't leave the rest showing.
+    $secrets = array_unique($secrets);
+    usort($secrets, fn(string $a, string $b) => strlen($b) <=> strlen($a));
+    return str_replace($secrets, '***', $message);
   }
 
 }

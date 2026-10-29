@@ -1,2 +1,4 @@
 expire_days: 14
+minimum_price: 0
+premium_offers: true
 notify_mail: ''

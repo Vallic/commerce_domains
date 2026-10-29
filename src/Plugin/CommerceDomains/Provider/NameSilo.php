@@ -41,6 +41,10 @@ final class NameSilo extends MarketplacePluginBase implements DomainManagementIn
   // The longest payment plan NameSilo offers.
   protected const MAX_PAYMENT_MONTHS = 12;
 
+  // Sale states that mean a buyer is paying or has paid, e.g. "awaiting
+  // payment". NameSilo doesn't list its states, so others are only locks.
+  protected const SALE_STATUS_PATTERN = '/payment|sold|purchas|escrow|transfer/i';
+
   /**
    * The API client, once created.
    *
@@ -127,6 +131,16 @@ final class NameSilo extends MarketplacePluginBase implements DomainManagementIn
     }
     $status = $current['status'] ?? '';
     return $status !== '' && $status !== 'active' ? $status : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * An auction someone won shows a sale too.
+   */
+  public function saleStatus(array $current): ?string {
+    $status = $current['status'] ?? NULL;
+    return is_string($status) && preg_match(self::SALE_STATUS_PATTERN, $status) ? $status : NULL;
   }
 
   /**

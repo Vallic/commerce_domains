@@ -62,10 +62,25 @@ interface MarketplaceInterface extends ProviderPluginInterface {
   /**
    * Returns why a listing must be left alone, e.g. it is mid-sale.
    *
+   * Listings that show a sale are always left alone, so this only needs the
+   * other reasons, such as a listing the marketplace curates itself.
+   *
    * @return string|null
    *   The listing's state, or NULL when it may be changed.
    */
   public function lockReason(array $current): ?string;
+
+  /**
+   * Returns the sale a listing shows: the domain sold, or a sale under way.
+   *
+   * A sync that finds one takes the domain off sale on the site, which gets
+   * its listings elsewhere removed, and leaves this listing alone.
+   *
+   * @return string|null
+   *   The marketplace's status for the sale, e.g. "SOLD", or NULL when the
+   *   listing shows none.
+   */
+  public function saleStatus(array $current): ?string;
 
   /**
    * Creates or updates listings.

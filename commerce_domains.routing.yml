@@ -26,3 +26,26 @@ commerce_domains.product_registrar:
     parameters:
       commerce_product:
         type: entity:commerce_product
+
+# Point the registrar's forwarding of parked domains here.
+commerce_domains.lander:
+  path: '/domain-lander'
+  defaults:
+    _controller: '\Drupal\commerce_domains\Controller\LanderController::redirect'
+    fallback: '/'
+  methods: [GET]
+  requirements:
+    # Visitors of parked domains, who only get a redirect.
+    _access: 'TRUE'
+  options:
+    no_cache: TRUE
+
+# Groups the settings of the module and its submodules under Commerce →
+# Configuration, whose page only lists links that have links of their own.
+commerce_domains.configuration:
+  path: '/admin/commerce/config/domains'
+  defaults:
+    _controller: '\Drupal\system\Controller\SystemController::systemAdminMenuBlockPage'
+    _title: 'Domains'
+  requirements:
+    _permission: 'access commerce administration pages'

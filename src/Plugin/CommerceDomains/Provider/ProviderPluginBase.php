@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 
+use Drupal\commerce_domains\Clients\ApiClient;
 use Drupal\commerce_domains\ProviderException;
+use Drupal\Component\Plugin\PluginInspectionInterface;
+use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Plugin\ConfigurableTrait;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Plugin\PluginBase;
 use Drupal\Core\Render\Markup;
+use Drupal\key\KeyInterface;
+use Drupal\key\KeyRepositoryInterface;
 use GuzzleHttp\ClientInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -19,6 +24,9 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Subclasses keep the plugin constructor's signature, so create() can build
  * them with new static().
  *
+ * Plugins read credentials from $this->configuration after assertReady():
+ * that fills the ones settings.php leaves empty from the provider's keys.
+ *
  * @phpstan-consistent-constructor
  */
 abstract class ProviderPluginBase extends PluginBase implements ProviderPluginInterface, ContainerFactoryPluginInterface {
@@ -26,8 +34,9 @@ abstract class ProviderPluginBase extends PluginBase implements ProviderPluginIn
   use ConfigurableTrait;
 
   // Settings that hold API credentials, mapped to the environment variable a
-  // site would read them from in settings.php. Keys never go through the
-  // form, so they can't end up in exported config.
+  // site would read them from in settings.php. Credentials never go through
+  // the form, so they can't end up in exported config: settings.php sets
+  // them, or they come from keys (Key module) chosen on the provider.
   protected const CREDENTIALS = [];
 
   // Credentials only some capabilities need, mapped the same way. A missing
@@ -45,6 +54,34 @@ abstract class ProviderPluginBase extends PluginBase implements ProviderPluginIn
    */
   protected ClientInterface $httpClient;
 
+  /**
+   * The key repository, when the Key module is installed.
+   *
+   * @var \Drupal\key\KeyRepositoryInterface|null
+   */
+  protected ?KeyRepositoryInterface $keyRepository = NULL;
+
+  /**
+   * The keys to read credentials from, keyed by setting.
+   *
+   * @var array<string, string>
+   */
+  protected array $credentialKeys = [];
+
+  /**
+   * Where each credential comes from, once worked out.
+   *
+   * @var array<string, array>|null
+   */
+  protected ?array $credentialSources = NULL;
+
+  /**
+   * What the settings now holding a key's value held before, by setting.
+   *
+   * @var array<string, mixed>
+   */
+  protected array $keyedSettings = [];
+
   public function __construct(array $configuration, $plugin_id, $plugin_definition) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
     $this->setConfiguration($configuration);
@@ -56,6 +93,11 @@ abstract class ProviderPluginBase extends PluginBase implements ProviderPluginIn
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition): static {
     $instance = new static($configuration, $plugin_id, $plugin_definition);
     $instance->httpClient = $container->get('http_client');
+    // Keys are optional: without the Key module, credentials only come from
+    // settings.php, as before.
+    if ($container->has('key.repository')) {
+      $instance->keyRepository = $container->get('key.repository');
+    }
     return $instance;
   }
 
@@ -72,6 +114,73 @@ abstract class ProviderPluginBase extends PluginBase implements ProviderPluginIn
 
   /**
    * {@inheritdoc}
+   *
+   * Values read from keys are left out, so saving the provider never writes
+   * one to config.
+   */
+  public function getConfiguration(): array {
+    return array_replace($this->configuration, $this->keyedSettings);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setConfiguration(array $configuration): static {
+    $this->configuration = NestedArray::mergeDeepArray([$this->defaultConfiguration(), $configuration], TRUE);
+    // Keys are read again against the new settings.
+    $this->keyedSettings = [];
+    $this->credentialSources = NULL;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setCredentialKeys(array $keys): static {
+    $keys = array_filter(array_map('strval', array_intersect_key($keys, static::CREDENTIALS + static::OPTIONAL_CREDENTIALS)), fn(string $id) => $id !== '');
+    ksort($keys);
+    if ($keys !== $this->credentialKeys) {
+      $this->configuration = $this->getConfiguration();
+      $this->keyedSettings = [];
+      $this->credentialSources = NULL;
+      $this->credentialKeys = $keys;
+    }
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCredentialSources(): array {
+    if ($this->credentialSources !== NULL) {
+      return $this->credentialSources;
+    }
+    $this->configuration = $this->getConfiguration();
+    $this->keyedSettings = [];
+    $sources = [];
+    foreach (static::CREDENTIALS + static::OPTIONAL_CREDENTIALS as $setting => $variable) {
+      $source = [
+        'variable' => $variable,
+        'required' => isset(static::CREDENTIALS[$setting]),
+        'source' => NULL,
+        'key' => $this->credentialKeys[$setting] ?? NULL,
+        'key_label' => NULL,
+        'problem' => NULL,
+      ];
+      if (!empty($this->configuration[$setting])) {
+        // A value from settings.php wins over a key.
+        $source['source'] = 'settings';
+      }
+      elseif ($source['key'] !== NULL) {
+        $source = $this->readKey($setting, $source);
+      }
+      $sources[$setting] = $source;
+    }
+    return $this->credentialSources = $sources;
+  }
+
+  /**
+   * {@inheritdoc}
    */
   public function label(): string {
     return (string) $this->pluginDefinition['label'];
@@ -81,12 +190,8 @@ abstract class ProviderPluginBase extends PluginBase implements ProviderPluginIn
    * {@inheritdoc}
    */
   public function getSetupError(): ?string {
-    foreach (array_keys(static::CREDENTIALS) as $key) {
-      if (empty($this->configuration[$key])) {
-        return sprintf('%s API credentials are missing: set %s.', $this->label(), self::andList(static::CREDENTIALS));
-      }
-    }
-    return NULL;
+    $missing = array_filter($this->getCredentialSources(), fn(array $source) => $source['required'] && $source['source'] === NULL);
+    return $missing ? sprintf('%s API credentials are missing: %s.', $this->label(), $this->describeMissing($missing)) : NULL;
   }
 
   /**
@@ -138,6 +243,38 @@ abstract class ProviderPluginBase extends PluginBase implements ProviderPluginIn
   }
 
   /**
+   * Whether a key keeps its value in config, as Key's Configuration provider.
+   *
+   * Config is exported, so such a key would put the secret in every export.
+   */
+  public static function keyStoresValueInConfig(KeyInterface $key): bool {
+    if ($key->get('key_provider') === 'config') {
+      return TRUE;
+    }
+    $provider = $key->getKeyProvider();
+    $definition = $provider instanceof PluginInspectionInterface ? $provider->getPluginDefinition() : [];
+    if (!is_array($definition)) {
+      return FALSE;
+    }
+    // Key 1.18 tags providers by storage; older releases name a method.
+    return in_array('config', (array) ($definition['tags'] ?? []), TRUE) || ($definition['storage_method'] ?? NULL) === 'config';
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function __sleep(): array {
+    // A serialized plugin, e.g. in a cached form, never carries a key's value:
+    // keys are read again when needed. Nor its API clients, which hold the
+    // credentials and are built again from them.
+    $this->configuration = $this->getConfiguration();
+    $this->keyedSettings = [];
+    $this->credentialSources = NULL;
+    $vars = get_object_vars($this);
+    return array_values(array_filter(parent::__sleep(), fn(string $name) => !(($vars[$name] ?? NULL) instanceof ApiClient)));
+  }
+
+  /**
    * Returns where to create the API credentials, for the settings form.
    */
   protected function credentialsHelp(): string {
@@ -183,14 +320,88 @@ abstract class ProviderPluginBase extends PluginBase implements ProviderPluginIn
   }
 
   /**
+   * Fills a setting from its key, or notes why the key can't fill it.
+   *
+   * @param string $setting
+   *   The setting.
+   * @param array $source
+   *   The setting's entry in getCredentialSources(), with a key.
+   *
+   * @return array
+   *   The entry, with the outcome.
+   */
+  protected function readKey(string $setting, array $source): array {
+    if (!$this->keyRepository) {
+      $source['problem'] = 'key_module';
+      return $source;
+    }
+    $key = $this->keyRepository->getKey($source['key']);
+    if (!$key instanceof KeyInterface) {
+      $source['problem'] = 'key_missing';
+      return $source;
+    }
+    $source['key_label'] = (string) $key->label();
+    try {
+      // The value of a key kept in config is never read: refusing it keeps
+      // sites from relying on a secret their config exports carry.
+      if (static::keyStoresValueInConfig($key)) {
+        $source['problem'] = 'key_config';
+        return $source;
+      }
+      // Providers give NULL for an unset variable or a missing file.
+      $value = (string) $key->getKeyValue();
+    }
+    catch (\Exception) {
+      // Remote key providers can fail; their messages are not passed on, in
+      // case they quote what they fetched.
+      $source['problem'] = 'key_error';
+      return $source;
+    }
+    if (empty($value)) {
+      $source['problem'] = 'key_empty';
+      return $source;
+    }
+    $this->keyedSettings[$setting] = $this->configuration[$setting] ?? '';
+    $this->configuration[$setting] = $value;
+    $source['source'] = 'key';
+    return $source;
+  }
+
+  /**
+   * Says what to do about missing credentials, never quoting a value.
+   *
+   * @param array<string, array> $sources
+   *   The missing credentials' entries in getCredentialSources().
+   */
+  protected function describeMissing(array $sources): string {
+    $unset = array_column(array_filter($sources, fn(array $source) => $source['key'] === NULL), 'variable');
+    $parts = $unset ? ['set ' . self::andList($unset)] : [];
+    foreach ($sources as $source) {
+      if ($source['key'] === NULL) {
+        continue;
+      }
+      $key = sprintf('key "%s" for %s', $source['key_label'] ?? $source['key'], $source['variable']);
+      $parts[] = match ($source['problem']) {
+        'key_module' => "$key needs the Key module",
+        'key_missing' => "$key does not exist",
+        'key_config' => "$key keeps its value in config, which is exported with the site: use a key that reads an environment variable or a file",
+        'key_error' => "$key could not be read",
+        default => "$key is empty",
+      };
+    }
+    return implode('; ', $parts);
+  }
+
+  /**
    * Throws when an optional credential a call needs is missing.
    *
    * @throws \Drupal\commerce_domains\ProviderException
    */
-  protected function assertCredential(string $key): void {
-    if (empty($this->configuration[$key])) {
-      $variable = static::OPTIONAL_CREDENTIALS[$key] ?? static::CREDENTIALS[$key] ?? $key;
-      throw new ProviderException(sprintf('%s needs another credential for this: set %s.', $this->label(), $variable), TRUE);
+  protected function assertCredential(string $setting): void {
+    $source = $this->getCredentialSources()[$setting] ?? NULL;
+    if ($source === NULL ? empty($this->configuration[$setting]) : $source['source'] === NULL) {
+      $missing = $source === NULL ? "set $setting" : $this->describeMissing([$setting => $source]);
+      throw new ProviderException(sprintf('%s needs another credential for this: %s.', $this->label(), $missing), TRUE);
     }
   }
 
@@ -198,7 +409,8 @@ abstract class ProviderPluginBase extends PluginBase implements ProviderPluginIn
    * Throws when the plugin cannot talk to the API yet.
    *
    * Missing keys are fixed outside the code, so the error is retryable and
-   * queued work waits for them.
+   * queued work waits for them. Afterwards, the credentials are in
+   * $this->configuration, keys' values included.
    *
    * @throws \Drupal\commerce_domains\ProviderException
    */

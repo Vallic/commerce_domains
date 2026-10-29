@@ -1,0 +1,9 @@
+name: 'Commerce Domains Marketplace test'
+type: module
+description: 'A second fake marketplace, and a record of the marketplace events.'
+package: Testing
+hidden: true
+dependencies:
+  - commerce_domains:commerce_domains_marketplace
+  - commerce_domains:commerce_domains_test
+core_version_requirement: ^11.4

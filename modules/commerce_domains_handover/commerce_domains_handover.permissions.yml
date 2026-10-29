@@ -1,0 +1,8 @@
+view domain handovers:
+  title: 'View domain handovers'
+  description: 'See the Handover tab on orders and the list of open handovers.'
+
+hand over domains:
+  title: 'Hand over sold domains'
+  description: 'Unlock sold domains at their registrar, email buyers their auth codes, and mark handovers pushed, transferred or canceled.'
+  restrict access: true

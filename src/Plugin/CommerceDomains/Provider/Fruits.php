@@ -15,6 +15,9 @@ use Drupal\commerce_domains\CatalogItem;
  *
  * Lists the catalog's euro price times the price factor, as the net amount
  * the seller receives.
+ *
+ * Domain records show no sale: fruits keeps sales as orders, which need the
+ * content.order.read scope. So syncs don't see a sale made on fruits.
  */
 #[CommerceDomainsProvider(
   id: 'fruits',

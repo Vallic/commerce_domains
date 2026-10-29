@@ -1,0 +1,3 @@
+commerce_domains_handover:
+  label: 'Domain handover'
+  entity_type: commerce_order

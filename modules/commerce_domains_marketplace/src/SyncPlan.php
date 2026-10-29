@@ -38,11 +38,44 @@ final class SyncPlan {
   public array $delete = [];
 
   /**
-   * Listings left alone because the network is selling them, keyed by name.
+   * Listings left alone, e.g. mid-sale, with the reason, keyed by name.
    *
    * @var array<string, string>
    */
   public array $locked = [];
+
+  /**
+   * Our listings that show a sale, with the marketplace's status for it.
+   *
+   * Catalog domains, managed or not, and domains that just left the catalog.
+   * They are locked too.
+   *
+   * @var array<string, string>
+   */
+  public array $sales = [];
+
+  /**
+   * The sales in $sales this check found first, and took off sale here.
+   *
+   * @var string[]
+   */
+  public array $newSales = [];
+
+  /**
+   * The sales in $sales a dry run found first, left for the next check.
+   *
+   * They are still for sale here.
+   *
+   * @var string[]
+   */
+  public array $salesToRecord = [];
+
+  /**
+   * The catalog domains that were for sale here when the check began.
+   *
+   * @var array<string, true>
+   */
+  public array $available = [];
 
   /**
    * Listed names the sync never touches.

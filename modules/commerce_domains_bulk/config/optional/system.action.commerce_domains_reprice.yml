@@ -1,0 +1,11 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - commerce_domains_bulk
+    - commerce_product
+id: commerce_domains_reprice
+label: 'Reprice by a factor'
+type: commerce_product
+plugin: commerce_domains_reprice
+configuration: {  }

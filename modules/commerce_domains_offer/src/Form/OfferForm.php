@@ -9,6 +9,7 @@ use Drupal\commerce_domains_offer\OfferManager;
 use Drupal\commerce_domains_offer\OfferPolicy;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Flood\FloodInterface;
 use Drupal\Core\Form\FormBase;
@@ -62,6 +63,8 @@ final class OfferForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state, ?ProductVariationInterface $variation = NULL): array {
+    // Whether the form shows follows the offer settings too.
+    CacheableMetadata::createFromRenderArray($form)->merge($this->offerPolicy->cacheability())->applyTo($form);
     $store = $variation ? $this->offerPolicy->store($variation) : NULL;
     $price = $store && $this->offerPolicy->allows($variation) ? $this->offerPolicy->price($variation, new Context($this->currentUser(), $store)) : NULL;
     if (!$price) {

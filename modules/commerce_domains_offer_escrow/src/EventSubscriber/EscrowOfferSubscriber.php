@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_offer_escrow\EventSubscriber;
 
+use Drupal\commerce_domains\Availability;
 use Drupal\commerce_domains_offer\Entity\OfferInterface;
 use Drupal\commerce_domains_offer_escrow\EscrowOfferStarter;
 use Drupal\commerce_escrow\Event\EscrowEvents;
 use Drupal\commerce_escrow\Event\EscrowWebhookEvent;
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\state_machine\Event\WorkflowTransitionEvent;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
@@ -21,6 +23,7 @@ final class EscrowOfferSubscriber implements EventSubscriberInterface {
 
   public function __construct(
     protected EscrowOfferStarter $starter,
+    protected Availability $availability,
   ) {}
 
   /**
@@ -36,11 +39,25 @@ final class EscrowOfferSubscriber implements EventSubscriberInterface {
 
   /**
    * Accepts the offer once both sides agree on Escrow.com.
+   *
+   * The domain is sold from then on, as the buyer is paying for it.
    */
   public function onOfferAccepted(WorkflowTransitionEvent $event): void {
     $offer = $this->offer($event);
     if ($offer && $this->apply($offer, 'accept')) {
       $offer->save();
+    }
+    /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
+    $order = $event->getEntity();
+    foreach ($order->getItems() as $item) {
+      $variation = $item->getPurchasedEntity();
+      $product = $variation instanceof ProductVariationInterface ? $variation->getProduct() : NULL;
+      if ($product && $product->hasField('domain')) {
+        // As when an order is placed: the variation bought, and any other
+        // variation that would keep the domain for sale.
+        $this->availability->markSold($variation);
+        $this->availability->markProductSold($product);
+      }
     }
   }
 

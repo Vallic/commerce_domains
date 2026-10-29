@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_marketplace\Plugin\views\field;
 
 use Drupal\commerce_domains_marketplace\ListingRecorder;
+use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\views\Attribute\ViewsField;
 use Drupal\views\Plugin\views\field\FieldPluginBase;
@@ -14,10 +15,18 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Shows a domain's status on each marketplace, as the last sync found it.
  *
- * The rows of a whole page are read in one query.
+ * The rows of a whole page are read in one query. A sale says when it was
+ * found.
  */
 #[ViewsField('commerce_domains_product_listings')]
 final class ProductListings extends FieldPluginBase {
+
+  /**
+   * The date formatter.
+   *
+   * @var \Drupal\Core\Datetime\DateFormatterInterface
+   */
+  protected DateFormatterInterface $dateFormatter;
 
   /**
    * The listing recorder.
@@ -47,6 +56,7 @@ final class ProductListings extends FieldPluginBase {
     $instance = new static($configuration, $plugin_id, $plugin_definition);
     $instance->recorder = $container->get(ListingRecorder::class);
     $instance->entityTypeManager = $container->get('entity_type.manager');
+    $instance->dateFormatter = $container->get('date.formatter');
     return $instance;
   }
 
@@ -87,12 +97,16 @@ final class ProductListings extends FieldPluginBase {
       if ($row->status === ListingRecorder::UNLISTED) {
         continue;
       }
+      $status = $labels[$row->status] ?? $row->status;
+      if ($row->status === ListingRecorder::SOLD && $row->sold) {
+        $status = $this->t('Sold on @date', ['@date' => $this->dateFormatter->format((int) $row->sold, 'short')]);
+      }
       $items[] = [
         '#type' => 'html_tag',
         '#tag' => 'span',
         '#value' => $this->t('@provider: @status', [
           '@provider' => isset($providers[$provider_id]) ? $providers[$provider_id]->label() : $provider_id,
-          '@status' => $labels[$row->status] ?? $row->status,
+          '@status' => $status,
         ]),
         '#attributes' => [
           'class' => ['commerce-domains-listing', 'commerce-domains-listing--' . $row->status],

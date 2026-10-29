@@ -1,5 +1,13 @@
+# The submodules' settings go under this too.
+commerce_domains.configuration:
+  title: 'Domains'
+  description: 'Domain providers, and the settings of selling domains.'
+  route_name: commerce_domains.configuration
+  parent: commerce.configuration
+
 entity.commerce_domains_provider.collection:
   title: 'Domain providers'
   description: 'Registrars and marketplaces that domains are registered or listed with.'
   route_name: entity.commerce_domains_provider.collection
-  parent: commerce.configuration
+  parent: commerce_domains.configuration
+  weight: -10

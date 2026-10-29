@@ -25,7 +25,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Jobs come from SyncScheduler: one provider and the domains to re-check.
  * All providers share the queue, so one that is down only delays its own
  * jobs. An outage or bad keys are retried every 15 minutes for a day; after
- * that the job is marked failed, and a full sync catches up.
+ * that the job is marked failed, reported with
+ * MarketplaceEvents::SYNC_FAILED, and a full sync catches up.
  */
 #[AdvancedQueueJobType(
   id: SyncScheduler::JOB_TYPE,
@@ -87,7 +88,7 @@ final class MarketplaceSyncJob extends JobTypeBase implements ContainerFactoryPl
       // re-reads both sides, picks these domains up once the cause is fixed.
       $this->logger->error('@provider sync of @count domains failed: @error', [
         '@provider' => $provider->label(),
-        '@count' => count($data['names']) + count($data['removed']),
+        '@count' => count((array) $data['names']) + count((array) $data['removed']),
         '@error' => $e->getMessage(),
       ]);
       return JobResult::failure($e->getMessage(), 0);

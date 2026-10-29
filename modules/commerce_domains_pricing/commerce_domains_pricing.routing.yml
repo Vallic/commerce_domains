@@ -1,0 +1,7 @@
+commerce_domains_pricing.settings:
+  path: '/admin/commerce/config/domain-pricing'
+  defaults:
+    _form: '\Drupal\commerce_domains_pricing\Form\SettingsForm'
+    _title: 'Domain pricing'
+  requirements:
+    _permission: 'administer commerce_domains pricing'

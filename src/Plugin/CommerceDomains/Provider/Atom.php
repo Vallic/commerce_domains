@@ -41,8 +41,9 @@ final class Atom extends MarketplacePluginBase implements RegistrarInterface, Cs
     'registrar_token' => 'ATOM_REGISTRAR_TOKEN',
   ];
 
-  // Listing states that mean a sale is under way or done.
-  protected const LOCKED_STATUS_PATTERN = '/sold|hold|purchas|transfer/i';
+  // Listing states that mean a sale is under way or done: a buyer's hold, a
+  // purchase, the transfer to the buyer, or sold.
+  protected const SALE_STATUS_PATTERN = '/sold|hold|purchas|transfer/i';
 
   /**
    * The API client, once created.
@@ -121,8 +122,17 @@ final class Atom extends MarketplacePluginBase implements RegistrarInterface, Cs
     if (($current['type'] ?? NULL) === 'premium') {
       return 'premium listing, managed by Atom';
     }
+    return $this->saleStatus($current);
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Premium listings sell too; their type only keeps them locked.
+   */
+  public function saleStatus(array $current): ?string {
     $status = $current['status'] ?? NULL;
-    return is_string($status) && preg_match(self::LOCKED_STATUS_PATTERN, $status) ? $status : NULL;
+    return is_string($status) && preg_match(self::SALE_STATUS_PATTERN, $status) ? $status : NULL;
   }
 
   /**

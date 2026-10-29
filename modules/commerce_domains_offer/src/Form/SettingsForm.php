@@ -37,10 +37,24 @@ class SettingsForm extends ConfigFormBase {
       '#min' => 0,
       '#config_target' => 'commerce_domains_offer.settings:expire_days',
     ];
+    $form['minimum_price'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Take offers from this price'),
+      '#description' => $this->t("In each domain's own currency. Cheaper domains sell at their price only. 0 takes offers at any price."),
+      '#min' => 0,
+      '#step' => 'any',
+      '#config_target' => 'commerce_domains_offer.settings:minimum_price',
+    ];
+    $form['premium_offers'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Take offers on Atom premium names'),
+      '#description' => $this->t('Atom sells its premium names at a fixed price.'),
+      '#config_target' => 'commerce_domains_offer.settings:premium_offers',
+    ];
     $form['notify_mail'] = [
       '#type' => 'email',
       '#title' => $this->t('Tell this address about new offers'),
-      '#description' => $this->t("Leave empty for the store's email address."),
+      '#description' => $this->t("Leave empty for the owner's notification address (Commerce Domains Owner), or else the store's email address."),
       '#config_target' => 'commerce_domains_offer.settings:notify_mail',
     ];
     return parent::buildForm($form, $form_state);

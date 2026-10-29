@@ -58,7 +58,8 @@ final class AtomClient extends ApiClient {
       $batch = $this->records($response);
       if ($batch === NULL) {
         if ($failure = $this->failure($response)) {
-          throw new ProviderException("Atom GET domains: $failure", TRUE);
+          // Failures can quote the response, which may echo the request.
+          throw new ProviderException($this->redact("Atom GET domains: $failure"), TRUE);
         }
         break;
       }
@@ -104,7 +105,7 @@ final class AtomClient extends ApiClient {
   protected function call(string $path, array $query): array {
     $response = $this->request('GET', $path, [RequestOptions::QUERY => $query]);
     if ($failure = $this->failure($response)) {
-      throw new ProviderException("Atom GET $path: $failure");
+      throw new ProviderException($this->redact("Atom GET $path: $failure"));
     }
     return $response;
   }

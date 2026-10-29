@@ -27,6 +27,22 @@ display:
     display_options:
       title: Domains
       fields:
+        commerce_product_bulk_form:
+          id: commerce_product_bulk_form
+          table: commerce_product
+          field: commerce_product_bulk_form
+          entity_type: commerce_product
+          plugin_id: bulk_form
+          label: ''
+          action_title: 'With selection'
+          include_exclude: include
+          selected_actions:
+            - commerce_domains_apply_price_rules
+            - commerce_domains_reprice
+            - commerce_domains_sale_terms
+            - commerce_domains_marketplaces
+            - commerce_publish_product
+            - commerce_unpublish_product
         title:
           id: title
           table: commerce_product_field_data
@@ -204,6 +220,7 @@ display:
         type: table
         options:
           columns:
+            commerce_product_bulk_form: commerce_product_bulk_form
             title: title
             domain_registrar: domain_registrar
             commerce_domains_registrar_check: commerce_domains_registrar_check
@@ -232,6 +249,7 @@ display:
               default_sort_order: desc
           sticky: true
           empty_table: true
+          class: ''
       row:
         type: fields
       query:

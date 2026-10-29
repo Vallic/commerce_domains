@@ -7,14 +7,16 @@ namespace Drupal\commerce_domains_marketplace;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Database\Connection;
+use Drupal\Core\Database\IntegrityConstraintViolationException;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 
 /**
  * Records what each sync found and did, one row per domain and marketplace.
  *
- * Syncs never read these rows back: they compare the catalog with the
- * marketplace every time. The rows are for people, on the domain overview
- * and the listings report.
+ * Syncs compare the catalog with the marketplace every time; the rows are
+ * for people, on the domain overview and the listings report. Sales are the
+ * exception: the record of a sale is what keeps a sync from acting on it
+ * twice.
  */
 class ListingRecorder {
 
@@ -26,8 +28,13 @@ class ListingRecorder {
   // To be added, changed or removed by the next push.
   public const OUTDATED = 'outdated';
 
-  // The marketplace is selling it, so it is left alone.
+  // Left alone, e.g. curated by the marketplace, or a sale that was over
+  // here before the marketplace caught up.
   public const LOCKED = 'locked';
+
+  // The marketplace sold it, or is selling it: off sale here, and left alone
+  // there.
+  public const SOLD = 'sold';
 
   // The marketplace refused the last push.
   public const FAILED = 'failed';
@@ -102,6 +109,10 @@ class ListingRecorder {
           'not null' => TRUE,
           'default' => 0,
         ],
+        'sold' => [
+          'description' => 'When a sync found the marketplace selling the domain; kept while the listing shows the sale.',
+          'type' => 'int',
+        ],
       ],
       'primary key' => ['provider', 'domain'],
       'indexes' => [
@@ -121,7 +132,8 @@ class ListingRecorder {
     return [
       self::LISTED => new TranslatableMarkup('Listed'),
       self::OUTDATED => new TranslatableMarkup('Out of date'),
-      self::LOCKED => new TranslatableMarkup('Mid-sale'),
+      self::LOCKED => new TranslatableMarkup('Locked'),
+      self::SOLD => new TranslatableMarkup('Sold'),
       self::FAILED => new TranslatableMarkup('Failed'),
       self::UNLISTED => new TranslatableMarkup('Not listed'),
       self::UNMANAGED => new TranslatableMarkup('Left to the marketplace'),
@@ -140,8 +152,18 @@ class ListingRecorder {
 
     $rows = [];
     foreach ([...$plan->managed, ...$plan->removed] as $name) {
+      if (isset($plan->sales[$name])) {
+        $rows[$name] = $this->saleRow($plan, $name);
+        continue;
+      }
       $current = $plan->current[$name] ?? NULL;
-      $row = ['product_id' => $plan->catalog[$name] ?? NULL, 'note' => NULL, 'listing' => $plan->wanted[$name] ?? NULL];
+      $row = [
+        'product_id' => $plan->catalog[$name] ?? NULL,
+        'note' => NULL,
+        'listing' => $plan->wanted[$name] ?? NULL,
+        // A listing that shows no sale ends the record of one.
+        'sold' => NULL,
+      ];
       if (isset($plan->locked[$name])) {
         $row['status'] = self::LOCKED;
         $row['note'] = $plan->locked[$name];
@@ -177,17 +199,143 @@ class ListingRecorder {
       $rows[$name] = $row;
     }
     foreach ($plan->unmanaged as $name) {
-      if (isset($plan->catalog[$name])) {
+      // A sale counts on listings the plugin leaves to the marketplace too.
+      if (isset($plan->sales[$name])) {
+        $rows[$name] = $this->saleRow($plan, $name);
+      }
+      elseif (isset($plan->catalog[$name])) {
         $rows[$name] = [
           'product_id' => $plan->catalog[$name],
           'status' => self::UNMANAGED,
           'note' => NULL,
           'listing' => $plan->current[$name],
+          'sold' => NULL,
         ];
       }
     }
 
     $this->write($provider->id(), $rows, $plan->full);
+  }
+
+  /**
+   * Builds the row of a listing that shows a sale.
+   *
+   * Sold while the domain is off sale here. Once it is back on sale, the
+   * sale is over here but not yet on the marketplace, so it stays locked.
+   * The time the sale was found is kept either way.
+   */
+  protected function saleRow(SyncPlan $plan, string $name): array {
+    $sold = in_array($name, $plan->newSales, TRUE) || !isset($plan->available[$name]);
+    return [
+      'product_id' => $plan->catalog[$name] ?? NULL,
+      'status' => $sold ? self::SOLD : self::LOCKED,
+      'note' => $plan->sales[$name],
+      'listing' => $plan->current[$name],
+    ];
+  }
+
+  /**
+   * Returns whether a sale a listing shows is not on record yet.
+   *
+   * It is on record while the row says sold, and, once the domain is back on
+   * sale here, while the marketplace shows the same status. A new status
+   * then, e.g. a hold that turned into a sale, is a sale again.
+   *
+   * @param object|null $row
+   *   The domain's row on that marketplace, if any.
+   * @param string $status
+   *   The marketplace's status for the sale.
+   */
+  public static function isNewSale(?object $row, string $status): bool {
+    return !$row || ($row->status !== self::SOLD && (($row->sold ?? NULL) === NULL || $row->note !== $status));
+  }
+
+  /**
+   * Records a sale, unless another sync just did.
+   *
+   * Takes the same test as isNewSale() in one statement, so two syncs that
+   * find the same sale act on it once.
+   *
+   * @param string $provider_id
+   *   The provider ID.
+   * @param string $name
+   *   The domain.
+   * @param int|null $product_id
+   *   The domain's product, when the catalog has it.
+   * @param string $status
+   *   The marketplace's status for the sale.
+   * @param array $listing
+   *   The listing showing it.
+   *
+   * @return bool
+   *   Whether this call recorded it.
+   */
+  public function claimSale(string $provider_id, string $name, ?int $product_id, string $status, array $listing): bool {
+    $now = $this->time->getCurrentTime();
+    $fields = [
+      'product_id' => $product_id,
+      'status' => self::SOLD,
+      'note' => $status,
+      'listing' => json_encode($listing),
+      'checked' => $now,
+      'changed' => $now,
+      'sold' => $now,
+    ];
+    $query = $this->database->update(self::TABLE)
+      ->fields($fields)
+      ->condition('provider', $provider_id)
+      ->condition('domain', $name)
+      ->condition('status', self::SOLD, '<>');
+    $query->condition($query->orConditionGroup()
+      ->isNull('sold')
+      ->isNull('note')
+      ->condition('note', $status, '<>'));
+    if ($query->execute()) {
+      return TRUE;
+    }
+    if ($this->load($provider_id, [$name])) {
+      return FALSE;
+    }
+    try {
+      $this->database->insert(self::TABLE)
+        ->fields(['provider' => $provider_id, 'domain' => $name] + $fields)
+        ->execute();
+      return TRUE;
+    }
+    catch (IntegrityConstraintViolationException) {
+      // Another sync recorded it in between.
+      return FALSE;
+    }
+  }
+
+  /**
+   * Ends the recorded sales of a domain that is back on sale here.
+   *
+   * A sale that fell through: the next syncs list the domain again. Listings
+   * that still show the sale stay locked until the marketplace catches up,
+   * and the same status isn't taken for a new sale.
+   */
+  public function relisted(string $name): void {
+    $this->database->update(self::TABLE)
+      ->fields(['status' => self::LOCKED, 'changed' => $this->time->getCurrentTime()])
+      ->condition('domain', $name)
+      ->condition('status', self::SOLD)
+      ->execute();
+  }
+
+  /**
+   * Returns a provider's rows for some domains.
+   *
+   * @param string $provider_id
+   *   The provider ID.
+   * @param string[] $names
+   *   The domains.
+   *
+   * @return array<string, object>
+   *   Rows keyed by domain; domains without one are missing.
+   */
+  public function rows(string $provider_id, array $names): array {
+    return $names ? $this->load($provider_id, array_values($names)) : [];
   }
 
   /**
@@ -201,9 +349,14 @@ class ListingRecorder {
    *   The marketplace's errors, keyed by domain.
    * @param bool $deleted
    *   Whether the listings in $plan->delete were removed.
+   *
+   * @return array<string, string>
+   *   The errors that are new: not on record already as the same failure.
    */
-  public function recordPush(ProviderInterface $provider, SyncPlan $plan, array $errors, bool $deleted): void {
+  public function recordPush(ProviderInterface $provider, SyncPlan $plan, array $errors, bool $deleted): array {
     $now = $this->time->getCurrentTime();
+    $old = $this->rows((string) $provider->id(), array_map('strval', array_keys($errors)));
+    $new = array_filter($errors, fn(mixed $error, int|string $name) => !isset($old[$name]) || $old[$name]->status !== self::FAILED || $old[$name]->note !== (string) $error, ARRAY_FILTER_USE_BOTH);
     $rows = [];
     foreach ($plan->create + $plan->update as $name => $listing) {
       $rows[$name] = isset($errors[$name])
@@ -221,6 +374,7 @@ class ListingRecorder {
       $row['product_id'] = $plan->catalog[$name] ?? NULL;
     }
     $this->write($provider->id(), $rows, FALSE, TRUE);
+    return $new;
   }
 
   /**
@@ -285,7 +439,7 @@ class ListingRecorder {
    *   The provider ID.
    * @param array<string, array> $rows
    *   Rows keyed by domain: status, note, listing and product_id, plus
-   *   pushed after a push.
+   *   pushed after a push, and sold as NULL to end the record of a sale.
    * @param bool $full
    *   Whether the rows cover the whole catalog and portfolio, so rows for
    *   anything else are stale.
@@ -316,11 +470,19 @@ class ListingRecorder {
         'note' => $row['note'],
         'listing' => $listing,
       ];
+      // Rows without the key keep the time their sale was found.
+      $same_sold = TRUE;
+      if (array_key_exists('sold', $row)) {
+        $fields['sold'] = $row['sold'];
+        $old_sold = $old->sold ?? NULL;
+        $same_sold = $old && ($old_sold === NULL ? $row['sold'] === NULL : (int) $old_sold === (int) $row['sold']);
+      }
       $same = $old
         && (int) $old->product_id === (int) $fields['product_id']
         && $old->status === $fields['status']
         && $old->note === $fields['note']
-        && $old->listing === $fields['listing'];
+        && $old->listing === $fields['listing']
+        && $same_sold;
       if ($same && !isset($row['pushed'])) {
         $touched[] = $name;
         continue;

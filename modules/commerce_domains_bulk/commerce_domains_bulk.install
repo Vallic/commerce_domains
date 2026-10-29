@@ -1,0 +1,55 @@
+<?php
+
+/**
+ * @file
+ * Install functions for Commerce Domains Bulk editing.
+ */
+
+declare(strict_types=1);
+
+/**
+ * Implements hook_install().
+ *
+ * Adds the bulk form to a Domains overview installed before it had one; new
+ * sites get it with the view.
+ */
+function commerce_domains_bulk_install(bool $is_syncing): void {
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if ($is_syncing || !$entity_type_manager->hasDefinition('view')) {
+    return;
+  }
+  /** @var \Drupal\views\ViewEntityInterface|null $view */
+  $view = $entity_type_manager->getStorage('view')->load('commerce_domains_overview');
+  if (!$view) {
+    return;
+  }
+  $display = &$view->getDisplay('default');
+  if (isset($display['display_options']['fields']['commerce_product_bulk_form'])) {
+    return;
+  }
+  // First, as the checkbox column.
+  $display['display_options']['fields'] = [
+    'commerce_product_bulk_form' => [
+      'id' => 'commerce_product_bulk_form',
+      'table' => 'commerce_product',
+      'field' => 'commerce_product_bulk_form',
+      'entity_type' => 'commerce_product',
+      'plugin_id' => 'bulk_form',
+      'label' => '',
+      'action_title' => 'With selection',
+      'include_exclude' => 'include',
+      'selected_actions' => [
+        'commerce_domains_apply_price_rules',
+        'commerce_domains_reprice',
+        'commerce_domains_sale_terms',
+        'commerce_domains_marketplaces',
+        'commerce_publish_product',
+        'commerce_unpublish_product',
+      ],
+    ],
+  ] + ($display['display_options']['fields'] ?? []);
+  if (isset($display['display_options']['style']['options']['columns'])) {
+    $display['display_options']['style']['options']['columns'] = ['commerce_product_bulk_form' => 'commerce_product_bulk_form'] + $display['display_options']['style']['options']['columns'];
+  }
+  $view->save();
+}

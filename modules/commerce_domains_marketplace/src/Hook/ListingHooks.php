@@ -8,9 +8,11 @@ use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains_marketplace\ListingRecorder;
+use Drupal\commerce_domains_marketplace\SyncScheduler;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\Hook\Order\Order;
+use Drupal\Core\State\StateInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 
 /**
@@ -22,6 +24,7 @@ class ListingHooks {
 
   public function __construct(
     protected ListingRecorder $recorder,
+    protected StateInterface $state,
   ) {}
 
   /**
@@ -30,6 +33,7 @@ class ListingHooks {
   #[Hook('commerce_domains_provider_delete')]
   public function providerDelete(ProviderInterface $provider): void {
     $this->recorder->deleteProvider((string) $provider->id());
+    $this->state->delete(SyncScheduler::CHECKED_KEY . $provider->id());
   }
 
   /**
@@ -107,7 +111,11 @@ class ListingHooks {
     ];
     $data[$table]['status'] = [
       'title' => $this->t('Status'),
-      'field' => ['id' => 'commerce_domains_listing_status'],
+      'help' => $this->t('Sold ones say when the sale was found.'),
+      'field' => [
+        'id' => 'commerce_domains_listing_status',
+        'additional fields' => ['sold'],
+      ],
       'filter' => ['id' => 'commerce_domains_listing_status'],
       'sort' => ['id' => 'standard'],
     ];
@@ -129,6 +137,7 @@ class ListingHooks {
       'checked' => $this->t('Checked'),
       'pushed' => $this->t('Pushed'),
       'changed' => $this->t('Changed'),
+      'sold' => $this->t('Sold'),
     ];
     foreach ($dates as $field => $title) {
       $data[$table][$field] = [
@@ -138,6 +147,7 @@ class ListingHooks {
         'sort' => ['id' => 'date'],
       ];
     }
+    $data[$table]['sold']['help'] = $this->t('When a sync found the marketplace selling the domain.');
     return $data;
   }
 

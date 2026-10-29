@@ -4,18 +4,26 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_marketplace;
 
+use Drupal\commerce_domains\Availability;
 use Drupal\commerce_domains\Catalog;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\ProviderException;
+use Drupal\commerce_domains_marketplace\Event\MarketplaceEvents;
+use Drupal\commerce_domains_marketplace\Event\SoldElsewhereEvent;
+use Drupal\commerce_domains_marketplace\Event\SyncFailedEvent;
+use Drupal\commerce_product\Entity\ProductInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Brings a provider's marketplace listings in line with the catalog.
  *
  * Every sync reads both sides and sends the difference, so a failed or
  * skipped run is fixed by the next one. What each check found and each push
- * did is recorded for people, but never read back.
+ * did is recorded for people, but never read back, except for sales: a
+ * listing that shows a sale takes the domain off sale here, once.
  */
 class MarketplaceSync {
 
@@ -23,12 +31,21 @@ class MarketplaceSync {
     protected Catalog $catalog,
     protected LoggerInterface $logger,
     protected ListingRecorder $recorder,
+    protected Availability $availability,
+    protected SyncScheduler $scheduler,
+    protected EntityTypeManagerInterface $entityTypeManager,
+    protected EventDispatcherInterface $eventDispatcher,
   ) {}
 
   /**
    * Works out what a sync would change, without changing the marketplace.
    *
-   * What it found is recorded for the domain overview.
+   * What it found is recorded for the domain overview. A sale it finds is
+   * acted on at once, unless this is a dry run: the domain goes off sale
+   * here, which gets its other listings removed, and
+   * MarketplaceEvents::SOLD_ELSEWHERE is dispatched. The selling
+   * marketplace's listing is left alone. A dry run only lists the sale in
+   * SyncPlan::$salesToRecord, and the next check acts on it.
    *
    * @param \Drupal\commerce_domains\Entity\ProviderInterface $provider
    *   A provider with a marketplace.
@@ -38,10 +55,12 @@ class MarketplaceSync {
    *   Domains that just left the catalog (deleted, or renamed away from). The
    *   catalog no longer knows them, so this is what lets their listings be
    *   removed rather than treated as someone else's.
+   * @param bool $dry_run
+   *   Whether to leave the sales it finds for the next check.
    *
    * @throws \Drupal\commerce_domains\ProviderException
    */
-  public function plan(ProviderInterface $provider, ?array $names = NULL, array $removed = []): SyncPlan {
+  public function plan(ProviderInterface $provider, ?array $names = NULL, array $removed = [], bool $dry_run = FALSE): SyncPlan {
     $plugin = MarketplaceSettings::plugin($provider);
     if ($names !== NULL) {
       $names = array_values(array_unique([...$names, ...$removed]));
@@ -52,6 +71,7 @@ class MarketplaceSync {
     $items = $this->catalog->load($names, MarketplaceSettings::priceList($provider));
     $plan->current = $plugin->fetchListings($names);
     $plan->catalog = array_map(fn($item) => $item->productId, $items);
+    $plan->available = array_map(fn() => TRUE, array_filter($items, fn($item) => $item->forSale));
 
     // Domains the plugin leaves to the provider count as unknown names.
     $managed = array_filter($items, $plugin->manages(...));
@@ -80,13 +100,90 @@ class MarketplaceSync {
       $this->planOne($plan, $plugin, $name, NULL);
     }
 
-    $plan->unmanaged = array_keys(array_diff_key($plan->current, $managed, array_flip($removed)));
+    // Recorded names still in the catalog stay unmanaged when the plugin
+    // leaves them to the marketplace, or their rows would go.
+    $plan->unmanaged = array_keys(array_diff_key($plan->current, $managed, array_flip($plan->removed)));
+    $this->recordSales($provider, $plugin, $plan, $dry_run);
     $this->recorder->recordCheck($provider, $plan);
     return $plan;
   }
 
   /**
+   * Acts on the sales the marketplace shows, once each.
+   *
+   * Only our domains count: catalog domains, even those the plugin leaves to
+   * the marketplace, and domains that just left the catalog. A new sale
+   * takes the domain off sale here and queues the other marketplaces' syncs,
+   * which remove its listings; their next sync does without automatic
+   * pushes. A dry run only lists the new sales.
+   */
+  protected function recordSales(ProviderInterface $provider, MarketplaceInterface $plugin, SyncPlan $plan, bool $dry_run = FALSE): void {
+    $ours = $plan->catalog + array_fill_keys($plan->removed, NULL);
+    foreach (array_intersect_key($plan->current, $ours) as $name => $current) {
+      $status = $plugin->saleStatus($current);
+      if ($status !== NULL && $status !== '') {
+        $plan->sales[(string) $name] = $status;
+      }
+    }
+    if (!$plan->sales) {
+      return;
+    }
+
+    $rows = $this->recorder->rows((string) $provider->id(), array_keys($plan->sales));
+    $storage = $this->entityTypeManager->getStorage('commerce_product');
+    foreach ($plan->sales as $name => $status) {
+      if (!ListingRecorder::isNewSale($rows[$name] ?? NULL, $status)) {
+        continue;
+      }
+      if ($dry_run) {
+        $plan->salesToRecord[] = $name;
+        continue;
+      }
+      $product_id = $plan->catalog[$name] ?? NULL;
+      $product = $product_id ? $storage->load($product_id) : NULL;
+      $product = $product instanceof ProductInterface ? $product : NULL;
+      // Off sale before the sale is recorded: if this fails, the next sync
+      // still finds the sale new.
+      if ($product) {
+        $this->availability->markProductSold($product);
+      }
+      unset($plan->available[$name]);
+      // Another sync may have just recorded it, and acted on it.
+      if (!$this->recorder->claimSale((string) $provider->id(), $name, $product_id, $status, $plan->current[$name])) {
+        continue;
+      }
+      $plan->newSales[] = $name;
+      // With other stock models the product may not change; queue anyway.
+      $this->scheduler->changed($name);
+      $this->logger->notice('@provider shows @domain sold (@status): it is now off sale here.', [
+        '@provider' => $provider->label(),
+        '@domain' => $name,
+        '@status' => $status,
+      ]);
+      $this->eventDispatcher->dispatch(new SoldElsewhereEvent($provider, $name, $product, $status), MarketplaceEvents::SOLD_ELSEWHERE);
+    }
+  }
+
+  /**
+   * Tells the site that a sync failed, so the owner can hear about it.
+   *
+   * @param \Drupal\commerce_domains\Entity\ProviderInterface $provider
+   *   The marketplace.
+   * @param array<string, string> $errors
+   *   Messages keyed by domain, or by '' for a failure of the whole run.
+   */
+  public function reportFailure(ProviderInterface $provider, array $errors): void {
+    if ($errors) {
+      $this->eventDispatcher->dispatch(new SyncFailedEvent($provider, $errors), MarketplaceEvents::SYNC_FAILED);
+    }
+  }
+
+  /**
    * Pushes a plan to the marketplace.
+   *
+   * Domains the marketplace refuses for a new reason are reported with
+   * MarketplaceEvents::SYNC_FAILED; a failure of the whole push is thrown,
+   * for the caller to report once it gives up.
    *
    * @return array<string, string>
    *   Errors keyed by domain name.
@@ -119,7 +216,8 @@ class MarketplaceSync {
       $this->recorder->recordPush($provider, $plan, $errors + $failed, $deletes);
       throw $e;
     }
-    $this->recorder->recordPush($provider, $plan, $errors, $deletes);
+    // The same refusal as last time was reported then.
+    $this->reportFailure($provider, $this->recorder->recordPush($provider, $plan, $errors, $deletes));
 
     foreach ($errors as $name => $error) {
       $this->logger->warning('@provider rejected @domain: @error', [
@@ -168,7 +266,8 @@ class MarketplaceSync {
    */
   protected function planOne(SyncPlan $plan, MarketplaceInterface $plugin, string $name, ?array $wanted): void {
     $current = $plan->current[$name] ?? NULL;
-    if ($current !== NULL && ($reason = $plugin->lockReason($current))) {
+    // A listing that shows a sale is never touched, whatever the plugin locks.
+    if ($current !== NULL && ($reason = $plugin->lockReason($current) ?: $plugin->saleStatus($current))) {
       $plan->locked[$name] = $reason;
     }
     elseif ($wanted === NULL) {

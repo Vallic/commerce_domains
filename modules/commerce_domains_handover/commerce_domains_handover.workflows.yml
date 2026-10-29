@@ -1,0 +1,41 @@
+# The seller acts on every step; the buyer only follows the emails. A push
+# has no API anywhere, so the seller pushes at the registrar and marks it.
+commerce_domains_handover_default:
+  id: commerce_domains_handover_default
+  group: commerce_domains_handover
+  label: 'Default'
+  states:
+    waiting:
+      label: 'Waiting for the seller'
+    unlocked:
+      label: 'Unlocked'
+    code_sent:
+      label: 'Auth code sent'
+    pushed:
+      label: 'Pushed'
+    transferred:
+      label: 'Transferred'
+    canceled:
+      label: 'Canceled'
+  transitions:
+    unlock:
+      label: 'Unlock'
+      from: [waiting]
+      to: unlocked
+    # Again from code_sent, for a buyer who lost the code or let it expire.
+    send_code:
+      label: 'Send the auth code'
+      from: [waiting, unlocked, code_sent]
+      to: code_sent
+    push:
+      label: 'Mark pushed'
+      from: [waiting, unlocked, code_sent]
+      to: pushed
+    complete:
+      label: 'Mark transferred'
+      from: [waiting, unlocked, code_sent, pushed]
+      to: transferred
+    cancel:
+      label: 'Cancel'
+      from: [waiting, unlocked, code_sent, pushed]
+      to: canceled

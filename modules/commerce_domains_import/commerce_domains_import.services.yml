@@ -1,0 +1,22 @@
+services:
+  _defaults:
+    autowire: true
+
+  logger.channel.commerce_domains_import:
+    parent: logger.channel_base
+    arguments: ['commerce_domains_import']
+
+  Drupal\commerce_domains_import\RegistrarLookup:
+    arguments:
+      $cache: '@cache.default'
+      $providerPluginManager: '@plugin.manager.commerce_domains_provider'
+      $logger: '@logger.channel.commerce_domains_import'
+
+  Drupal\commerce_domains_import\DomainImporter:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_import'
+      # Commerce Domains Pricing is optional.
+      $priceRules: '@?Drupal\commerce_domains_pricing\PriceRules'
+
+  # The import form's batch callbacks.
+  Drupal\commerce_domains_import\ImportBatch: ~

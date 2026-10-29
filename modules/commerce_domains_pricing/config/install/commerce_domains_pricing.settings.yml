@@ -1,0 +1,7 @@
+rules: {  }
+rounding:
+  whole_units: false
+  steps: {  }
+currencies: {  }
+price_list: null
+field_prefix: ''

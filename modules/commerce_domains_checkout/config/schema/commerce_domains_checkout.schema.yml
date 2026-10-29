@@ -1,0 +1,2 @@
+commerce_checkout.commerce_checkout_flow.plugin.commerce_domains:
+  type: commerce_checkout_flow_with_panes_configuration

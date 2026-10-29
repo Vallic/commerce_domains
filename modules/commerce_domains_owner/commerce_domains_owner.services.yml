@@ -1,0 +1,42 @@
+services:
+  _defaults:
+    autowire: true
+
+  logger.channel.commerce_domains_owner:
+    parent: logger.channel_base
+    arguments: ['commerce_domains_owner']
+
+  Drupal\commerce_domains_owner\Costs:
+    arguments:
+      # Commerce Exchanger is optional.
+      $exchanger: '@?commerce_exchanger.calculate'
+
+  Drupal\commerce_domains_owner\Renewals:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_owner'
+
+  Drupal\commerce_domains_owner\SaleRecorder: ~
+
+  Drupal\commerce_domains_owner\Notifier: ~
+
+  Drupal\commerce_domains_owner\Checklist: ~
+
+  Drupal\commerce_domains_owner\SalesReport: ~
+
+  Drupal\commerce_domains_owner\EventSubscriber\OrderSubscriber:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_owner'
+    tags:
+      - { name: event_subscriber }
+
+  Drupal\commerce_domains_owner\EventSubscriber\MarketplaceSubscriber:
+    tags:
+      - { name: event_subscriber }
+
+  Drupal\commerce_domains_owner\EventSubscriber\OfferSubscriber:
+    tags:
+      - { name: event_subscriber }
+
+  Drupal\commerce_domains_owner\EventSubscriber\LanderSubscriber:
+    tags:
+      - { name: event_subscriber }

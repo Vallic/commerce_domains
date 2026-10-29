@@ -1,0 +1,9 @@
+commerce_domains_import.import:
+  path: '/admin/commerce/domains/import'
+  defaults:
+    _form: '\Drupal\commerce_domains_import\Form\ImportForm'
+    _title: 'Import domains'
+  requirements:
+    _permission: 'import domains'
+  options:
+    _admin_route: TRUE

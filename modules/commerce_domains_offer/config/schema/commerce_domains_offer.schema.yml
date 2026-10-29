@@ -5,6 +5,12 @@ commerce_domains_offer.settings:
     expire_days:
       type: integer
       label: 'Days an offer stays open without an answer'
+    minimum_price:
+      type: float
+      label: 'Least price that takes offers, in the domain''s currency'
+    premium_offers:
+      type: boolean
+      label: 'Take offers on Atom premium names'
     notify_mail:
       type: email
       label: 'Address told about new offers'

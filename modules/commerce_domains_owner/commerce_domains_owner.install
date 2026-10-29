@@ -1,0 +1,71 @@
+<?php
+
+/**
+ * @file
+ * Install and uninstall hooks for Commerce Domains Owner.
+ */
+
+declare(strict_types=1);
+
+use Drupal\commerce_domains\Catalog;
+use Drupal\commerce_domains_owner\Checklist;
+use Drupal\commerce_domains_owner\Notifier;
+use Drupal\commerce_domains_owner\Plugin\Commerce\EntityTrait\DomainCosts;
+use Drupal\commerce_domains_owner\Renewals;
+use Drupal\field\Entity\FieldConfig;
+
+/**
+ * Implements hook_install().
+ *
+ * Turns on the costs trait for the product types that sell domains, and
+ * takes the registrar checks so far as seen: only domains that go missing
+ * from now on are news.
+ */
+function commerce_domains_owner_install(bool $is_syncing): void {
+  // A config import brings the fields and the product types along.
+  if (!$is_syncing) {
+    $trait_manager = \Drupal::service('plugin.manager.commerce_entity_trait');
+    $field_manager = \Drupal::service('commerce.configurable_field_manager');
+    $trait = $trait_manager->createInstance(DomainCosts::ID);
+    $storage = \Drupal::entityTypeManager()->getStorage('commerce_product_type');
+    /** @var \Drupal\commerce_product\Entity\ProductTypeInterface $type */
+    foreach ($storage->loadMultiple(\Drupal::service(Catalog::class)->productTypes()) as $type) {
+      foreach ($trait->buildFieldDefinitions() as $field_name => $definition) {
+        // Kept from an earlier install.
+        if (FieldConfig::loadByName('commerce_product', $type->id(), $field_name)) {
+          continue;
+        }
+        $definition->setTargetEntityTypeId('commerce_product');
+        $definition->setTargetBundle($type->id());
+        $definition->setName($field_name);
+        $field_manager->createField($definition);
+      }
+      $type->setTraits(array_values(array_unique([...$type->getTraits(), DomainCosts::ID])))->save();
+    }
+  }
+  \Drupal::service(Notifier::class)->seeRegistrarChecks();
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * Takes the costs trait off the product types, so their forms keep working
+ * without its plugin. The fields and what was entered in them stay.
+ */
+function commerce_domains_owner_uninstall(bool $is_syncing): void {
+  if (!$is_syncing) {
+    /** @var \Drupal\commerce_product\Entity\ProductTypeInterface $type */
+    foreach (\Drupal::entityTypeManager()->getStorage('commerce_product_type')->loadMultiple() as $type) {
+      if (in_array(DomainCosts::ID, $type->getTraits(), TRUE)) {
+        $type->setTraits(array_values(array_diff($type->getTraits(), [DomainCosts::ID])))->save();
+      }
+    }
+  }
+  \Drupal::state()->deleteMultiple([
+    Checklist::LANDER_KEY,
+    Notifier::DIGEST_KEY,
+    Notifier::REGISTRAR_CHECKS_KEY,
+    Notifier::SYNC_FAILURES_KEY,
+    Renewals::OFF_SALE_KEY,
+  ]);
+}

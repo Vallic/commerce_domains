@@ -1,0 +1,6 @@
+entity.commerce_domains_handover.collection:
+  title: 'Domain handovers'
+  description: 'Hand sold domains over to their buyers.'
+  route_name: entity.commerce_domains_handover.collection
+  parent: commerce.admin_commerce
+  weight: 6

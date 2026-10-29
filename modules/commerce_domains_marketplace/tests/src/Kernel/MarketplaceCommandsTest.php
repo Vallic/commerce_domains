@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains_marketplace\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains_marketplace\Drush\Commands\MarketplaceCommands;
+use Drupal\commerce_domains_marketplace\Event\MarketplaceEvents;
 use Drupal\commerce_domains_marketplace\MarketplaceSync;
 use Drupal\Tests\commerce_domains\Kernel\DrushCommandTrait;
 use Drush\Commands\DrushCommands;
@@ -42,6 +43,18 @@ class MarketplaceCommandsTest extends MarketplaceKernelTestBase {
     $command = new MarketplaceCommands($this->entityTypeManager, $this->container->get(MarketplaceSync::class));
     $this->prepareCommand($command);
     return $command->sync($provider, $options + ['domains' => NULL, 'dry-run' => FALSE, 'details' => FALSE]);
+  }
+
+  /**
+   * Returns whether the domain is in stock here, as stored.
+   */
+  protected function isForSale(string $domain): bool {
+    $this->entityTypeManager->getStorage('commerce_product_variation')->resetCache();
+    $products = $this->entityTypeManager->getStorage('commerce_product')->loadByProperties(['domain' => $domain]);
+    /** @var \Drupal\commerce_product\Entity\ProductInterface $product */
+    $product = reset($products);
+    $variations = $product->getVariations();
+    return (bool) reset($variations)->get('in_stock')->value;
   }
 
   /**
@@ -96,6 +109,30 @@ class MarketplaceCommandsTest extends MarketplaceKernelTestBase {
     $this->assertSame(DrushCommands::EXIT_SUCCESS, $this->runCommand('test'));
     $this->assertStringContainsString('[OK] Test is in sync.', $this->output->fetch());
     $this->assertSame(3000, $this->listings()['new.com']['price']);
+  }
+
+  /**
+   * Tests a sale the sync finds, and a sync that fails.
+   */
+  public function testSaleAndFailure(): void {
+    $this->createProvider('test');
+    $this->setListings(['same.com' => ['price' => 1000, 'status' => 'sold'], 'repriced.com' => ['price' => 1]]);
+    // A dry run lists the sale and leaves it for the sync.
+    $this->assertSame(DrushCommands::EXIT_SUCCESS, $this->runCommand('test', ['dry-run' => TRUE]));
+    $this->assertMatchesRegularExpression('/Sold there\s+1\s+same\.com sold/', $this->output->fetch());
+    $this->assertSame(['Test shows same.com sold (sold): a sync takes it off sale here.'], $this->messages('warning'));
+    $this->assertSame([], $this->events());
+    $this->assertTrue($this->isForSale('same.com'), 'A dry run changes nothing here.');
+
+    $this->assertSame(DrushCommands::EXIT_SUCCESS, $this->runCommand('test'));
+    $this->assertSame(['Test shows same.com sold (sold): it is now off sale here.'], $this->messages('warning'));
+    $this->assertSame(MarketplaceEvents::SOLD_ELSEWHERE, $this->events()[0][0]);
+    $this->assertFalse($this->isForSale('same.com'));
+
+    $this->container->get('state')->set('commerce_domains_test.fail', 'permanent');
+    $this->assertSame(DrushCommands::EXIT_FAILURE, $this->runCommand('test', ['dry-run' => TRUE]));
+    $this->assertSame(['Test marketplace failed (permanent).'], $this->messages('error'));
+    $this->assertSame([[MarketplaceEvents::SYNC_FAILED, 'test', ['' => 'Test marketplace failed (permanent).']]], $this->events());
   }
 
 }

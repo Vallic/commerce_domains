@@ -16,9 +16,10 @@ use Psr\Log\LoggerInterface;
  * Brings the catalog's registration details in line with a registrar.
  *
  * Reads the account, records the registrar on every catalog domain the
- * account holds, and updates their expiry dates. The account is the record of
- * where a domain is: one transferred in is moved to this registrar on the next
- * sync. Nothing is written to the registrar.
+ * account holds, and updates their expiry dates, and their auto-renew setting
+ * where the product keeps one (Commerce Domains Owner's costs trait). The
+ * account is the record of where a domain is: one transferred in is moved to
+ * this registrar on the next sync. Nothing is written to the registrar.
  */
 class RegistrarSync {
 
@@ -89,10 +90,19 @@ class RegistrarSync {
           $plan->missing[$name] = $name;
           continue;
         }
+        $changed = FALSE;
         $expires = $product->get('domain_expires')->value;
         $expires = $expires === NULL ? NULL : (int) $expires;
         if ($registration->expires !== NULL && $expires !== $registration->expires) {
           $plan->expires[$name] = [$expires, $registration->expires];
+          $changed = TRUE;
+        }
+        $auto_renew = self::autoRenew($product);
+        if ($registration->autoRenew !== NULL && $product->hasField('domain_auto_renew') && $auto_renew !== $registration->autoRenew) {
+          $plan->autoRenew[$name] = [$auto_renew, $registration->autoRenew];
+          $changed = TRUE;
+        }
+        if ($changed) {
           $plan->products[$name][] = (int) $product->id();
         }
         else {
@@ -103,7 +113,7 @@ class RegistrarSync {
     }
 
     // A domain with one stale listing among several still needs the update.
-    $plan->unchanged = count(array_diff_key($unchanged, $plan->expires));
+    $plan->unchanged = count(array_diff_key($unchanged, $plan->expires, $plan->autoRenew));
     $plan->missing = array_values($plan->missing);
     $plan->unknown = array_keys(array_diff_key($plan->registrations, $seen));
     if ($names === NULL) {
@@ -164,7 +174,7 @@ class RegistrarSync {
     if (!$provider->status()) {
       throw new ProviderException(sprintf('%s is disabled.', $provider->label()));
     }
-    $names = array_merge(array_keys($plan->expires), array_keys($plan->elsewhere));
+    $names = array_unique(array_merge(array_keys($plan->expires), array_keys($plan->elsewhere), array_keys($plan->autoRenew)));
 
     $storage = $this->entityTypeManager->getStorage('commerce_product');
     $updated = 0;
@@ -175,6 +185,9 @@ class RegistrarSync {
         $product->set('domain_registrar', $provider->id());
         if ($registration->expires !== NULL) {
           $product->set('domain_expires', $registration->expires);
+        }
+        if ($registration->autoRenew !== NULL && $product->hasField('domain_auto_renew')) {
+          $product->set('domain_auto_renew', $registration->autoRenew);
         }
         // Registration details aren't an edit: keep the changed time.
         $product->setSyncing(TRUE);
@@ -223,6 +236,16 @@ class RegistrarSync {
       }
       $this->state->set($key, $now);
     }
+  }
+
+  /**
+   * Returns a product's recorded auto-renew setting, NULL when unknown.
+   */
+  protected static function autoRenew(ProductInterface $product): ?bool {
+    if (!$product->hasField('domain_auto_renew') || $product->get('domain_auto_renew')->isEmpty()) {
+      return NULL;
+    }
+    return (bool) $product->get('domain_auto_renew')->value;
   }
 
   /**

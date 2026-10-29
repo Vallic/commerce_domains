@@ -1,0 +1,19 @@
+services:
+  _defaults:
+    autowire: true
+
+  logger.channel.commerce_domains_handover:
+    parent: logger.channel_base
+    arguments: ['commerce_domains_handover']
+
+  Drupal\commerce_domains_handover\HandoverMail: ~
+
+  Drupal\commerce_domains_handover\HandoverManager:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_handover'
+
+  Drupal\commerce_domains_handover\EventSubscriber\OrderSubscriber:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_handover'
+    tags:
+      - { name: event_subscriber }

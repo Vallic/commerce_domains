@@ -40,6 +40,10 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
   // Mid-sale, or stopped by hand in SellerHub.
   protected const LOCKED_STATUSES = ['saleProcessing', 'privateSale', 'leaseActive', 'sold', 'onSaleStopped'];
 
+  // The locked statuses that are sales: a purchase under way, an open
+  // SafePay transaction, a lease-to-own not yet paid off, or sold.
+  protected const SALE_STATUSES = ['saleProcessing', 'privateSale', 'leaseActive', 'sold'];
+
   protected const MONEY_FIELDS = ['binPrice', 'minPrice'];
 
   /**
@@ -178,6 +182,14 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
   public function lockReason(array $current): ?string {
     $status = $current['status'] ?? NULL;
     return in_array($status, self::LOCKED_STATUSES, TRUE) ? $status : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function saleStatus(array $current): ?string {
+    $status = $current['status'] ?? NULL;
+    return in_array($status, self::SALE_STATUSES, TRUE) ? $status : NULL;
   }
 
   /**

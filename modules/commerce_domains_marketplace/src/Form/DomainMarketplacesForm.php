@@ -13,6 +13,7 @@ use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains_marketplace\ListingRecorder;
 use Drupal\commerce_domains_marketplace\MarketplaceSettings;
 use Drupal\commerce_domains_marketplace\MarketplaceSync;
+use Drupal\commerce_domains_marketplace\SyncPlan;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Access\AccessResultInterface;
@@ -26,7 +27,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Shows a domain's listing on each marketplace, and checks or pushes it.
  *
  * The statuses are what the last sync recorded; checking reads the
- * marketplaces again for this domain alone, and pushing syncs it.
+ * marketplaces again for this domain alone, and pushing syncs it. A sale
+ * either finds takes the domain off sale here.
  */
 final class DomainMarketplacesForm extends FormBase {
 
@@ -87,13 +89,13 @@ final class DomainMarketplacesForm extends FormBase {
     $name = (string) $product->get('domain')->value;
     $form_state->set('domain', $name);
     $item = $this->catalog->load([$name])[$name] ?? NULL;
+    $rows = $this->recorder->forProducts([(int) $product->id()])[(int) $product->id()] ?? [];
 
     $form['summary'] = [
       '#type' => 'item',
-      '#markup' => $this->summary($item),
+      '#markup' => $this->summary($item, $rows),
     ];
 
-    $rows = $this->recorder->forProducts([(int) $product->id()])[(int) $product->id()] ?? [];
     $labels = ListingRecorder::statusLabels();
     $date = fn($time) => $time ? $this->dateFormatter->format((int) $time, 'short') : '';
     $table = [];
@@ -102,10 +104,14 @@ final class DomainMarketplacesForm extends FormBase {
         $row = $rows[$id] ?? NULL;
         // E.g. a marketplace for the domains registered there only.
         $handled = !$item || MarketplaceSettings::plugin($provider)->manages($item);
+        $details = $row->note ?? ($handled ? '' : $this->t('This marketplace does not list this domain.'));
+        if ($row && $row->status === ListingRecorder::SOLD && $row->sold) {
+          $details = $this->t('@status, found on @date.', ['@status' => $row->note, '@date' => $date($row->sold)]);
+        }
         $table[$id] = [
           $provider->label(),
           $row ? ($labels[$row->status] ?? $row->status) : ($handled ? $this->t('Not checked yet') : $this->t('Not handled here')),
-          $row->note ?? ($handled ? '' : $this->t('This marketplace does not list this domain.')),
+          $details,
           $date($row->checked ?? NULL),
           $date($row->pushed ?? NULL),
         ];
@@ -149,8 +155,19 @@ final class DomainMarketplacesForm extends FormBase {
 
   /**
    * Says whether the domain is for sale, and where the seller lists it.
+   *
+   * @param \Drupal\commerce_domains\CatalogItem|null $item
+   *   The domain, as marketplaces see it.
+   * @param array<string, object> $rows
+   *   Its recorded listings, keyed by provider ID.
    */
-  protected function summary(?CatalogItem $item): string {
+  protected function summary(?CatalogItem $item, array $rows): string {
+    $sold = array_keys(array_filter($rows, fn(object $row) => $row->status === ListingRecorder::SOLD));
+    if ($sold && (!$item || !$item->forSale)) {
+      $providers = $this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple($sold);
+      $labels = array_map(fn($provider) => $provider->label(), $providers) ?: $sold;
+      return (string) $this->t('Sold on @providers: off sale here, and the other marketplaces remove its listings. Put it back on sale if the sale falls through.', ['@providers' => implode(', ', $labels)]);
+    }
     if (!$item || !$item->forSale) {
       return (string) $this->t('Not for sale: marketplaces remove its listings on the next sync.');
     }
@@ -187,11 +204,13 @@ final class DomainMarketplacesForm extends FormBase {
   public function submitForm(array &$form, FormStateInterface $form_state): void {}
 
   /**
-   * Reads the marketplaces again for this domain, changing nothing there.
+   * Reads the marketplaces again for this domain, pushing nothing.
+   *
+   * A sale found there still takes the domain off sale here.
    */
   public function check(array &$form, FormStateInterface $form_state): void {
     $this->each($form_state, function (ProviderInterface $provider, string $name): void {
-      $this->sync->plan($provider, [$name]);
+      $this->plan($provider, $name);
     });
     $this->messenger()->addStatus($this->t('Checked.'));
   }
@@ -201,7 +220,7 @@ final class DomainMarketplacesForm extends FormBase {
    */
   public function push(array &$form, FormStateInterface $form_state): void {
     $this->each($form_state, function (ProviderInterface $provider, string $name): void {
-      $plan = $this->sync->plan($provider, [$name]);
+      $plan = $this->plan($provider, $name);
       if (!$plan->isEmpty()) {
         foreach ($this->sync->apply($provider, $plan) as $error) {
           $this->messenger()->addError($this->t('@provider refused it: @error', [
@@ -227,12 +246,29 @@ final class DomainMarketplacesForm extends FormBase {
         $action($provider, $name);
       }
       catch (ProviderException $e) {
+        $this->sync->reportFailure($provider, ['' => $e->getMessage()]);
         $this->messenger()->addError($this->t('@provider: @error', [
           '@provider' => $provider->label(),
           '@error' => $e->getMessage(),
         ]));
       }
     }
+  }
+
+  /**
+   * Checks one marketplace for the domain, saying when it found a sale.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  protected function plan(ProviderInterface $provider, string $name): SyncPlan {
+    $plan = $this->sync->plan($provider, [$name]);
+    if ($plan->newSales) {
+      $this->messenger()->addWarning($this->t('@provider shows it sold (@status): it is now off sale here.', [
+        '@provider' => $provider->label(),
+        '@status' => $plan->sales[$name] ?? '',
+      ]));
+    }
+    return $plan;
   }
 
 }

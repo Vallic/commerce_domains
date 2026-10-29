@@ -1,0 +1,4 @@
+import domains:
+  title: 'Import domains'
+  description: 'Add domains to the catalog from a list, a CSV file or a registrar account, and update the prices and sale terms of domains already there.'
+  restrict access: true

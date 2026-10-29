@@ -58,7 +58,9 @@ final class Afternic extends MarketplacePluginBase implements CsvExportInterface
     'hidden',
   ];
 
-  // Afternic says to review the sale before touching these.
+  // Afternic says to review the sale before touching these. Both are sales:
+  // ON_HOLD is a purchase under way (Afternic's "pending sale"), SOLD a done
+  // one.
   protected const LOCKED_STATUSES = ['ON_HOLD', 'SOLD'];
 
   /**
@@ -164,6 +166,14 @@ final class Afternic extends MarketplacePluginBase implements CsvExportInterface
   public function lockReason(array $current): ?string {
     $status = $current['listStatus'] ?? NULL;
     return in_array($status, self::LOCKED_STATUSES, TRUE) ? $status : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function saleStatus(array $current): ?string {
+    // Every locked status is a sale.
+    return $this->lockReason($current);
   }
 
   /**

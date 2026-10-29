@@ -13,9 +13,11 @@ use Drupal\commerce_domains_offer_escrow\EventSubscriber\EscrowOfferSubscriber;
 use Drupal\commerce_domains_offer_escrow\Hook\EscrowOfferHooks;
 use Drupal\commerce_escrow\Event\EscrowEvents;
 use Drupal\commerce_escrow\Event\EscrowWebhookEvent;
+use Drupal\commerce_order\Entity\Order;
 use Drupal\commerce_order\Entity\OrderType;
 use Drupal\commerce_payment\Entity\PaymentGateway;
 use Drupal\commerce_price\Price;
+use Drupal\commerce_product\Entity\ProductVariation;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Form\FormStateInterface;
@@ -193,9 +195,29 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     $offer = current($this->offers());
     $order = $offer->getOrder();
 
+    // Only the Escrow Offer gateway's conditions match the order.
+    $condition = $this->container->get('plugin.manager.commerce_condition')->createInstance('commerce_domains_order_escrow_offer');
+    $this->assertTrue($condition->evaluate($order));
+    $condition->setConfiguration(['escrow_offer' => FALSE]);
+    $this->assertFalse($condition->evaluate($order));
+
+    // Another variation of the domain is for sale too.
+    $other = ProductVariation::create([
+      'type' => 'default',
+      'sku' => 'follow.com-other',
+      'price' => new Price('2500', 'USD'),
+      'status' => TRUE,
+      'in_stock' => TRUE,
+    ]);
+    $other->save();
+    $variation->getProduct()->addVariation($other)->save();
+
     $order->getState()->applyTransitionById('offer_accepted');
     $order->save();
     $this->assertSame('accepted', Offer::load($offer->id())->getState()->getId());
+    // The domain is sold, whichever variation the offer was on.
+    $this->assertFalse((bool) ProductVariation::load($variation->id())->get('in_stock')->value);
+    $this->assertFalse((bool) ProductVariation::load($other->id())->get('in_stock')->value, 'Its other variation is off sale too.');
 
     // Escrow.com settles the price on the order before the payment.
     $order->getItems()[0]->setUnitPrice(new Price('1800', 'USD'), TRUE)->save();
@@ -213,6 +235,26 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     $this->container->get('event_dispatcher')->dispatch(new EscrowWebhookEvent($cancelled->getOrder(), ['event' => 'cancel']), EscrowEvents::ESCROW_WEBHOOK);
     $this->assertSame('declined', Offer::load($cancelled->id())->getState()->getId());
     $this->assertCount(0, $this->getMails(['key' => 'declined']));
+  }
+
+  /**
+   * Tests the offer condition without a gateway named in the settings.
+   */
+  public function testConditionWithoutGateway(): void {
+    $this->config('commerce_domains_offer_escrow.settings')->set('gateway', '')->save();
+    // Left unsaved: commerce_escrow has no config schema for its gateways.
+    $gateway = PaymentGateway::create([
+      'id' => 'escrow_offer',
+      'label' => 'Escrow Offer',
+      'plugin' => 'escrow_offer',
+      'status' => TRUE,
+    ]);
+    $condition = $this->container->get('plugin.manager.commerce_condition')->createInstance('commerce_domains_order_escrow_offer');
+    $order = Order::create(['type' => 'default', 'payment_gateway' => $gateway]);
+    $this->assertTrue($condition->evaluate($order), 'Offers go to the first enabled Escrow Offer gateway.');
+    $this->assertFalse($condition->evaluate($order->set('payment_gateway', NULL)));
+    $condition->setConfiguration(['escrow_offer' => FALSE]);
+    $this->assertTrue($condition->evaluate($order), 'Other orders.');
   }
 
   /**

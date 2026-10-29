@@ -1,0 +1,60 @@
+# Each step of a handover, on its order. Never an auth code: the parameters
+# are the domain, the registrar's name and flags.
+commerce_domains_handover_start:
+  category: commerce_domains_handover
+  label: 'Handover started'
+  template: '<p>Handover of <em>{{ domain }}</em> started{% if manual %} by hand{% endif %}.</p>'
+commerce_domains_handover_unlock:
+  category: commerce_domains_handover
+  label: 'Domain unlocked'
+  template: '<p><em>{{ domain }}</em> unlocked at {{ registrar }}.</p>'
+commerce_domains_handover_send_code:
+  category: commerce_domains_handover
+  label: 'Auth code sent'
+  template: '<p>Auth code for <em>{{ domain }}</em> {% if entered %}entered by the seller{% else %}from {{ registrar }}{% endif %} emailed to the buyer.</p>'
+commerce_domains_handover_push:
+  category: commerce_domains_handover
+  label: 'Domain pushed'
+  template: '<p><em>{{ domain }}</em> marked pushed to the buyer.</p>'
+commerce_domains_handover_complete:
+  category: commerce_domains_handover
+  label: 'Domain transferred'
+  template: '<p><em>{{ domain }}</em> marked transferred{% if registrar %}; no longer expected at {{ registrar }}{% endif %}.</p>'
+commerce_domains_handover_cancel:
+  category: commerce_domains_handover
+  label: 'Handover canceled'
+  template: '<p>Handover of <em>{{ domain }}</em> canceled{% if with_order %} with the order{% endif %}.</p>'
+
+# The buyer emails, which Commerce logs as mail_ plus the email ID.
+mail_commerce_domains_handover_started:
+  category: commerce_domains_handover
+  label: 'Handover email'
+  template: '<p>Email on what happens next with the domain sent to {{ to_email }}.</p>'
+mail_commerce_domains_handover_started_failure:
+  category: commerce_domains_handover
+  label: 'Handover email'
+  template: '<p>Failed to send the email on what happens next with the domain to {{ to_email }}.</p>'
+mail_commerce_domains_handover_auth_code:
+  category: commerce_domains_handover
+  label: 'Handover email'
+  template: '<p>Email with the auth code sent to {{ to_email }}.</p>'
+mail_commerce_domains_handover_auth_code_failure:
+  category: commerce_domains_handover
+  label: 'Handover email'
+  template: '<p>Failed to send the email with the auth code to {{ to_email }}.</p>'
+mail_commerce_domains_handover_pushed:
+  category: commerce_domains_handover
+  label: 'Handover email'
+  template: '<p>Email that the domain was pushed sent to {{ to_email }}.</p>'
+mail_commerce_domains_handover_pushed_failure:
+  category: commerce_domains_handover
+  label: 'Handover email'
+  template: '<p>Failed to send the email that the domain was pushed to {{ to_email }}.</p>'
+mail_commerce_domains_handover_transferred:
+  category: commerce_domains_handover
+  label: 'Handover email'
+  template: '<p>Email that the domain is transferred sent to {{ to_email }}.</p>'
+mail_commerce_domains_handover_transferred_failure:
+  category: commerce_domains_handover
+  label: 'Handover email'
+  template: '<p>Failed to send the email that the domain is transferred to {{ to_email }}.</p>'

@@ -1,0 +1,15 @@
+action.configuration.commerce_domains_apply_price_rules:
+  type: action_configuration_default
+  label: 'Configuration for the Apply pricing rules action'
+
+action.configuration.commerce_domains_reprice:
+  type: action_configuration_default
+  label: 'Configuration for the Reprice by a factor action'
+
+action.configuration.commerce_domains_sale_terms:
+  type: action_configuration_default
+  label: 'Configuration for the Set sale terms action'
+
+action.configuration.commerce_domains_marketplaces:
+  type: action_configuration_default
+  label: 'Configuration for the Choose marketplaces action'

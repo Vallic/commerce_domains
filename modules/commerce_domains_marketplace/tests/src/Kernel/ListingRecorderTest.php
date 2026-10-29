@@ -55,6 +55,7 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
     $this->createDomain('Sold.com', 5000);
     $this->createDomain('Premium.com', 6000, ['atom_premium' => TRUE]);
     $this->createDomain('Quiet.com', 7000, [], ['in_stock' => FALSE]);
+    $this->createDomain('Stopped.com', 8000);
     $this->setListings([
       'same.com' => ['price' => 1000],
       'repriced.com' => ['price' => 1],
@@ -62,6 +63,7 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
       'sold.com' => ['price' => 5000, 'status' => 'sold'],
       'premium.com' => ['price' => 1],
       'foreign.com' => ['price' => 1],
+      'stopped.com' => ['price' => 8000, 'status' => 'stopped'],
     ]);
     $this->createProvider('test');
   }
@@ -102,10 +104,13 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
       'premium.com' => ['unmanaged', NULL],
       'repriced.com' => ['outdated', 'price 1 → 2000'],
       'same.com' => ['listed', NULL],
-      'sold.com' => ['locked', 'sold'],
+      'sold.com' => ['sold', 'sold'],
+      'stopped.com' => ['locked', 'stopped'],
     ], $this->statuses(), 'Names the catalog lacks, and names neither listed nor for sale, get no row.');
     $rows = $this->rows();
     $this->assertSame('{"price":2000}', $rows['repriced.com']->listing, 'The listing wanted.');
+    $this->assertNotNull($rows['sold.com']->sold, 'When the sale was found.');
+    $this->assertNull($rows['stopped.com']->sold, 'A lock is no sale.');
     $this->assertSame('{"price":1}', $rows['premium.com']->listing, 'The listing found.');
     $this->assertNull($rows['same.com']->pushed);
     $this->assertGreaterThan(0, (int) $rows['same.com']->checked);
@@ -119,7 +124,8 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
       'premium.com' => ['unmanaged', NULL],
       'repriced.com' => ['listed', NULL],
       'same.com' => ['listed', NULL],
-      'sold.com' => ['locked', 'sold'],
+      'sold.com' => ['sold', 'sold'],
+      'stopped.com' => ['locked', 'stopped'],
     ], $this->statuses());
     $rows = $this->rows();
     $this->assertNotNull($rows['repriced.com']->pushed);
@@ -131,6 +137,8 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
     $this->sync->plan(Provider::load('test'));
     $this->assertSame(['failed', 'Rejected by the test marketplace.'], $this->statuses()['new.com']);
     $this->assertSame('unlisted', $this->statuses()['gone.com'][0]);
+    $this->assertSame(['unmanaged', NULL], $this->statuses()['premium.com'], 'Still recorded by the next whole check.');
+    $this->assertSame(['sold', 'sold'], $this->statuses()['sold.com']);
 
     $this->container->get('state')->set('commerce_domains_test.reject', []);
     $this->sync->sync(Provider::load('test'), ['new.com']);
@@ -205,9 +213,67 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
   }
 
   /**
+   * Tests the updates for sites with listings recorded before sales were.
+   */
+  public function testUpdates(): void {
+    $schema = $this->container->get('database')->schema();
+    $schema->dropField(ListingRecorder::TABLE, 'sold');
+    $this->container->get('module_handler')->loadInclude('commerce_domains_marketplace', 'install');
+    commerce_domains_marketplace_update_11004();
+    $this->assertTrue($schema->fieldExists(ListingRecorder::TABLE, 'sold'));
+
+    // Listings locked as mid-sale before: gone.com is off sale here already,
+    // same.com isn't, and stopped.com is no sale. Premium names were left to
+    // the marketplace: parked.com is off sale here, premium.com isn't.
+    $this->createDomain('Parked.com', 9000, ['atom_premium' => TRUE], ['in_stock' => FALSE]);
+    $database = $this->container->get('database');
+    $old = [
+      'gone.com' => [ListingRecorder::LOCKED, 'sold'],
+      'same.com' => [ListingRecorder::LOCKED, 'sold'],
+      'stopped.com' => [ListingRecorder::LOCKED, 'stopped'],
+      'parked.com' => [ListingRecorder::UNMANAGED, 'sold'],
+      'premium.com' => [ListingRecorder::UNMANAGED, 'sold'],
+    ];
+    foreach ($old as $name => [$row_status, $status]) {
+      $products = $this->entityTypeManager->getStorage('commerce_product')->loadByProperties(['domain' => $name]);
+      $database->insert(ListingRecorder::TABLE)->fields([
+        'provider' => 'test',
+        'domain' => $name,
+        'product_id' => reset($products)->id(),
+        'status' => $row_status,
+        'note' => $row_status === ListingRecorder::LOCKED ? $status : NULL,
+        'listing' => json_encode(['price' => 1, 'status' => $status]),
+        'checked' => 100,
+        'changed' => 50,
+      ])->execute();
+    }
+    $this->container->get('module_handler')->loadInclude('commerce_domains_marketplace', 'php', 'commerce_domains_marketplace.post_update');
+    $this->assertSame('Recorded 2 sales the marketplaces showed before.', (string) commerce_domains_marketplace_post_update_record_sales());
+    $rows = $this->rows();
+    foreach (['gone.com', 'parked.com'] as $name) {
+      $row = $rows[$name];
+      $this->assertSame([ListingRecorder::SOLD, 'sold', '50'], [$row->status, $row->note, (string) $row->sold], $name);
+    }
+    $this->assertSame([ListingRecorder::LOCKED, NULL], [$rows['same.com']->status, $rows['same.com']->sold]);
+    $this->assertSame([ListingRecorder::LOCKED, NULL], [$rows['stopped.com']->status, $rows['stopped.com']->sold]);
+    $this->assertSame([ListingRecorder::UNMANAGED, NULL], [$rows['premium.com']->status, $rows['premium.com']->sold]);
+
+    // The next check takes premium.com off sale, and reports only that sale.
+    $this->setListings([
+      'parked.com' => ['price' => 1, 'status' => 'sold'],
+      'premium.com' => ['price' => 1, 'status' => 'sold'],
+    ]);
+    $this->events();
+    $this->assertSame(['premium.com'], $this->sync->plan(Provider::load('test'))->newSales);
+    $this->assertCount(1, $this->events());
+  }
+
+  /**
    * Tests the domain overview and the listings report.
    */
   public function testViews(): void {
+    // Dates need the date formats.
+    $this->installConfig(['system']);
     // Product queries are access-checked.
     $this->setUpCurrentUser([], ['administer commerce_product']);
     $this->sync->plan(Provider::load('test'));
@@ -240,6 +306,24 @@ class ListingRecorderTest extends MarketplaceKernelTestBase {
     $domains = array_map(fn($row) => (string) $view->field['domain']->getValue($row), $view->result);
     sort($domains);
     $this->assertSame(['gone.com', 'new.com', 'repriced.com'], $domains);
+    $view->destroy();
+
+    // A sale says when it was found, on both.
+    $found = $this->container->get('date.formatter')->format((int) $this->rows()['sold.com']->sold, 'short');
+    $view = Views::getView('commerce_domains_overview');
+    $view->setDisplay('page_1');
+    $view->setExposedInput(['title' => 'sold']);
+    $view->render();
+    $this->assertSame("Test: Sold on $found", trim(strip_tags((string) $view->style_plugin->getField(0, 'commerce_domains_listings'))));
+    $view->destroy();
+
+    $view = Views::getView('commerce_domains_listings');
+    $view->setDisplay('page_1');
+    $view->setExposedInput(['status' => 'sold']);
+    $view->render();
+    $this->assertCount(1, $view->result);
+    $this->assertSame("Sold on $found", trim(strip_tags((string) $view->style_plugin->getField(0, 'status'))));
+    $this->assertSame('sold', trim(strip_tags((string) $view->style_plugin->getField(0, 'note'))), "The marketplace's status.");
     $view->destroy();
 
     // The listings tab gets an Overview tab beside it.

@@ -9,4 +9,4 @@ commerce_domains_offer.settings:
   title: 'Domain offers'
   description: 'How long offers stay open, and who is told about new ones.'
   route_name: commerce_domains_offer.settings
-  parent: commerce.configuration
+  parent: commerce_domains.configuration

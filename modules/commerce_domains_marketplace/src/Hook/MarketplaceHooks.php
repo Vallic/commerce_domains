@@ -53,7 +53,7 @@ class MarketplaceHooks {
     $form['marketplace']['auto_sync'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Push catalog changes automatically'),
-      '#description' => $this->t('Domains that are added, repriced, sold or removed are queued and pushed on the next cron run. Run a dry-run sync with Drush before turning this on.'),
+      '#description' => $this->t('Domains that are added, repriced, sold or removed are queued and pushed on the next cron run. Cron also checks the marketplace for sales every hour: a domain sold there goes off sale here. Run a dry-run sync with Drush before turning this on.'),
       '#default_value' => MarketplaceSettings::isAutoSync($provider),
       '#access' => $syncs,
     ];

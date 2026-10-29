@@ -1,0 +1,4 @@
+administer commerce_domains pricing:
+  title: 'Administer domain pricing'
+  description: 'Change the pricing rules, the rounding, and where prices in other currencies are written.'
+  restrict access: true

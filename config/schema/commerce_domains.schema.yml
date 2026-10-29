@@ -14,6 +14,12 @@ commerce_domains.provider.*:
       nullable: true
     configuration:
       type: commerce_domains.provider_plugin.[%parent.plugin]
+    credential_keys:
+      type: sequence
+      label: 'Keys the API credentials are read from'
+      sequence:
+        type: string
+        label: 'Key ID, keyed by the setting it fills'
     registration_sync:
       type: boolean
       label: 'Refresh registration details daily'

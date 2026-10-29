@@ -148,6 +148,16 @@ final class RegistrationsForm extends FormBase {
         [$this->t('In the account, not in the catalog'), count($plan->unknown), $this->t('nothing')],
       ],
     ];
+    // Only products that keep it have auto-renew, e.g. with the costs trait
+    // of Commerce Domains Owner.
+    if ($plan->autoRenew) {
+      $row = [
+        $this->t('Auto-renew to update'),
+        count($plan->autoRenew),
+        $this->t('records whether it renews automatically'),
+      ];
+      array_splice($build['summary']['#rows'], 1, 0, [$row]);
+    }
 
     $date = fn(?int $time) => $time === NULL ? '-' : gmdate('Y-m-d', $time);
     $rows = [];
@@ -157,6 +167,15 @@ final class RegistrationsForm extends FormBase {
     }
     foreach ($plan->expires as $name => [$old, $new]) {
       $rows[] = [$name, $this->t('expiry'), $date($old) . ' → ' . $date($new)];
+    }
+    $renews = fn(?bool $value) => match ($value) {
+      TRUE => $this->t('on'),
+      FALSE => $this->t('off'),
+      NULL => $this->t('unknown'),
+    };
+    foreach ($plan->autoRenew as $name => [$old, $new]) {
+      $change = $this->t('auto-renew: @old → @new', ['@old' => $renews($old), '@new' => $renews($new)]);
+      $rows[] = [$name, $change, $date($plan->registrations[$name]->expires)];
     }
     foreach ($plan->missing as $name) {
       $rows[] = [$name, $this->t('not in the account'), ''];

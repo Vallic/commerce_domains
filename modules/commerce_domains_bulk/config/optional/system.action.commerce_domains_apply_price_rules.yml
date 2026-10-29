@@ -1,0 +1,11 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - commerce_domains_bulk
+    - commerce_product
+id: commerce_domains_apply_price_rules
+label: 'Apply pricing rules'
+type: commerce_product
+plugin: commerce_domains_apply_price_rules
+configuration: {  }

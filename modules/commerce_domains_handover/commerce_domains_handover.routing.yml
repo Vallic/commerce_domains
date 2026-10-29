@@ -1,0 +1,61 @@
+entity.commerce_domains_handover.collection:
+  path: '/admin/commerce/domain-handovers'
+  defaults:
+    _entity_list: 'commerce_domains_handover'
+    _title: 'Domain handovers'
+  requirements:
+    _permission: 'view domain handovers+hand over domains'
+
+# The order's Handover tab: its domains, their state, and the steps open.
+commerce_domains_handover.order:
+  path: '/admin/commerce/orders/{commerce_order}/handover'
+  defaults:
+    _controller: '\Drupal\commerce_domains_handover\Controller\HandoverController::page'
+    _title: 'Handover'
+  requirements:
+    _permission: 'view domain handovers+hand over domains'
+    _entity_access: 'commerce_order.view'
+    _custom_access: '\Drupal\commerce_domains_handover\Controller\HandoverController::access'
+    commerce_order: \d+
+  options:
+    _admin_route: TRUE
+    parameters:
+      commerce_order:
+        type: entity:commerce_order
+
+# Starts the handover of an order by hand: one paid before this module, paid
+# outside Commerce, or paid on Escrow.com.
+commerce_domains_handover.start:
+  path: '/admin/commerce/orders/{commerce_order}/handover/start'
+  defaults:
+    _form: '\Drupal\commerce_domains_handover\Form\HandoverStartForm'
+    _title: 'Start the handover'
+  requirements:
+    _permission: 'hand over domains'
+    _entity_access: 'commerce_order.view'
+    _custom_access: '\Drupal\commerce_domains_handover\Form\HandoverStartForm::access'
+    commerce_order: \d+
+  options:
+    _admin_route: TRUE
+    parameters:
+      commerce_order:
+        type: entity:commerce_order
+
+# Each step is a confirmation form, so it only happens on a POST with the
+# form's token.
+commerce_domains_handover.step:
+  path: '/admin/commerce/domain-handovers/{commerce_domains_handover}/{transition}'
+  defaults:
+    _form: '\Drupal\commerce_domains_handover\Form\HandoverStepForm'
+    _title: 'Domain handover'
+  requirements:
+    _permission: 'hand over domains'
+    _custom_access: '\Drupal\commerce_domains_handover\Form\HandoverStepForm::access'
+    commerce_domains_handover: \d+
+    transition: 'unlock|send_code|push|complete|cancel'
+  options:
+    _admin_route: TRUE
+    no_cache: TRUE
+    parameters:
+      commerce_domains_handover:
+        type: entity:commerce_domains_handover

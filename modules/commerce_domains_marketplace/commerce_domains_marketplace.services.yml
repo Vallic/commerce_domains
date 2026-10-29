@@ -18,6 +18,10 @@ services:
     tags:
       - { name: event_subscriber }
 
+  Drupal\commerce_domains_marketplace\EventSubscriber\JobFailureSubscriber:
+    tags:
+      - { name: event_subscriber }
+
   Drupal\commerce_domains_marketplace\CsvExport: ~
 
   Drupal\commerce_domains_marketplace\ListingRecorder: ~

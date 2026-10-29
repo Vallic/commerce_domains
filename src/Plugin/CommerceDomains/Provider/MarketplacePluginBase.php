@@ -48,6 +48,15 @@ abstract class MarketplacePluginBase extends ListingPluginBase implements Market
   }
 
   /**
+   * {@inheritdoc}
+   *
+   * NULL for marketplaces whose listings never show a sale.
+   */
+  public function saleStatus(array $current): ?string {
+    return NULL;
+  }
+
+  /**
    * Reads a numeric string as an int when it is whole.
    */
   protected static function number(string|int|float $value): int|float {

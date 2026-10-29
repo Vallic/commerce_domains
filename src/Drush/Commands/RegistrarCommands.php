@@ -85,6 +85,8 @@ final class RegistrarCommands extends DrushCommands {
     $elsewhere = dt('registrar will be set to @label', ['@label' => $label]);
     $this->io()->table([dt('Catalog domains'), dt('Count'), dt('Notes')], [
       [dt('Expiry to update'), count($plan->expires), ''],
+      // Only products that keep it have auto-renew (Commerce Domains Owner).
+      ...($plan->autoRenew ? [[dt('Auto-renew to update'), count($plan->autoRenew), '']] : []),
       [dt('Up to date'), $plan->unchanged, ''],
       [dt('Not in the account'), count($plan->missing), implode(', ', array_slice($plan->missing, 0, 5))],
       [dt('In the account, recorded elsewhere'), count($plan->elsewhere), $elsewhere],
@@ -98,6 +100,15 @@ final class RegistrarCommands extends DrushCommands {
     $rows = [];
     foreach ($plan->expires as $name => [$old, $new]) {
       $rows[] = [$name, dt('expiry'), $date($old) . ' → ' . $date($new)];
+    }
+    $renews = fn(?bool $value) => match ($value) {
+      TRUE => dt('on'),
+      FALSE => dt('off'),
+      NULL => dt('unknown'),
+    };
+    foreach ($plan->autoRenew as $name => [$old, $new]) {
+      $change = dt('auto-renew: @old → @new', ['@old' => $renews($old), '@new' => $renews($new)]);
+      $rows[] = [$name, $change, $date($plan->registrations[$name]->expires)];
     }
     foreach ($plan->elsewhere as $name => $registrar) {
       $recorded = dt('recorded at @registrar', ['@registrar' => $registrar ?? dt('no registrar')]);

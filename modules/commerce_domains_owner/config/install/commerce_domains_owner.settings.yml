@@ -1,0 +1,10 @@
+notify_mail: ''
+notify:
+  sold: true
+  sold_elsewhere: true
+  sync_failed: true
+  expiring: true
+  registrar_missing: true
+  offer_expired: true
+expiring_days: 60
+off_sale_days: 14

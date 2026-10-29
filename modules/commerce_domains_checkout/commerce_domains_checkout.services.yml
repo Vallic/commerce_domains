@@ -1,0 +1,9 @@
+services:
+  _defaults:
+    autowire: true
+
+  Drupal\commerce_domains_checkout\EventSubscriber\CartPageRedirect:
+    arguments:
+      $cartProvider: '@commerce_cart.cart_provider'
+    tags:
+      - { name: event_subscriber }

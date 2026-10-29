@@ -91,7 +91,8 @@ final class UnstoppableClient extends ApiClient {
    *   The items.
    *
    * @return array[]
-   *   The per-item results.
+   *   The per-item results. Syncs log their errors, so the errors are
+   *   redacted like whole-request errors.
    *
    * @throws \Drupal\commerce_domains\ProviderException
    */
@@ -100,7 +101,9 @@ final class UnstoppableClient extends ApiClient {
     foreach (array_chunk(array_values($items), self::BATCH_SIZE) as $chunk) {
       array_push($results, ...($this->action($action, [$key => $chunk])['results'] ?? []));
     }
-    return $results;
+    return array_map(fn($result) => is_array($result) && is_string($result['error'] ?? NULL)
+      ? ['error' => $this->redact($result['error'])] + $result
+      : $result, $results);
   }
 
   /**

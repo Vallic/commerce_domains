@@ -64,3 +64,13 @@ function commerce_domains_marketplace_update_11003(): void {
   }
   $old->deleteQueue();
 }
+
+/**
+ * Records when a marketplace sale was found, on each domain's listing.
+ */
+function commerce_domains_marketplace_update_11004(): void {
+  $schema = \Drupal::database()->schema();
+  if (!$schema->fieldExists(ListingRecorder::TABLE, 'sold')) {
+    $schema->addField(ListingRecorder::TABLE, 'sold', ListingRecorder::schema()['fields']['sold']);
+  }
+}

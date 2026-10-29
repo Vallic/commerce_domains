@@ -8,3 +8,10 @@ commerce_domains_offer_escrow.settings:
     preselect:
       type: boolean
       label: 'Negotiate on Escrow.com by default'
+
+commerce.commerce_condition.plugin.commerce_domains_order_escrow_offer:
+  type: commerce_condition_configuration
+  mapping:
+    escrow_offer:
+      type: boolean
+      label: 'Offers negotiated on Escrow.com, or the other orders'

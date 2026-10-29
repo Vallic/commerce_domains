@@ -34,3 +34,23 @@ function commerce_domains_update_11001(): void {
     }
   }
 }
+
+/**
+ * Adds the keys that API credentials can be read from to domain providers.
+ */
+function commerce_domains_update_11002(): void {
+  $config_factory = \Drupal::configFactory();
+  foreach ($config_factory->listAll('commerce_domains.provider.') as $name) {
+    $config = $config_factory->getEditable($name);
+    $data = $config->getRawData();
+    if (array_key_exists('credential_keys', $data)) {
+      continue;
+    }
+    // Where saving the provider would put it, so exports don't move it later.
+    $position = array_search('configuration', array_keys($data), TRUE);
+    $data = $position === FALSE
+      ? $data + ['credential_keys' => []]
+      : array_slice($data, 0, $position + 1, TRUE) + ['credential_keys' => []] + array_slice($data, $position + 1, NULL, TRUE);
+    $config->setData($data)->save();
+  }
+}

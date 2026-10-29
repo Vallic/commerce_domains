@@ -1,0 +1,5 @@
+commerce_domains_pricing.settings:
+  title: 'Domain pricing'
+  description: 'Prices for domains saved without one, rounding, and prices in other currencies.'
+  route_name: commerce_domains_pricing.settings
+  parent: commerce_domains.configuration

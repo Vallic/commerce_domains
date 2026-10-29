@@ -1,0 +1,18 @@
+<?php
+
+/**
+ * @file
+ * Install and update functions for Commerce Domains Offers.
+ */
+
+declare(strict_types=1);
+
+/**
+ * Adds the price and Atom premium settings for offers.
+ */
+function commerce_domains_offer_update_11001(): void {
+  $config = \Drupal::configFactory()->getEditable('commerce_domains_offer.settings');
+  $config->set('minimum_price', $config->get('minimum_price') ?? 0)
+    ->set('premium_offers', $config->get('premium_offers') ?? TRUE)
+    ->save();
+}

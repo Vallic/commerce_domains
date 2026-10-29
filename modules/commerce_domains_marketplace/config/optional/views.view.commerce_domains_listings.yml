@@ -183,6 +183,7 @@ display:
               default_sort_order: desc
           sticky: true
           empty_table: true
+          class: ''
       row:
         type: fields
       query:

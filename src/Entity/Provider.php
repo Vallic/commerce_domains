@@ -8,6 +8,7 @@ use Drupal\commerce_domains\Form\ProviderForm;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginInterface;
 use Drupal\commerce_domains\ProviderListBuilder;
 use Drupal\Core\Config\Entity\ConfigEntityBase;
+use Drupal\Core\Config\Entity\ConfigEntityInterface;
 use Drupal\Core\Entity\Attribute\ConfigEntityType;
 use Drupal\Core\Entity\EntityDeleteForm;
 use Drupal\Core\Entity\Routing\AdminHtmlRouteProvider;
@@ -58,6 +59,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
     'label',
     'plugin',
     'configuration',
+    'credential_keys',
     'registration_sync',
   ],
 )]
@@ -92,6 +94,13 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
   protected array $configuration = [];
 
   /**
+   * The keys (Key module) the plugin reads credentials from, by setting.
+   *
+   * @var array<string, string>
+   */
+  protected array $credential_keys = [];
+
+  /**
    * Whether cron refreshes registration details daily.
    *
    * @var bool
@@ -109,7 +118,13 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
    * {@inheritdoc}
    */
   public function getPlugin(): ?ProviderPluginInterface {
-    return $this->plugin ? $this->getPluginCollection()->get($this->plugin) : NULL;
+    if (!$this->plugin) {
+      return NULL;
+    }
+    $plugin = $this->getPluginCollection()->get($this->plugin);
+    assert($plugin instanceof ProviderPluginInterface);
+    // The plugin fills the credentials settings.php leaves empty from these.
+    return $plugin->setCredentialKeys($this->credential_keys);
   }
 
   /**
@@ -125,6 +140,7 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
   public function setPluginId(?string $plugin_id): static {
     $this->plugin = $plugin_id ?: NULL;
     $this->configuration = [];
+    $this->credential_keys = [];
     $this->pluginCollection = NULL;
     return $this;
   }
@@ -134,6 +150,24 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
    */
   public function hasCapability(string $capability): bool {
     return $this->getPlugin() instanceof $capability;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCredentialKeys(): array {
+    return $this->credential_keys;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setCredentialKeys(array $keys): static {
+    // Form values for "no key" are empty strings.
+    $keys = array_filter(array_map('strval', $keys), fn(string $id) => $id !== '');
+    ksort($keys);
+    $this->credential_keys = $keys;
+    return $this;
   }
 
   /**
@@ -156,6 +190,42 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
    */
   public function getPluginCollections(): array {
     return $this->plugin ? ['configuration' => $this->getPluginCollection()] : [];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies(): static {
+    parent::calculateDependencies();
+    // The chosen keys are config the provider needs: imports bring them
+    // along, and deleting one takes it off the provider (see below).
+    if ($this->credential_keys && $this->entityTypeManager()->hasDefinition('key')) {
+      foreach ($this->entityTypeManager()->getStorage('key')->loadMultiple(array_values($this->credential_keys)) as $key) {
+        $this->addDependency('config', $key->getConfigDependencyName());
+      }
+    }
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function onDependencyRemoval(array $dependencies): bool {
+    $changed = parent::onDependencyRemoval($dependencies);
+    $removed = [];
+    foreach ($dependencies['config'] ?? [] as $dependency) {
+      if ($dependency instanceof ConfigEntityInterface && $dependency->getEntityTypeId() === 'key') {
+        $removed[] = $dependency->id();
+      }
+    }
+    $keys = in_array('key', $dependencies['module'] ?? [], TRUE) ? [] : array_diff($this->credential_keys, $removed);
+    if ($keys !== $this->credential_keys) {
+      // Losing a key leaves the provider in place, waiting for settings.php
+      // or another key, rather than deleting it with the key.
+      $this->credential_keys = $keys;
+      $changed = TRUE;
+    }
+    return $changed;
   }
 
   /**

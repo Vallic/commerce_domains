@@ -256,6 +256,16 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
 
   /**
    * {@inheritdoc}
+   *
+   * PendingSaleLocked is the only sale state the API reports. A finished sale
+   * leaves the account, and with it the list of listings.
+   */
+  public function saleStatus(array $current): ?string {
+    return $this->lockReason($current);
+  }
+
+  /**
+   * {@inheritdoc}
    */
   public function saveListings(array $listings, array $current): array {
     $client = $this->client();

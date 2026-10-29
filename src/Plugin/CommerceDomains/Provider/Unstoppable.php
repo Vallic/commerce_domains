@@ -34,6 +34,10 @@ final class Unstoppable extends MarketplacePluginBase implements RegistrarInterf
   // Listing states a sync may change.
   protected const OPEN_STATUSES = ['open', 'open-on-request', 'open-not-signed', 'draft'];
 
+  // "Sale in progress", the only sale state the API documents; the others
+  // are approvals or a cancelled listing.
+  protected const SALE_STATUSES = ['pending'];
+
   // The portfolio shows the price only, so syncs compare that.
   protected const REPORTED_FIELDS = ['price'];
 
@@ -118,6 +122,14 @@ final class Unstoppable extends MarketplacePluginBase implements RegistrarInterf
   public function lockReason(array $current): ?string {
     $status = $current['status'] ?? '';
     return $status !== '' && !in_array($status, self::OPEN_STATUSES, TRUE) ? $status : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function saleStatus(array $current): ?string {
+    $status = $current['status'] ?? NULL;
+    return in_array($status, self::SALE_STATUSES, TRUE) ? $status : NULL;
   }
 
   /**

@@ -1,0 +1,9 @@
+view domain portfolio:
+  title: 'View the domain dashboard'
+  description: 'See pending offers, sales and profit, expiring domains, and the health of marketplace and registrar syncs.'
+  restrict access: true
+
+manage domain portfolio:
+  title: 'Manage the domain portfolio'
+  description: 'Decide which domains to keep or let expire, which takes those off sale, and set where owner notifications go.'
+  restrict access: true

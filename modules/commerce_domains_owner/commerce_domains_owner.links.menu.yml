@@ -1,0 +1,14 @@
+# Moved under Commerce > Domains when the domain overview is there; see
+# NavigationHooks.
+commerce_domains_owner.dashboard:
+  title: 'Domain dashboard'
+  description: 'Pending offers, recent sales, expiring domains, sync health and next steps.'
+  route_name: commerce_domains_owner.dashboard
+  parent: commerce.admin_commerce
+  weight: -21
+
+commerce_domains_owner.settings:
+  title: 'Domain portfolio'
+  description: 'Where owner notifications go, which are sent, and when domains count as expiring.'
+  route_name: commerce_domains_owner.settings
+  parent: commerce_domains.configuration

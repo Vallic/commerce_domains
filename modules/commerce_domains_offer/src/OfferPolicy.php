@@ -14,6 +14,8 @@ use Drupal\commerce_price\RounderInterface;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\commerce_store\CurrentStoreInterface;
 use Drupal\commerce_store\Entity\StoreInterface;
+use Drupal\Core\Cache\CacheableMetadata;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
@@ -27,6 +29,7 @@ class OfferPolicy {
     protected ChainPriceResolverInterface $chainPriceResolver,
     protected RounderInterface $rounder,
     protected CurrentStoreInterface $currentStore,
+    protected ConfigFactoryInterface $configFactory,
   ) {}
 
   /**
@@ -48,7 +51,8 @@ class OfferPolicy {
   /**
    * Returns whether a domain takes offers on the site.
    *
-   * It must be for sale, its sale terms must accept offers, and no
+   * It must be for sale, its sale terms must accept offers, the settings
+   * must allow them at its price and on Atom premium names, and no
    * subscriber to OfferAllowedEvent may refuse.
    */
   public function allows(ProductVariationInterface $variation): bool {
@@ -56,9 +60,25 @@ class OfferPolicy {
     if (!$product || !$this->availability->isForSale($product, $variation)) {
       return FALSE;
     }
-    $event = new OfferAllowedEvent($variation, SaleTerms::fromVariation($variation)->offers);
+    $settings = $this->configFactory->get('commerce_domains_offer.settings');
+    $premium = $product->hasField('atom_premium') && (bool) $product->get('atom_premium')->value;
+    // In the domain's own currency, as its price is kept.
+    $price = (float) ($variation->getPrice()?->getNumber() ?? 0);
+    $allowed = SaleTerms::fromVariation($variation)->offers
+      && $price >= (float) $settings->get('minimum_price')
+      && (!$premium || $settings->get('premium_offers') !== FALSE);
+    $event = new OfferAllowedEvent($variation, $allowed);
     $this->eventDispatcher->dispatch($event, OfferAllowedEvent::NAME);
     return $event->isAllowed();
+  }
+
+  /**
+   * Returns what allows() depends on besides the domain: the settings.
+   *
+   * Pages that show or hide offers add it, so they follow the settings.
+   */
+  public function cacheability(): CacheableMetadata {
+    return CacheableMetadata::createFromObject($this->configFactory->get('commerce_domains_offer.settings'));
   }
 
   /**

@@ -17,6 +17,16 @@ final class RegistrarPlan {
   public array $expires = [];
 
   /**
+   * Auto-renew settings to update: old and new, keyed by domain.
+   *
+   * Only for products with an auto-renew field (the costs trait of Commerce
+   * Domains Owner), and registrars that report the setting.
+   *
+   * @var array<string, array{0: bool|null, 1: bool}>
+   */
+  public array $autoRenew = [];
+
+  /**
    * Product IDs of each domain to update, keyed by domain.
    *
    * @var array<string, int[]>
@@ -24,7 +34,7 @@ final class RegistrarPlan {
   public array $products = [];
 
   /**
-   * How many catalog domains already have the registrar's expiry date.
+   * How many catalog domains already have the registrar's details.
    */
   public int $unchanged = 0;
 
@@ -66,7 +76,7 @@ final class RegistrarPlan {
    * Whether applying the plan would change nothing.
    */
   public function isEmpty(): bool {
-    return !$this->expires && !$this->elsewhere;
+    return !$this->expires && !$this->elsewhere && !$this->autoRenew;
   }
 
 }

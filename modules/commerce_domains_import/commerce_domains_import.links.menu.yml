@@ -1,0 +1,8 @@
+# Moves under Commerce → Domains when the domain overview is there; see
+# ImportHooks::menuLinksDiscoveredAlter().
+commerce_domains_import.import:
+  title: 'Import domains'
+  description: 'Add domains from a list, a CSV file or a registrar account.'
+  route_name: commerce_domains_import.import
+  parent: commerce.admin_commerce
+  weight: -19

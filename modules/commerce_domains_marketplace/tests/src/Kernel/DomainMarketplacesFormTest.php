@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains_marketplace\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
+use Drupal\commerce_domains_marketplace\Event\MarketplaceEvents;
 use Drupal\commerce_domains_marketplace\Form\DomainMarketplacesForm;
+use Drupal\commerce_product\Entity\Product;
 use Drupal\Core\Form\FormState;
 use Drupal\Tests\user\Traits\UserCreationTrait;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -54,6 +56,35 @@ class DomainMarketplacesFormTest extends MarketplaceKernelTestBase {
     $form = $form_builder->getForm(DomainMarketplacesForm::class, $product);
     $this->assertSame('Listed', (string) $form['listings']['#rows']['test'][1]);
     $this->assertNotSame('', $form['listings']['#rows']['test'][4], 'When it was pushed.');
+  }
+
+  /**
+   * Tests a sale the check finds, and a marketplace that fails.
+   */
+  public function testSaleAndFailure(): void {
+    $this->installConfig(['system']);
+    $this->setUpCurrentUser([], ['administer commerce_domains providers']);
+    $this->createProvider('test');
+    $this->createProvider('other', plugin: 'test_marketplace_other');
+    $product = $this->createDomain('Example.com', 1000);
+    $this->setListings(['example.com' => ['price' => 1000, 'status' => 'sold']]);
+    $this->container->get('state')->set('commerce_domains_marketplace_test.fail', 'retryable');
+
+    $form_builder = $this->container->get('form_builder');
+    $form_state = (new FormState())->addBuildInfo('args', [$product])->setValues(['op' => 'Check marketplaces']);
+    $form_builder->submitForm(DomainMarketplacesForm::class, $form_state);
+    $messages = $this->container->get('messenger')->all();
+    $this->assertSame('Test shows it sold (sold): it is now off sale here.', (string) $messages['warning'][0]);
+    $this->assertSame('Other: Test marketplace failed (retryable).', (string) $messages['error'][0]);
+    $this->assertEqualsCanonicalizing([
+      self::soldEvent('test', 'example.com', (int) $product->id(), 'sold'),
+      [MarketplaceEvents::SYNC_FAILED, 'other', ['' => 'Test marketplace failed (retryable).']],
+    ], $this->events());
+
+    $form = $form_builder->getForm(DomainMarketplacesForm::class, Product::load($product->id()));
+    $this->assertSame('Sold on Test: off sale here, and the other marketplaces remove its listings. Put it back on sale if the sale falls through.', (string) $form['summary']['#markup']);
+    $this->assertSame('Sold', (string) $form['listings']['#rows']['test'][1]);
+    $this->assertStringStartsWith('sold, found on ', (string) $form['listings']['#rows']['test'][2]);
   }
 
 }

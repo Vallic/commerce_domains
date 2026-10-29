@@ -9,7 +9,9 @@ use Drupal\advancedqueue\Job;
 use Drupal\advancedqueue\JobResult;
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains_marketplace\EventSubscriber\CatalogSubscriber;
+use Drupal\commerce_domains_marketplace\Hook\CronHooks;
 use Drupal\commerce_domains_marketplace\Hook\MarketplaceHooks;
+use Drupal\commerce_domains_marketplace\Plugin\AdvancedQueue\JobType\MarketplaceCheckJob;
 use Drupal\commerce_domains_marketplace\Plugin\AdvancedQueue\JobType\MarketplaceSyncJob;
 use Drupal\commerce_domains_marketplace\SyncScheduler;
 use Drupal\commerce_product\Entity\Product;
@@ -25,6 +27,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[CoversClass(SyncScheduler::class)]
 #[CoversClass(CatalogSubscriber::class)]
 #[CoversClass(MarketplaceSyncJob::class)]
+#[CoversClass(MarketplaceCheckJob::class)]
+#[CoversClass(CronHooks::class)]
 #[CoversClass(MarketplaceHooks::class)]
 #[Group('commerce_domains')]
 #[RunTestsInSeparateProcesses]
@@ -123,6 +127,47 @@ class AutomaticSyncTest extends MarketplaceKernelTestBase {
     $this->assertSame(Job::STATE_FAILURE, $result->getState());
     $this->assertNull($result->getMaxRetries());
     $this->assertSame(96, $job_type->getMaxRetries());
+  }
+
+  /**
+   * Tests the hourly sale checks cron queues.
+   */
+  public function testHourlyChecks(): void {
+    $product = $this->createDomain('Sold.com', 1000);
+    $this->setListings(['sold.com' => ['price' => 1000, 'status' => 'sold']]);
+    $this->takeJobs();
+    /** @var \Drupal\advancedqueue\Plugin\AdvancedQueue\Backend\Database $backend */
+    $backend = Queue::load(SyncScheduler::QUEUE)->getBackend();
+    $state = $this->container->get('state');
+
+    // Only the provider that pushes automatically gets one, once an hour.
+    $this->container->get('module_handler')->invoke('commerce_domains_marketplace', 'cron');
+    $this->container->get(SyncScheduler::class)->queueChecks();
+    $this->assertSame(1, (int) $backend->countJobs()[Job::STATE_QUEUED]);
+    // An hour on, the first one still waits, e.g. retrying an outage.
+    $state->set(SyncScheduler::CHECKED_KEY . 'auto', 0);
+    $this->container->get(SyncScheduler::class)->queueChecks();
+    $this->assertSame(1, (int) $backend->countJobs()[Job::STATE_QUEUED]);
+
+    $jobs = $this->takeJobs();
+    $this->assertSame(SyncScheduler::CHECK_JOB_TYPE, $jobs[0]->getType());
+    $this->assertSame(['provider' => 'auto'], $jobs[0]->getPayload());
+    $result = $this->process($jobs[0]);
+    $this->assertSame(Job::STATE_SUCCESS, $result->getState());
+    $this->assertSame('Sold there: sold.com.', $result->getMessage());
+    $this->assertSame([self::soldEvent('auto', 'sold.com', (int) $product->id(), 'sold')], $this->events());
+    $this->assertSame([['fetch', NULL]], $this->calls(), 'A check pushes nothing.');
+
+    // Providers that stopped pushing automatically are skipped.
+    $this->container->get('state')->delete('commerce_domains_test.calls');
+    foreach (['manual', 'off', 'missing'] as $provider) {
+      $result = $this->process(Job::create(SyncScheduler::CHECK_JOB_TYPE, ['provider' => $provider]));
+      $this->assertSame(Job::STATE_SUCCESS, $result->getState());
+    }
+    $this->assertSame([], $this->calls());
+    $provider = Provider::load('auto');
+    $provider->delete();
+    $this->assertNull($state->get(SyncScheduler::CHECKED_KEY . 'auto'), 'Forgotten with the provider.');
   }
 
   /**

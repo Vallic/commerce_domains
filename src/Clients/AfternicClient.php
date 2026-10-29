@@ -121,7 +121,8 @@ final class AfternicClient extends ApiClient {
         $errors[$name] = 'Afternic returned no result for this domain.';
       }
       elseif (($result['code'] ?? 0) >= 300 && !in_array($result['code'], $ok, TRUE)) {
-        $errors[$name] = $this->describeError((int) $result['code'], $result['error'] ?? []);
+        // Syncs log these, so they are redacted like whole-request errors.
+        $errors[$name] = $this->redact($this->describeError((int) $result['code'], $result['error'] ?? []));
       }
     }
     return $errors;

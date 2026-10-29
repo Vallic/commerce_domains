@@ -1,0 +1,32 @@
+# The forms the bulk actions lead to, for the selection the action kept.
+commerce_domains_bulk.price_rules:
+  path: '/admin/commerce/domains/bulk/price-rules'
+  defaults:
+    _form: '\Drupal\commerce_domains_bulk\Form\PriceRulesForm'
+    _title: 'Apply pricing rules'
+  requirements:
+    _permission: 'access commerce_product overview'
+
+commerce_domains_bulk.reprice:
+  path: '/admin/commerce/domains/bulk/reprice'
+  defaults:
+    _form: '\Drupal\commerce_domains_bulk\Form\RepriceForm'
+    _title: 'Reprice domains'
+  requirements:
+    _permission: 'access commerce_product overview'
+
+commerce_domains_bulk.sale_terms:
+  path: '/admin/commerce/domains/bulk/sale-terms'
+  defaults:
+    _form: '\Drupal\commerce_domains_bulk\Form\SaleTermsForm'
+    _title: 'Set sale terms'
+  requirements:
+    _permission: 'access commerce_product overview'
+
+commerce_domains_bulk.marketplaces:
+  path: '/admin/commerce/domains/bulk/marketplaces'
+  defaults:
+    _form: '\Drupal\commerce_domains_bulk\Form\MarketplacesForm'
+    _title: 'Choose marketplaces'
+  requirements:
+    _permission: 'access commerce_product overview'

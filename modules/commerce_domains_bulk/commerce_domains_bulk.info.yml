@@ -1,0 +1,8 @@
+name: Commerce Domains Bulk editing
+type: module
+description: 'Actions for a selection of domains on the Domains overview: apply the pricing rules, reprice by a factor, set sale terms, choose marketplaces.'
+package: Commerce (contrib)
+core_version_requirement: ^11.4
+php: 8.3
+dependencies:
+  - commerce_domains:commerce_domains_pricing

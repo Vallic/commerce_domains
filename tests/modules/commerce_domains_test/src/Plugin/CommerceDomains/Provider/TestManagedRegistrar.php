@@ -16,8 +16,13 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * A registrar that manages domains, its account kept in State.
  *
- * State key commerce_domains_test.managed: per domain, expires, nameservers,
- * locked and auto_renew. A domain named refuse.com refuses every change.
+ * State keys, both under commerce_domains_test.:
+ * - managed: per domain, expires, nameservers, locked and auto_renew, and
+ *   emails_code for a registrar that emails the auth code instead.
+ * - managed_calls: each management call, as the method, the domain and the
+ *   arguments. Never what a call returned, so an auth code is never kept.
+ *
+ * A domain named refuse.com refuses every change, and its auth code.
  */
 #[CommerceDomainsProvider(
   id: 'test_managed_registrar',
@@ -26,6 +31,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 final class TestManagedRegistrar extends ProviderPluginBase implements DomainManagementInterface {
 
   protected const KEY = 'commerce_domains_test.managed';
+
+  public const CALLS = 'commerce_domains_test.managed_calls';
 
   /**
    * The state store holding the account.
@@ -58,6 +65,7 @@ final class TestManagedRegistrar extends ProviderPluginBase implements DomainMan
    * {@inheritdoc}
    */
   public function getNameservers(string $name): array {
+    $this->record('getNameservers', $name);
     return $this->state->get(self::KEY, [])[$name]['nameservers'] ?? [];
   }
 
@@ -65,6 +73,7 @@ final class TestManagedRegistrar extends ProviderPluginBase implements DomainMan
    * {@inheritdoc}
    */
   public function setNameservers(string $name, array $nameservers): void {
+    $this->record('setNameservers', $name, $nameservers);
     $this->change($name, 'nameservers', $nameservers);
   }
 
@@ -72,6 +81,7 @@ final class TestManagedRegistrar extends ProviderPluginBase implements DomainMan
    * {@inheritdoc}
    */
   public function setTransferLock(string $name, bool $locked): void {
+    $this->record('setTransferLock', $name, $locked);
     $this->change($name, 'locked', $locked);
   }
 
@@ -79,16 +89,43 @@ final class TestManagedRegistrar extends ProviderPluginBase implements DomainMan
    * {@inheritdoc}
    */
   public function setAutoRenew(string $name, bool $auto_renew): void {
+    $this->record('setAutoRenew', $name, $auto_renew);
     $this->change($name, 'auto_renew', $auto_renew);
   }
 
   /**
    * {@inheritdoc}
+   *
+   * The code is made from the name rather than kept, so tests can look for it
+   * anywhere it must not be.
    */
   public function getAuthCode(string $name): string {
+    $this->record('getAuthCode', $name);
+    if ($name === 'refuse.com') {
+      throw new ProviderException('Refused.');
+    }
     // Domains marked so stand in for registrars that email the code.
     $account = $this->state->get(self::KEY, []);
     return empty($account[$name]['emails_code']) ? 'code-' . $name : '';
+  }
+
+  /**
+   * Returns the management calls made so far.
+   *
+   * @return array<int, array<int, mixed>>
+   *   Each call as the method, the domain and the arguments.
+   */
+  public static function calls(StateInterface $state): array {
+    return $state->get(self::CALLS, []);
+  }
+
+  /**
+   * Records a call, without what it returns.
+   */
+  protected function record(string $method, string $name, mixed ...$arguments): void {
+    $calls = $this->state->get(self::CALLS, []);
+    $calls[] = [$method, $name, ...$arguments];
+    $this->state->set(self::CALLS, $calls);
   }
 
   /**

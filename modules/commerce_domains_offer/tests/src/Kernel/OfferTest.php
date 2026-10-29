@@ -118,6 +118,16 @@ class OfferTest extends DomainsKernelTestBase {
     $this->assertEquals(new Price('1440', 'EUR'), $policy->minimum($own, new Price('1800', 'EUR')));
     $this->assertEquals(new Price('2000', 'USD'), $policy->price($own, new Context(new AnonymousUserSession(), $this->store)));
 
+    // The settings: a least price, and none on Atom premium names.
+    $premium = $this->domain('premium.com', 20000);
+    $premium->getProduct()->set('atom_premium', TRUE)->save();
+    $this->assertTrue($policy->allows($premium));
+    $this->config('commerce_domains_offer.settings')->set('minimum_price', 10000)->set('premium_offers', FALSE)->save();
+    $this->assertFalse($policy->allows($plain));
+    $this->assertTrue($policy->allows($this->domain('dear.com', 10000)));
+    $this->assertFalse($policy->allows($premium));
+    $this->config('commerce_domains_offer.settings')->set('minimum_price', 0)->set('premium_offers', TRUE)->save();
+
     // Sites add their own rules.
     $this->container->get('event_dispatcher')->addListener(OfferAllowedEvent::NAME, fn(OfferAllowedEvent $event) => $event->setAllowed(FALSE));
     $this->assertFalse($policy->allows($plain));
@@ -234,10 +244,14 @@ class OfferTest extends DomainsKernelTestBase {
     $made = reset($offers);
     $this->assertEquals(new Price('1200', 'USD'), $made->getAmount());
 
-    // A domain that doesn't take offers shows no form.
+    // A domain that doesn't take offers shows no form. Both follow the
+    // settings, which can change that.
     $fixed = $this->domain('firm.com', 2000, ['sale_offers' => FALSE]);
     $form = $this->container->get('form_builder')->getForm(OfferForm::class, $fixed);
     $this->assertArrayNotHasKey('amount', $form);
+    $this->assertContains('config:commerce_domains_offer.settings', $form['#cache']['tags']);
+    $form = $this->container->get('form_builder')->getForm(OfferForm::class, $variation);
+    $this->assertContains('config:commerce_domains_offer.settings', $form['#cache']['tags']);
   }
 
   /**

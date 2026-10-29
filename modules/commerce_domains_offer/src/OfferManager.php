@@ -263,7 +263,10 @@ class OfferManager {
    * Emails the seller about an offer.
    */
   protected function notifySeller(OfferInterface $offer, string $key): void {
+    // Without an address of their own, offers go where Commerce Domains
+    // Owner sends the owner's mail, if it is installed and has one.
     $to = (string) $this->configFactory->get('commerce_domains_offer.settings')->get('notify_mail')
+      ?: (string) $this->configFactory->get('commerce_domains_owner.settings')->get('notify_mail')
       ?: (string) $offer->getStore()?->getEmail()
       ?: (string) $this->configFactory->get('system.site')->get('mail');
     if ($to !== '') {

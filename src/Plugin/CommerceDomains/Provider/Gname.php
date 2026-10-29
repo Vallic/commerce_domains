@@ -17,6 +17,9 @@ use Drupal\commerce_domains\Registration;
  * A Buy It Now listing has an end date, so listings run for a year and are
  * renewed in their last month. Removing a listing takes it off sale and
  * deletes it, so the domain can be listed again later.
+ *
+ * Only listings on sale are read, and they show no sale: a sold listing
+ * moves to GNAME's list of sold domains, which syncs don't read yet.
  */
 #[CommerceDomainsProvider(
   id: 'gname',

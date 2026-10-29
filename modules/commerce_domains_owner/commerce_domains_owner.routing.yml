@@ -1,0 +1,42 @@
+commerce_domains_owner.dashboard:
+  path: '/admin/commerce/domains/dashboard'
+  defaults:
+    _controller: '\Drupal\commerce_domains_owner\Controller\DashboardController::build'
+    _title: 'Domain dashboard'
+  requirements:
+    # Either permission: managing the portfolio means seeing it.
+    _permission: 'view domain portfolio+manage domain portfolio'
+  options:
+    _admin_route: TRUE
+
+commerce_domains_owner.expiring:
+  path: '/admin/commerce/domains/expiring'
+  defaults:
+    _form: '\Drupal\commerce_domains_owner\Form\ExpiringForm'
+    _title: 'Expiring soon'
+  requirements:
+    # Either permission: managing the portfolio means seeing it.
+    _permission: 'view domain portfolio+manage domain portfolio'
+  options:
+    _admin_route: TRUE
+
+commerce_domains_owner.profit:
+  path: '/admin/commerce/domains/profit'
+  defaults:
+    _controller: '\Drupal\commerce_domains_owner\Controller\ProfitController::build'
+    _title: 'Sales and profit'
+  requirements:
+    # Either permission: managing the portfolio means seeing it.
+    _permission: 'view domain portfolio+manage domain portfolio'
+  options:
+    _admin_route: TRUE
+
+commerce_domains_owner.settings:
+  path: '/admin/commerce/config/domain-portfolio'
+  defaults:
+    _form: '\Drupal\commerce_domains_owner\Form\SettingsForm'
+    _title: 'Domain portfolio'
+  requirements:
+    _permission: 'manage domain portfolio'
+  options:
+    _admin_route: TRUE
