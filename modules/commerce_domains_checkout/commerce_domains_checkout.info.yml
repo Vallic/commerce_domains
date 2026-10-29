@@ -3,7 +3,7 @@ type: module
 description: 'A checkout for one domain at a time: buy now goes straight to checkout, which asks where the domain should go.'
 package: Commerce (contrib)
 core_version_requirement: ^11.4
-php: 8.3
+php: 8.4
 dependencies:
   - commerce:commerce_cart
   - commerce:commerce_checkout

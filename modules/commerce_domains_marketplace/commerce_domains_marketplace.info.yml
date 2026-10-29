@@ -3,7 +3,7 @@ type: module
 description: 'Keeps domain listings on provider marketplaces in sync with the catalog, and exports the CSV files they import.'
 package: Commerce (contrib)
 core_version_requirement: ^11.4
-php: 8.3
+php: 8.4
 dependencies:
   - advancedqueue:advancedqueue
   - commerce_domains:commerce_domains

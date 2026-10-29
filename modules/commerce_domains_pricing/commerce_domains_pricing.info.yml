@@ -3,7 +3,7 @@ type: module
 description: 'Prices domains by rules on extension, length and Atom premium, rounds prices, and keeps prices in other currencies on a price list and price fields.'
 package: Commerce (contrib)
 core_version_requirement: ^11.4
-php: 8.3
+php: 8.4
 configure: commerce_domains_pricing.settings
 dependencies:
   - commerce_domains:commerce_domains

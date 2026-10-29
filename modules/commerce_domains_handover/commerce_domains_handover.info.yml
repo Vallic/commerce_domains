@@ -3,7 +3,7 @@ type: module
 description: 'Hands sold domains over to their buyers: unlocks them, emails the auth code or records the push, and keeps a record of each handover on its order.'
 package: Commerce (contrib)
 core_version_requirement: ^11.4
-php: 8.3
+php: 8.4
 dependencies:
   - commerce_domains:commerce_domains_checkout
   - state_machine:state_machine

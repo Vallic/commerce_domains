@@ -3,7 +3,7 @@ type: module
 description: 'Runs a domain portfolio day to day: costs and profit, renewals, notifications to the owner and a dashboard.'
 package: Commerce (contrib)
 core_version_requirement: ^11.4
-php: 8.3
+php: 8.4
 configure: commerce_domains_owner.settings
 dependencies:
   - commerce_domains:commerce_domains

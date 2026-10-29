@@ -3,7 +3,7 @@ type: module
 description: 'Adds domains to the catalog from a pasted list, a CSV file or a registrar account, with default prices and sale terms.'
 package: Commerce (contrib)
 core_version_requirement: ^11.4
-php: 8.3
+php: 8.4
 dependencies:
   - commerce:commerce_product
   - commerce_domains:commerce_domains

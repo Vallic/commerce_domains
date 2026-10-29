@@ -125,7 +125,7 @@ other currencies.
 
 ## Requirements
 
-- Drupal 11.4 or later, PHP 8.3 or later
+- Drupal 11.4 or later, PHP 8.4 or later
 - Commerce 3 (Commerce Product)
 - [Advanced Queue](https://www.drupal.org/project/advancedqueue), for
   Commerce Domains Marketplace
