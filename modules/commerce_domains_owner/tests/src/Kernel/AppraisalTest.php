@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains_owner\Kernel;
 use Drupal\commerce_domains_owner\Appraiser;
 use Drupal\commerce_domains_owner\Drush\Commands\AppraisalCommands;
 use Drupal\commerce_domains_owner\Hook\ProductHooks;
+use Drupal\commerce_product\Entity\Product;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Tests\commerce_domains\Kernel\DrushCommandTrait;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -46,7 +47,9 @@ class AppraisalTest extends OwnerKernelTestBase {
   protected function reload(ProductInterface $product): ProductInterface {
     $storage = $this->entityTypeManager->getStorage('commerce_product');
     $storage->resetCache([$product->id()]);
-    return $storage->load($product->id());
+    $reloaded = Product::load($product->id());
+    $this->assertNotNull($reloaded);
+    return $reloaded;
   }
 
   /**
@@ -63,7 +66,7 @@ class AppraisalTest extends OwnerKernelTestBase {
     $this->config('commerce_domains_owner.settings')->set('appraisals_per_day', 1)->save();
     $this->assertSame(1, $this->appraiser->cron());
     $abc = $this->reload($abc);
-    $this->assertSame('300', $abc->get('domain_appraisal')->number);
+    $this->assertEquals(300, $abc->get('domain_appraisal')->number);
     $this->assertSame('USD', $abc->get('domain_appraisal')->currency_code);
     $this->assertEquals(7.5, $abc->get('domain_appraisal_score')->value);
     $this->assertSame(3, (int) $abc->get('domain_tld_count')->value);
@@ -76,7 +79,7 @@ class AppraisalTest extends OwnerKernelTestBase {
     $this->config('commerce_domains_owner.settings')->set('appraisals_per_day', 50)->save();
     $this->assertSame(1, $this->appraiser->cron());
     $this->assertSame(['abc.com', 'longer.com'], $state->get('commerce_domains_test.appraised'));
-    $this->assertSame('600', $this->reload($longer)->get('domain_appraisal')->number);
+    $this->assertEquals(600, $this->reload($longer)->get('domain_appraisal')->number);
     $this->assertSame([], $this->appraiser->due(10), 'Fresh appraisals stand.');
 
     // Old ones are redone, oldest first; the service's limit ends the day.

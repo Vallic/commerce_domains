@@ -47,6 +47,7 @@ final class AppraisalCommands extends DrushCommands {
     $storage = $this->entityTypeManager->getStorage('commerce_product');
     if ($options['domains']) {
       $names = array_map(DomainName::normalize(...), StringUtils::csvToArray($options['domains']));
+      /** @var \Drupal\commerce_product\Entity\ProductInterface[] $products */
       $products = $storage->loadByProperties(['domain' => $names]);
       $found = array_map(fn($product) => (string) $product->get('domain')->value, $products);
       foreach (array_diff($names, $found) as $name) {
@@ -56,6 +57,7 @@ final class AppraisalCommands extends DrushCommands {
     else {
       $products = $storage->loadMultiple($this->appraiser->due(max(1, (int) $options['limit'])));
     }
+    /** @var \Drupal\commerce_product\Entity\ProductInterface[] $products */
 
     $rows = [];
     $status = self::EXIT_SUCCESS;

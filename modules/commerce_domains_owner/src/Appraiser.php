@@ -151,8 +151,9 @@ class Appraiser {
       return 0;
     }
     $done = 0;
-    $storage = $this->entityTypeManager->getStorage('commerce_product');
-    foreach ($storage->loadMultiple($this->due($count)) as $product) {
+    /** @var \Drupal\commerce_product\Entity\ProductInterface[] $products */
+    $products = $this->entityTypeManager->getStorage('commerce_product')->loadMultiple($this->due($count));
+    foreach ($products as $product) {
       try {
         $this->appraise($product, $provider);
         $done++;
