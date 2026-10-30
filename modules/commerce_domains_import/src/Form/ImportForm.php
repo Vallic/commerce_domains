@@ -131,7 +131,7 @@ final class ImportForm extends FormBase {
     $form['csv'] = [
       '#type' => 'file',
       '#title' => $this->t('CSV file'),
-      '#description' => $this->t('A header row names the columns, in any order and case: <em>domain</em> (or <em>domain name</em>; required), <em>price</em> (or <em>selling price</em>), <em>currency</em>, <em>buy_now</em> and <em>offers</em> (yes or no), <em>minimum_offer</em>, <em>description</em>, <em>registrar</em> (a domain provider, by name or ID), <em>expires</em> (a date), <em>atom_premium</em> and <em>internal</em> (yes or no). Other columns are left to the site.'),
+      '#description' => $this->t('A header row names the columns, in any order and case: <em>domain</em> (or <em>domain name</em>; required), <em>price</em> (or <em>selling price</em>), <em>currency</em>, <em>buy_now</em>, <em>offers</em> and <em>marketplaces</em> (yes or no), <em>not_listed_on</em> (marketplaces by name or ID, separated by commas), <em>minimum_offer</em>, <em>floor_price</em>, <em>lease_months</em> (0 for none), <em>description</em>, <em>registrar</em> (a domain provider, by name or ID), <em>expires</em> (a date), <em>atom_premium</em> and <em>internal</em> (yes or no). Other columns are left to the site.'),
       '#attributes' => ['accept' => '.csv,.txt,text/csv'],
       '#states' => ['visible' => [':input[name="source"]' => ['value' => ImportOptions::SOURCE_CSV]]],
     ];
@@ -218,6 +218,12 @@ final class ImportForm extends FormBase {
       '#type' => 'checkbox',
       '#title' => $this->t('Accept offers'),
       '#default_value' => $choices['offers'] ?? TRUE,
+    ];
+    $form['defaults']['marketplaces'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('List on marketplaces'),
+      '#description' => $this->t('Without it, new domains are sold on this site only.'),
+      '#default_value' => $choices['marketplaces'] ?? TRUE,
     ];
     $form['defaults']['published'] = [
       '#type' => 'checkbox',
@@ -438,6 +444,7 @@ final class ImportForm extends FormBase {
       'currency' => $options->currency,
       'buy_now' => $options->buyNow,
       'offers' => $options->offers,
+      'marketplaces' => $options->marketplaces,
       'published' => $options->published,
       'internal' => $options->internal,
       'existing' => $options->existing,
@@ -469,6 +476,7 @@ final class ImportForm extends FormBase {
       price: $number === '' ? NULL : $number,
       buyNow: (bool) $form_state->getValue('buy_now'),
       offers: (bool) $form_state->getValue('offers'),
+      marketplaces: (bool) $form_state->getValue('marketplaces'),
       published: (bool) $form_state->getValue('published'),
       internal: (bool) $form_state->getValue('internal'),
       existing: (string) $form_state->getValue('existing'),

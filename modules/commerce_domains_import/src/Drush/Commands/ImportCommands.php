@@ -52,6 +52,7 @@ final class ImportCommands extends DrushCommands {
   #[CLI\Option(name: 'currency', description: "The currency of prices that don't name one. Defaults to the store's.")]
   #[CLI\Option(name: 'buy-now', description: 'New domains sell at their price straight away; --no-buy-now makes them take offers only.')]
   #[CLI\Option(name: 'offers', description: 'New domains accept offers; --no-offers turns that off.')]
+  #[CLI\Option(name: 'marketplaces', description: 'New domains are listed on marketplaces; --no-marketplaces sells them on this site only.')]
   #[CLI\Option(name: 'unpublished', description: 'Create new domains unpublished.')]
   #[CLI\Option(name: 'internal', description: 'Create new domains internal: kept for your own use, never for sale.')]
   #[CLI\Option(name: 'update', description: 'Update the price and sale terms of domains already in the catalog from their row, instead of skipping them.')]
@@ -72,6 +73,7 @@ final class ImportCommands extends DrushCommands {
       'currency' => self::REQ,
       'buy-now' => TRUE,
       'offers' => TRUE,
+      'marketplaces' => TRUE,
       'unpublished' => FALSE,
       'internal' => FALSE,
       'update' => FALSE,
@@ -149,6 +151,7 @@ final class ImportCommands extends DrushCommands {
       price: $options['price'] === NULL || $options['price'] === '' ? NULL : (string) $options['price'],
       buyNow: (bool) $options['buy-now'],
       offers: (bool) $options['offers'],
+      marketplaces: (bool) ($options['marketplaces'] ?? TRUE),
       published: !$options['unpublished'],
       internal: (bool) ($options['internal'] ?? FALSE),
       existing: $options['update'] ? ImportOptions::UPDATE : ImportOptions::SKIP,

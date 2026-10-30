@@ -333,7 +333,9 @@ Import*, for people with *Import domains*, in one of three ways:
   `example.com 1500` or `example.net, 2500 EUR`.
 - **Upload a CSV file** with a header row. Columns go by their header, in any
   order and case: `domain` (or *domain name*; required), `price` (or *selling
-  price*), `currency`, `buy_now` and `offers` (yes or no), `minimum_offer`,
+  price*), `currency`, `buy_now`, `offers` and `marketplaces` (yes or no),
+  `not_listed_on` (marketplaces by ID or name, separated by commas),
+  `minimum_offer`, `floor_price`, `lease_months` (0 for none),
   `description`, `registrar` (a provider's ID or name), `expires` (a date),
   and `atom_premium` and `internal` (yes or no).
 - **From a registrar account**: *Read the account* lists the domains a
@@ -342,11 +344,11 @@ Import*, for people with *Import domains*, in one of three ways:
   registrar with the expiry date the account gives, and marked verified. The
   provider's *Registrations* tab links here when there are such domains.
 
-New domains get the chosen product type, store, sale terms (buy now, offers),
-published status and whether they are internal where their row says
-nothing. A row without a price
-gets the price of the first matching pricing rule (Commerce Domains Pricing),
-else the import's default price. Domains already in the catalog are skipped,
+New domains get the chosen product type, store, sale terms (buy now, offers,
+listed on marketplaces), published status and whether they are internal
+where their row says nothing. A row without a price gets the price of the
+first matching pricing rule (Commerce Domains Pricing), else the import's
+default price. Domains already in the catalog are skipped,
 or updated: the row's price and sale terms replace theirs, and whatever the
 row leaves out stays as it is, as does whether the domain is published. A
 price without a currency stays in the domain's.
@@ -377,6 +379,8 @@ drush cdi domains.csv --update
 drush cdi --from-registrar=dynadot --unpublished
 # Import domains kept for your own use: internal, never for sale.
 drush cdi own.txt --internal
+# Import domains sold on this site only, not on marketplaces.
+drush cdi site-only.txt --no-marketplaces
 ```
 
 Sites map their own columns by subscribing to `DomainImportEvent`. It holds

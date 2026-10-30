@@ -29,6 +29,10 @@ final class ImportParser {
     'expires' => ['expires', 'expiry', 'expiry_date', 'expiration', 'expiration_date', 'expires_on', 'expire_date'],
     'atom_premium' => ['atom_premium', 'premium'],
     'internal' => ['internal', 'not_for_sale'],
+    'marketplaces' => ['marketplaces', 'list_on_marketplaces', 'marketplace'],
+    'not_listed_on' => ['not_listed_on', 'not_on'],
+    'floor_price' => ['floor_price', 'floor'],
+    'lease_months' => ['lease_months', 'lease', 'lease_to_own'],
   ];
 
   /**
@@ -186,6 +190,30 @@ final class ImportParser {
       default => throw new \InvalidArgumentException((string) new TranslatableMarkup('Not a price: @value.', ['@value' => $value])),
     };
     return [$number, $currency];
+  }
+
+  /**
+   * Reads a number of months, 0 or more.
+   *
+   * @throws \InvalidArgumentException
+   *   When the value is not a whole number.
+   */
+  public static function months(string $value): int {
+    $value = trim($value);
+    if (!preg_match('/^\d{1,3}$/', $value)) {
+      throw new \InvalidArgumentException((string) new TranslatableMarkup('Not a number of months: @value.', ['@value' => $value]));
+    }
+    return (int) $value;
+  }
+
+  /**
+   * Reads a list, separated by commas, semicolons or vertical bars.
+   *
+   * @return string[]
+   *   The items, trimmed, without empty ones.
+   */
+  public static function items(string $value): array {
+    return array_values(array_filter(array_map('trim', preg_split('/[,;|]/', $value) ?: []), fn($item) => $item !== ''));
   }
 
   /**

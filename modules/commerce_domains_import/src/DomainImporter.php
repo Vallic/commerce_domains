@@ -9,6 +9,7 @@ use Drupal\commerce_domains\Catalog;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\DomainNameParser;
 use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\RegistrarPlan;
 use Drupal\commerce_domains\RegistrarSync;
 use Drupal\commerce_domains_import\Event\DomainImportEvent;
@@ -56,6 +57,13 @@ class DomainImporter {
    * @var string[]|null
    */
   protected ?array $currencies = NULL;
+
+  /**
+   * Marketplace provider IDs by lowercase ID and name, once read.
+   *
+   * @var array<string, string>|null
+   */
+  protected ?array $marketplaces = NULL;
 
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
@@ -323,6 +331,10 @@ class DomainImporter {
     $internal = self::read($row, 'internal', ImportParser::flag(...));
     $buy_now = self::read($row, 'buy_now', ImportParser::flag(...));
     $offers = self::read($row, 'offers', ImportParser::flag(...));
+    $marketplaces = self::read($row, 'marketplaces', ImportParser::flag(...));
+    $not_listed_on = self::read($row, 'not_listed_on', $this->marketplaceIds(...));
+    $floor = self::read($row, 'floor_price', ImportParser::amount(...));
+    $lease = self::read($row, 'lease_months', ImportParser::months(...));
     $amount = self::read($row, 'price', ImportParser::amount(...));
     $minimum = self::read($row, 'minimum_offer', ImportParser::amount(...));
     $expires = self::read($row, 'expires', ImportParser::date(...));
@@ -353,8 +365,20 @@ class DomainImporter {
     if ($variation->hasField('sale_offers') && ($offers !== NULL || $is_new)) {
       $variation->set('sale_offers', $offers ?? $options->offers);
     }
+    if ($variation->hasField('sale_marketplaces') && ($marketplaces !== NULL || $is_new)) {
+      $variation->set('sale_marketplaces', $marketplaces ?? $options->marketplaces);
+    }
+    if ($not_listed_on !== NULL && $variation->hasField('sale_not_listed_on')) {
+      $variation->set('sale_not_listed_on', $not_listed_on);
+    }
     if ($minimum !== NULL && $variation->hasField('sale_minimum_offer')) {
       $variation->set('sale_minimum_offer', $this->price($minimum, $variation->getPrice()?->getCurrencyCode() ?? $fallback));
+    }
+    if ($floor !== NULL && $variation->hasField('sale_floor_price')) {
+      $variation->set('sale_floor_price', $this->price($floor, $variation->getPrice()?->getCurrencyCode() ?? $fallback));
+    }
+    if ($lease !== NULL && $variation->hasField('sale_lease_months')) {
+      $variation->set('sale_lease_months', $lease);
     }
 
     if (($description = $row->value('description')) !== NULL && $product->hasField('body')) {
@@ -562,6 +586,37 @@ class DomainImporter {
    */
   protected static function hasRegistrar(ProductInterface $product): bool {
     return !$product->get('domain_registrar')->isEmpty();
+  }
+
+  /**
+   * Reads a list of marketplaces, by ID or name.
+   *
+   * @return string[]
+   *   Provider IDs.
+   *
+   * @throws \InvalidArgumentException
+   *   When one isn't a marketplace provider.
+   */
+  protected function marketplaceIds(string $value): array {
+    if ($this->marketplaces === NULL) {
+      $this->marketplaces = [];
+      /** @var \Drupal\commerce_domains\Entity\ProviderInterface $provider */
+      foreach ($this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple() as $id => $provider) {
+        if ($provider->hasCapability(MarketplaceInterface::class)) {
+          $this->marketplaces[mb_strtolower((string) $id)] = (string) $id;
+          $this->marketplaces[mb_strtolower((string) $provider->label())] = (string) $id;
+        }
+      }
+    }
+    $ids = [];
+    foreach (ImportParser::items($value) as $item) {
+      $id = $this->marketplaces[mb_strtolower($item)] ?? NULL;
+      if ($id === NULL) {
+        throw new \InvalidArgumentException((string) new TranslatableMarkup('No marketplace @name.', ['@name' => $item]));
+      }
+      $ids[$id] = $id;
+    }
+    return array_values($ids);
   }
 
   /**

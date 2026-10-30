@@ -34,6 +34,8 @@ final class ImportOptions {
     // The sale terms of new domains whose row doesn't give them.
     public readonly bool $buyNow = TRUE,
     public readonly bool $offers = TRUE,
+    // Whether new domains whose row doesn't say are listed on marketplaces.
+    public readonly bool $marketplaces = TRUE,
     // Whether new domains are published.
     public readonly bool $published = TRUE,
     // Whether new domains are internal: kept for the owner's use, never for

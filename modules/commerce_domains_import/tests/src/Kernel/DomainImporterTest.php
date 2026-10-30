@@ -152,6 +152,39 @@ class DomainImporterTest extends ImportKernelTestBase {
   }
 
   /**
+   * Tests the sale terms a CSV file can give: marketplaces, floor and lease.
+   */
+  public function testSaleTermsColumns(): void {
+    Provider::create(['id' => 'afternic', 'label' => 'Afternic', 'plugin' => 'afternic'])->save();
+    Provider::create(['id' => 'atom', 'label' => 'Atom', 'plugin' => 'atom'])->save();
+    $csv = "domain,price,marketplaces,not listed on,floor price,lease months\n"
+      . "site.com,1000,no,,,\n"
+      . "some.com,1000,,\"afternic; ATOM\",800,0\n"
+      . "plain.com,1000,,,,\n"
+      . "bad.com,1000,,Sedo,,\n"
+      . "long.com,1000,,,,twelve\n";
+    $report = $this->import(ImportParser::parseCsv($csv));
+    $this->assertSame(['site.com', 'some.com', 'plain.com'], $report->created);
+    $this->assertSame(['5: bad.com: No marketplace Sedo.', '6: long.com: Not a number of months: twelve.'], self::errors($report));
+
+    $this->assertFalse((bool) $this->variation('site.com')->get('sale_marketplaces')->value);
+    $some = $this->variation('some.com');
+    $this->assertTrue((bool) $some->get('sale_marketplaces')->value);
+    $this->assertSame(['afternic', 'atom'], array_column($some->get('sale_not_listed_on')->getValue(), 'target_id'));
+    /** @var \Drupal\commerce_price\Plugin\Field\FieldType\PriceItem $floor */
+    $floor = $some->get('sale_floor_price')->first();
+    $this->assertEquals(new Price('800', 'USD'), $floor->toPrice());
+    $this->assertSame('0', (string) $some->get('sale_lease_months')->value, 'No lease to own.');
+    $plain = $this->variation('plain.com');
+    $this->assertTrue((bool) $plain->get('sale_marketplaces')->value, 'Listed by default.');
+    $this->assertTrue($plain->get('sale_lease_months')->isEmpty(), 'Worked out from the price.');
+
+    // The import can keep all its new domains off marketplaces.
+    $this->import(ImportParser::parseList("seven.com 100\n"), ['marketplaces' => FALSE]);
+    $this->assertFalse((bool) $this->variation('seven.com')->get('sale_marketplaces')->value);
+  }
+
+  /**
    * Tests importing the domains a registrar account holds.
    */
   public function testRegistrarAccount(): void {
