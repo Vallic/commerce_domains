@@ -3,7 +3,7 @@ commerce_domains_owner.dashboard:
   title: 'Dashboard'
   route_name: commerce_domains_owner.dashboard
   base_route: commerce_domains_owner.dashboard
-  weight: -5
+  weight: -20
 commerce_domains_owner.expiring:
   title: 'Expiring soon'
   route_name: commerce_domains_owner.expiring

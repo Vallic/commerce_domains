@@ -21,6 +21,15 @@ display:
     display_options:
       title: 'Marketplace listings'
       fields:
+        product_id:
+          id: product_id
+          table: commerce_domains_listing
+          field: product_id
+          plugin_id: numeric
+          label: Product
+          exclude: true
+          separator: ''
+          hide_empty: true
         domain:
           id: domain
           table: commerce_domains_listing
@@ -30,15 +39,7 @@ display:
           alter:
             alter_text: false
             make_link: true
-            path: 'product/{{ product_id }}/edit'
-        product_id:
-          id: product_id
-          table: commerce_domains_listing
-          field: product_id
-          plugin_id: numeric
-          label: Product
-          exclude: true
-          separator: ''
+            path: '{% if product_id %}/product/{{ product_id }}/edit{% endif %}'
         provider:
           id: provider
           table: commerce_domains_listing
@@ -156,8 +157,8 @@ display:
         type: table
         options:
           columns:
-            domain: domain
             product_id: product_id
+            domain: domain
             provider: provider
             status: status
             note: note

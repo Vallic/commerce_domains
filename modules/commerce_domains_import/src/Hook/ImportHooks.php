@@ -39,6 +39,7 @@ class ImportHooks {
     if (isset($links[self::OVERVIEW_LINK], $links['commerce_domains_import.import'])) {
       $links['commerce_domains_import.import']['parent'] = self::OVERVIEW_LINK;
       $links['commerce_domains_import.import']['title'] = new TranslatableMarkup('Import');
+      $links['commerce_domains_import.import']['weight'] = 40;
     }
   }
 

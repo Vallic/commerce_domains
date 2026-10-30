@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains_owner\Kernel;
 
 use Drupal\commerce_domains\Drush\Commands\RegistrarCommands;
+use Drupal\commerce_domains\Form\DomainRegistrarForm;
 use Drupal\commerce_domains\Form\RegistrationsForm;
 use Drupal\commerce_domains\RegistrarPlan;
 use Drupal\commerce_domains\RegistrarSync;
@@ -85,10 +86,12 @@ class CostsTest extends OwnerKernelTestBase {
     $this->setUpCurrentUser([], [], TRUE);
     $product = $this->createDomain('Grouped.com');
     $built = $this->container->get('entity.form_builder')->getForm($product, 'edit');
+    $this->assertSame('domain_details', $built['domain_expires']['#group']);
+    $this->assertSame('domain_details', $built['domain_registrar']['#group']);
     $this->assertSame('domain_costs', $built['domain_purchase_price']['#group']);
     $this->assertSame('domain_sale', $built['domain_sold']['#group']);
     $this->assertSame('domain_owner', $built['domain_sale']['#group'], 'Costs and sale are tabs.');
-    $this->assertSame('edit-domain-costs', $built['domain_owner']['#default_tab'], 'The sale tab comes first once the domain sells.');
+    $this->assertSame('edit-domain-details', $built['domain_owner']['#default_tab'], 'The sale tab comes first once the domain sells.');
 
     // Only the owner sees what domains cost, and only the manager edits it.
     $buyer = $this->createUser(['view commerce_product']);
@@ -287,6 +290,21 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertFalse((bool) $this->reload($lapses)->get('domain_auto_renew')->value);
     $this->assertTrue($this->reload($silent)->get('domain_auto_renew')->isEmpty());
     $this->assertTrue($sync->plan($provider)->isEmpty());
+  }
+
+  /**
+   * Tests that a sold domain is neither managed nor missed at the registrar.
+   */
+  public function testSoldLeavesRegistrar(): void {
+    $provider = $this->createProvider('reg', 'test_managed_registrar');
+    $this->container->get('state')->set('commerce_domains_test.managed', []);
+    $values = ['domain_registrar' => 'reg', 'domain_expires' => 1_820_000_000];
+    $kept = $this->createDomain('Kept.com', 1000, $values);
+    $sold = $this->createDomain('Sold.com', 1000, $values + ['domain_sold' => 1_700_000_000]);
+
+    $this->assertSame(['kept.com'], $this->container->get(RegistrarSync::class)->plan($provider)->missing, 'The buyer took the sold one.');
+    $this->assertTrue(DomainRegistrarForm::access($kept)->isAllowed());
+    $this->assertFalse(DomainRegistrarForm::access($sold)->isAllowed(), 'The sold one has no Registrar tab.');
   }
 
   /**

@@ -13,6 +13,7 @@ use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\commerce_product\Event\ProductEvent;
 use Drupal\commerce_product\Event\ProductEvents;
 use Drupal\commerce_product\Event\ProductVariationEvent;
+use Drupal\Core\Entity\FieldableEntityInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
@@ -20,8 +21,38 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  *
  * A domain put back on sale after a marketplace sold it ends that sale's
  * record: the sale fell through, so the syncs list the domain again.
+ *
+ * An update only schedules a sync when it changes something a listing is
+ * built from, so editing a domain's costs or notes queues nothing.
  */
 class CatalogSubscriber implements EventSubscriberInterface {
+
+  // Product fields that listings, or whether the domain is for sale, read.
+  public const PRODUCT_FIELDS = [
+    'domain',
+    'title',
+    'status',
+    'variations',
+    'domain_internal',
+    'domain_registrar',
+    'domain_verified',
+    'atom_premium',
+    'body',
+  ];
+
+  // Variation fields that listings, or whether the domain is for sale, read.
+  public const VARIATION_FIELDS = [
+    'price',
+    'status',
+    'in_stock',
+    'sale_buy_now',
+    'sale_offers',
+    'sale_minimum_offer',
+    'sale_floor_price',
+    'sale_lease_months',
+    'sale_marketplaces',
+    'sale_not_listed_on',
+  ];
 
   public function __construct(
     protected SyncScheduler $scheduler,
@@ -52,7 +83,7 @@ class CatalogSubscriber implements EventSubscriberInterface {
    */
   public function onProductSave(ProductEvent $event): void {
     $product = $event->getProduct();
-    if (!$name = $this->domain($product)) {
+    if (!($name = $this->domain($product)) || !$this->changesListing($product, self::PRODUCT_FIELDS)) {
       return;
     }
     $this->scheduler->changed($name);
@@ -86,6 +117,9 @@ class CatalogSubscriber implements EventSubscriberInterface {
   public function onVariationChange(ProductVariationEvent $event, string $event_name): void {
     $variation = $event->getProductVariation();
     if (($product = $variation->getProduct()) && ($name = $this->domain($product))) {
+      if ($event_name === ProductEvents::PRODUCT_VARIATION_UPDATE && !$this->changesListing($variation, self::VARIATION_FIELDS)) {
+        return;
+      }
       $this->scheduler->changed($name);
       // Back in stock, or published again. Taking a domain off sale saves
       // its variations too, but they aren't for sale then.
@@ -106,6 +140,29 @@ class CatalogSubscriber implements EventSubscriberInterface {
     if ($variation instanceof ProductVariationInterface && ($product = $variation->getProduct()) && ($name = $this->domain($product))) {
       $this->scheduler->changed($name);
     }
+  }
+
+  /**
+   * Whether a saved entity differs from its original in any of the fields.
+   *
+   * A new entity, or one saved without its original, always does.
+   *
+   * @param \Drupal\Core\Entity\FieldableEntityInterface $entity
+   *   The product or variation just saved.
+   * @param string[] $fields
+   *   The fields to compare; those the entity lacks are skipped.
+   */
+  protected function changesListing(FieldableEntityInterface $entity, array $fields): bool {
+    $original = $entity->getOriginal();
+    if (!$original instanceof FieldableEntityInterface) {
+      return TRUE;
+    }
+    foreach ($fields as $field) {
+      if ($entity->hasField($field) && !$entity->get($field)->equals($original->get($field))) {
+        return TRUE;
+      }
+    }
+    return FALSE;
   }
 
   /**

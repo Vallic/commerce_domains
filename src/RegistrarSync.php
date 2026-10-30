@@ -87,7 +87,10 @@ class RegistrarSync {
           continue;
         }
         if (!$registration) {
-          $plan->missing[$name] = $name;
+          // A sold domain leaves the account once the buyer takes it.
+          if (!Availability::isSold($product)) {
+            $plan->missing[$name] = $name;
+          }
           continue;
         }
         $changed = FALSE;
@@ -182,17 +185,7 @@ class RegistrarSync {
       $registration = $plan->registrations[$name];
       /** @var \Drupal\commerce_product\Entity\ProductInterface $product */
       foreach ($storage->loadMultiple($plan->products[$name] ?? []) as $product) {
-        $product->set('domain_registrar', $provider->id());
-        if ($registration->expires !== NULL) {
-          $product->set('domain_expires', $registration->expires);
-        }
-        if ($registration->autoRenew !== NULL && $product->hasField('domain_auto_renew')) {
-          $product->set('domain_auto_renew', $registration->autoRenew);
-        }
-        // Registration details aren't an edit: keep the changed time.
-        $product->setSyncing(TRUE);
-        $product->save();
-        $updated++;
+        $updated += (int) $this->applyRegistration($product, $provider, $registration);
       }
     }
 
@@ -203,6 +196,43 @@ class RegistrarSync {
       ]);
     }
     return $updated;
+  }
+
+  /**
+   * Writes one registration's details to its product, when they differ.
+   *
+   * @param \Drupal\commerce_product\Entity\ProductInterface $product
+   *   The domain's product.
+   * @param \Drupal\commerce_domains\Entity\ProviderInterface $provider
+   *   The registrar whose account holds the domain.
+   * @param \Drupal\commerce_domains\Registration $registration
+   *   What the account says about it.
+   *
+   * @return bool
+   *   Whether the product was saved.
+   */
+  public function applyRegistration(ProductInterface $product, ProviderInterface $provider, Registration $registration): bool {
+    $values = ['domain_registrar' => $provider->id()];
+    if ($registration->expires !== NULL) {
+      $values['domain_expires'] = $registration->expires;
+    }
+    if ($registration->autoRenew !== NULL && $product->hasField('domain_auto_renew')) {
+      $values['domain_auto_renew'] = (int) $registration->autoRenew;
+    }
+    $changed = FALSE;
+    foreach ($values as $field => $value) {
+      if ((string) $product->get($field)->getString() !== (string) $value) {
+        $product->set($field, $value);
+        $changed = TRUE;
+      }
+    }
+    if (!$changed) {
+      return FALSE;
+    }
+    // Registration details aren't an edit: keep the changed time.
+    $product->setSyncing(TRUE);
+    $product->save();
+    return TRUE;
   }
 
   /**

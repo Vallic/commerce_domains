@@ -21,8 +21,10 @@ class ProductHooks {
 
   use StringTranslationTrait;
 
-  // The fields of the costs trait, by the form group they go in.
+  // The domain's own fields and those of the costs trait, by the form group
+  // they go in.
   protected const GROUPS = [
+    'domain_details' => ['domain_expires', 'domain_registrar', 'domain_internal', 'atom_premium'],
     'domain_costs' => [
       'domain_purchase_price',
       'domain_purchase_date',
@@ -53,7 +55,14 @@ class ProductHooks {
     $form['domain_owner'] = [
       '#type' => 'vertical_tabs',
       '#weight' => 30,
-      '#default_tab' => $sold ? 'edit-domain-sale' : 'edit-domain-costs',
+      '#default_tab' => $sold ? 'edit-domain-sale' : 'edit-domain-details',
+    ];
+    $form['domain_details'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Domain details'),
+      '#description' => $this->t('Where the domain is registered and until when, and whether it is kept for your own use.'),
+      '#group' => 'domain_owner',
+      '#weight' => 29,
     ];
     $form['domain_costs'] = [
       '#type' => 'details',
@@ -79,7 +88,7 @@ class ProductHooks {
         }
       }
     }
-    $form['domain_owner']['#access'] = $form['domain_costs']['#access'] || $form['domain_sale']['#access'];
+    $form['domain_owner']['#access'] = $form['domain_details']['#access'] || $form['domain_costs']['#access'] || $form['domain_sale']['#access'];
   }
 
   /**

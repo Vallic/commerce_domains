@@ -1,0 +1,4 @@
+listings:
+  css:
+    component:
+      css/listings.css: {}

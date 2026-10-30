@@ -35,8 +35,11 @@ final class ListingSummary extends FieldPluginBase {
 
   /**
    * {@inheritdoc}
+   *
+   * One item per setting: yes-or-no settings as a tick or a cross before
+   * their name, long text folded away.
    */
-  public function render(ResultRow $values) {
+  public function render(ResultRow $values): array|string {
     $listing = json_decode((string) $this->getValue($values), TRUE);
     if (!is_array($listing) || !$listing) {
       return '';
@@ -45,11 +48,74 @@ final class ListingSummary extends FieldPluginBase {
     /** @var \Drupal\commerce_domains\Entity\ProviderInterface|null $provider */
     $provider = $this->entityTypeManager->getStorage('commerce_domains_provider')->load($provider_id);
     $plugin = $provider?->getPlugin();
-    $describe = $plugin instanceof MarketplaceInterface
-      ? $plugin->describeValue(...)
-      : fn(string $field, mixed $value) => is_scalar($value) ? var_export($value, TRUE) : json_encode($value);
-    $parts = array_map(fn(string $field, mixed $value) => "$field " . $describe($field, $value), array_keys($listing), $listing);
-    return $this->sanitizeValue(implode(', ', $parts));
+
+    $items = [];
+    foreach ($listing as $field => $value) {
+      $field = (string) $field;
+      $label = self::label($field);
+      if (is_bool($value)) {
+        $items[] = [
+          '#type' => 'html_tag',
+          '#tag' => 'li',
+          '#attributes' => ['class' => ['cd-listing-summary__flag', $value ? 'cd-listing-summary__flag--on' : 'cd-listing-summary__flag--off']],
+          'icon' => [
+            '#type' => 'html_tag',
+            '#tag' => 'span',
+            '#value' => $value ? '✓' : '✗',
+            '#attributes' => ['class' => ['cd-listing-summary__icon'], 'aria-hidden' => 'true'],
+          ],
+          'label' => ['#plain_text' => $label],
+          'state' => [
+            '#type' => 'html_tag',
+            '#tag' => 'span',
+            '#value' => $value ? $this->t('(yes)') : $this->t('(no)'),
+            '#attributes' => ['class' => ['visually-hidden']],
+          ],
+        ];
+        continue;
+      }
+      $described = $plugin instanceof MarketplaceInterface ? $plugin->describeValue($field, $value) : NULL;
+      // A plugin that has nothing to add quotes the value back.
+      if (is_string($value) && ($described === NULL || $described === var_export($value, TRUE))) {
+        $described = $value;
+      }
+      $described ??= is_scalar($value) ? (string) $value : (string) json_encode($value);
+      if (is_string($value) && mb_strlen($value) > 60) {
+        $items[] = [
+          '#type' => 'html_tag',
+          '#tag' => 'li',
+          '#attributes' => ['class' => ['cd-listing-summary__text']],
+          'details' => [
+            '#type' => 'html_tag',
+            '#tag' => 'details',
+            'summary' => ['#type' => 'html_tag', '#tag' => 'summary', '#value' => $this->t('@label (@count characters)', ['@label' => $label, '@count' => mb_strlen($value)])],
+            'text' => ['#type' => 'html_tag', '#tag' => 'p', 'value' => ['#plain_text' => $value]],
+          ],
+        ];
+        continue;
+      }
+      $items[] = [
+        '#type' => 'html_tag',
+        '#tag' => 'li',
+        'label' => ['#type' => 'html_tag', '#tag' => 'span', '#attributes' => ['class' => ['cd-listing-summary__label']], 'value' => ['#plain_text' => $label]],
+        'value' => ['#type' => 'html_tag', '#tag' => 'span', '#attributes' => ['class' => ['cd-listing-summary__value']], 'value' => ['#plain_text' => $described]],
+      ];
+    }
+    return [
+      '#type' => 'html_tag',
+      '#tag' => 'ul',
+      '#attributes' => ['class' => ['cd-listing-summary']],
+      '#attached' => ['library' => ['commerce_domains_marketplace/listings']],
+      'items' => $items,
+    ];
+  }
+
+  /**
+   * Turns a marketplace's field name into words, e.g. "Floor price".
+   */
+  protected static function label(string $field): string {
+    $words = strtolower(trim((string) preg_replace(['/([a-z0-9])([A-Z])/', '/[_-]+/'], ['$1 $2', ' '], $field)));
+    return ucfirst($words);
   }
 
 }

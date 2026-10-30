@@ -88,6 +88,28 @@ class AutomaticSyncTest extends MarketplaceKernelTestBase {
   }
 
   /**
+   * Tests that saves leaving the listing as it was queue nothing.
+   */
+  public function testUnchangedListing(): void {
+    $trait_manager = $this->container->get('plugin.manager.commerce_entity_trait');
+    $trait_manager->installTrait($trait_manager->createInstance('commerce_domains_sale_terms'), 'commerce_product_variation', 'default');
+    $product = $this->createDomain('Same.com');
+    $this->queued();
+    $variation = $product->getVariations()[0];
+
+    $product->set('domain_expires', 1900000000)->save();
+    $variation->setSku('same-com-2')->save();
+    $product->save();
+    $this->assertSame([], $this->queued(), 'Fields listings do not read change nothing.');
+
+    $variation->set('sale_floor_price', ['number' => '500', 'currency_code' => 'USD'])->save();
+    $this->assertSame([['provider' => 'auto', 'names' => ['same.com'], 'removed' => []]], $this->queued());
+
+    $product->set('domain_internal', TRUE)->save();
+    $this->assertSame([['provider' => 'auto', 'names' => ['same.com'], 'removed' => []]], $this->queued());
+  }
+
+  /**
    * Tests the job pushing changes, and retrying on outages.
    */
   public function testJob(): void {

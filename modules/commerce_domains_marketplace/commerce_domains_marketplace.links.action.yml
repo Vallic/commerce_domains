@@ -1,0 +1,7 @@
+commerce_domains_marketplace.sync:
+  title: 'Sync marketplaces'
+  route_name: commerce_domains_marketplace.sync
+  appears_on:
+    - view.commerce_domains_overview.page_1
+    - view.commerce_domains_listings.page_1
+    - entity.commerce_domains_provider.collection

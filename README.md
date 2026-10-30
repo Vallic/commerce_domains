@@ -209,10 +209,18 @@ A dry run works while the provider is disabled. Once the output looks right,
 enable the provider and, if wanted, *Push catalog changes automatically*:
 changed domains are then queued in the *Marketplace sync* queue of
 [Advanced Queue](https://www.drupal.org/project/advancedqueue) and pushed
-on cron. An outage or bad keys are retried every 15 minutes for a day; the
+on cron. Only changes a listing reads count: the name, price, sale terms,
+stock, status, registrar and description, not costs, dates or notes (see
+`CatalogSubscriber::PRODUCT_FIELDS` and `VARIATION_FIELDS`). An outage or bad keys are retried every 15 minutes for a day; the
 queue's job list shows what waits and what failed. With automatic pushes
 on, cron also queues a *Marketplace sale check* of the whole marketplace
-every hour, which reads it and pushes nothing. To push sooner than cron:
+every hour, which reads it and pushes nothing.
+
+*Commerce → Domains → Sync marketplaces* (also an action on the domain
+overview, the listings and the providers) checks or syncs whole
+marketplaces from the browser, one batch step each: *Check* reads them and
+records their listings, *Sync* also pushes what differs. Very large
+accounts may be quicker with Drush. To push sooner than cron:
 
 ```sh
 drush advancedqueue:queue:process commerce_domains_marketplace
@@ -322,7 +330,12 @@ the update once a day.
 
 Once an enabled registrar API has read the whole account, found the domain
 there and set its expiry date, the date is locked on the product form: it
-follows the registrar.
+follows the registrar. The expiry and auto-renew setting are updated by
+every sync, and whenever the domain's *Registrar* tab reads the registrar.
+
+A sold domain (Commerce Domains Owner records the sale) is the buyer's to
+manage: it has no *Registrar* tab, and a sync does not count it missing
+once it leaves the account.
 
 ## Importing domains
 
@@ -454,8 +467,8 @@ older adds the bulk form to the view.
 Registrars whose API can change domains add a *Registrar* tab to the domain's
 product, for people with *Manage domains at registrars*: the registration as
 the registrar has it, the nameservers, the transfer lock, automatic renewal,
-and the transfer auth code. The page reads the registrar each time it is
-shown, and every button acts on the registrar at once. Changes are logged
+and the transfer auth code. Sold domains have none. The page reads the
+registrar each time it is shown, and every button acts on the registrar at once. Changes are logged
 with who made them; an auth code is shown on the page and never logged.
 
 | Registrar | Nameservers | Lock | Unlock | Auto-renew | Auth code |
@@ -578,7 +591,10 @@ turned on for the product types that sell domains when the module is
 installed (turn it on for types added later): the purchase price and date,
 the yearly renewal cost, auto-renew, whether to keep the domain or let it
 expire, and the sale: what it sold for, when, through which marketplace,
-and for a lease to own the number of monthly payments.
+and for a lease to own the number of monthly payments. The product form
+shows them in vertical tabs: *Domain details* (expiry, registrar, internal,
+Atom premium), *Costs and renewal* and *Sale*, the last open once the
+domain sold.
 Only people with *View the domain dashboard* or *Manage the domain
 portfolio* see these fields, in forms, Views and JSON:API alike. A sale on
 the site fills in the sale from its order, and cancelling the order clears

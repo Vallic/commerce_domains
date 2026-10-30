@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Form;
 
+use Drupal\commerce_domains\Availability;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\ProviderException;
+use Drupal\commerce_domains\RegistrarSync;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Access\AccessResultInterface;
@@ -34,6 +36,7 @@ final class DomainRegistrarForm extends FormBase {
     protected EntityTypeManagerInterface $entityTypeManager,
     protected DateFormatterInterface $dateFormatter,
     protected LoggerInterface $logger,
+    protected RegistrarSync $registrarSync,
   ) {}
 
   /**
@@ -44,6 +47,7 @@ final class DomainRegistrarForm extends FormBase {
       $container->get('entity_type.manager'),
       $container->get('date.formatter'),
       $container->get('logger.channel.commerce_domains'),
+      $container->get(RegistrarSync::class),
     );
   }
 
@@ -69,7 +73,8 @@ final class DomainRegistrarForm extends FormBase {
    * Allows the page for domains at a registrar whose API can manage them.
    */
   public static function access(ProductInterface $commerce_product): AccessResultInterface {
-    $provider = self::provider($commerce_product);
+    // A sold domain is the buyer's to manage now.
+    $provider = Availability::isSold($commerce_product) ? NULL : self::provider($commerce_product);
     $result = AccessResult::allowedIf($provider !== NULL)->addCacheableDependency($commerce_product);
     return $provider ? $result->addCacheableDependency($provider) : $result;
   }
@@ -109,6 +114,9 @@ final class DomainRegistrarForm extends FormBase {
       $this->messenger()->addWarning($this->t("The @label account does not hold @domain. Compare the account on the provider's Registrations tab.", $args));
       return $form;
     }
+
+    // What the registrar says is the record: keep the product up to date.
+    $this->registrarSync->applyRegistration($product, $provider, $registration);
 
     $expires = $registration->expires ? $this->dateFormatter->format($registration->expires, 'custom', 'Y-m-d') : NULL;
     $yes_no = fn(?bool $value) => $value === NULL ? $this->t('Unknown') : ($value ? $this->t('Yes') : $this->t('No'));

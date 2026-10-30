@@ -26,3 +26,13 @@ commerce_domains_marketplace.product_marketplaces:
     parameters:
       commerce_product:
         type: entity:commerce_product
+
+commerce_domains_marketplace.sync:
+  path: '/admin/commerce/domains/sync'
+  defaults:
+    _form: '\Drupal\commerce_domains_marketplace\Form\SyncForm'
+    _title: 'Sync marketplaces'
+  requirements:
+    _permission: 'administer commerce_domains providers'
+  options:
+    _admin_route: TRUE

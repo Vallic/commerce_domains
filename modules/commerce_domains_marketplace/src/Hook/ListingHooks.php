@@ -10,9 +10,11 @@ use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains_marketplace\ListingRecorder;
 use Drupal\commerce_domains_marketplace\SyncScheduler;
 use Drupal\commerce_product\Entity\ProductInterface;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\Hook\Order\Order;
 use Drupal\Core\State\StateInterface;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 
 /**
@@ -25,6 +27,7 @@ class ListingHooks {
   public function __construct(
     protected ListingRecorder $recorder,
     protected StateInterface $state,
+    protected ConfigFactoryInterface $configFactory,
   ) {}
 
   /**
@@ -42,6 +45,52 @@ class ListingHooks {
   #[Hook('commerce_product_delete')]
   public function productDelete(ProductInterface $product): void {
     $this->recorder->unlinkProduct((int) $product->id());
+  }
+
+  /**
+   * Implements hook_menu_links_discovered_alter().
+   *
+   * Gathers the domain pages under Commerce > Domains, the overview's menu
+   * link, when the site has the overview: its listings, the sync, offers,
+   * handovers and the domain settings. The other modules move their own.
+   */
+  #[Hook('menu_links_discovered_alter')]
+  public function menuLinksDiscoveredAlter(array &$links): void {
+    $parent = 'views_view:views.commerce_domains_overview.page_1';
+    if (!isset($links[$parent])) {
+      return;
+    }
+    $add = [
+      'commerce_domains_marketplace.listings' => ['Marketplace listings', 'view.commerce_domains_listings.page_1', -40],
+      'commerce_domains_marketplace.sync' => ['Sync marketplaces', 'commerce_domains_marketplace.sync', -35],
+      'commerce_domains_marketplace.settings' => ['Settings', 'commerce_domains.configuration', 50],
+    ];
+    foreach ($add as $id => [$title, $route, $weight]) {
+      $links[$id] = [
+        'id' => $id,
+        'title' => new TranslatableMarkup($title),
+        'route_name' => $route,
+        'parent' => $parent,
+        'menu_name' => $links[$parent]['menu_name'] ?? 'admin',
+        'weight' => $weight,
+        'provider' => 'commerce_domains_marketplace',
+      ];
+    }
+    // The listings view is optional config too.
+    if ($this->configFactory->get('views.view.commerce_domains_listings')->isNew()) {
+      unset($links['commerce_domains_marketplace.listings']);
+    }
+    $move = [
+      'entity.commerce_domains_offer.collection' => ['Offers', -30],
+      'entity.commerce_domains_handover.collection' => ['Handovers', -25],
+    ];
+    foreach ($move as $id => [$title, $weight]) {
+      if (isset($links[$id])) {
+        $links[$id]['parent'] = $parent;
+        $links[$id]['title'] = new TranslatableMarkup($title);
+        $links[$id]['weight'] = $weight;
+      }
+    }
   }
 
   /**

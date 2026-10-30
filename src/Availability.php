@@ -33,6 +33,15 @@ class Availability {
   }
 
   /**
+   * Whether a domain has sold, so it is no longer ours to manage.
+   *
+   * Sales are recorded by Commerce Domains Owner; without it nothing has.
+   */
+  public static function isSold(ProductInterface $product): bool {
+    return $product->hasField('domain_sold') && !$product->get('domain_sold')->isEmpty();
+  }
+
+  /**
    * Whether a domain is internal: kept for the owner's use, not for sale.
    */
   public static function isInternal(ProductInterface $product): bool {

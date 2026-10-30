@@ -114,7 +114,12 @@ final class ProductListings extends FieldPluginBase {
         ],
       ];
     }
-    return $items ? ['#theme' => 'item_list', '#items' => $items] : '';
+    return $items ? [
+      '#theme' => 'item_list',
+      '#items' => $items,
+      '#attributes' => ['class' => ['commerce-domains-listings']],
+      '#attached' => ['library' => ['commerce_domains_marketplace/listings']],
+    ] : '';
   }
 
 }
