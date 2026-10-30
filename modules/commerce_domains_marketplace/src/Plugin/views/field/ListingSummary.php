@@ -52,7 +52,7 @@ final class ListingSummary extends FieldPluginBase {
     $items = [];
     foreach ($listing as $field => $value) {
       $field = (string) $field;
-      $label = self::label($field);
+      $label = self::fieldLabel($field);
       if (is_bool($value)) {
         $items[] = [
           '#type' => 'html_tag',
@@ -113,7 +113,7 @@ final class ListingSummary extends FieldPluginBase {
   /**
    * Turns a marketplace's field name into words, e.g. "Floor price".
    */
-  protected static function label(string $field): string {
+  protected static function fieldLabel(string $field): string {
     $words = strtolower(trim((string) preg_replace(['/([a-z0-9])([A-Z])/', '/[_-]+/'], ['$1 $2', ' '], $field)));
     return ucfirst($words);
   }
