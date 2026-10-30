@@ -16,6 +16,7 @@ use Drupal\commerce_domains_owner\Profit;
 use Drupal\commerce_domains_owner\SalesReport;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductType;
+use Drupal\Core\Datetime\DrupalDateTime;
 use Drupal\Core\Form\FormState;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\Tests\commerce_domains\Kernel\DrushCommandTrait;
@@ -86,7 +87,8 @@ class CostsTest extends OwnerKernelTestBase {
     $built = $this->container->get('entity.form_builder')->getForm($product, 'edit');
     $this->assertSame('domain_costs', $built['domain_purchase_price']['#group']);
     $this->assertSame('domain_sale', $built['domain_sold']['#group']);
-    $this->assertFalse($built['domain_sale']['#open'], 'Closed until the domain sells.');
+    $this->assertSame('domain_owner', $built['domain_sale']['#group'], 'Costs and sale are tabs.');
+    $this->assertSame('edit-domain-costs', $built['domain_owner']['#default_tab'], 'The sale tab comes first once the domain sells.');
 
     // Only the owner sees what domains cost, and only the manager edits it.
     $buyer = $this->createUser(['view commerce_product']);
@@ -219,6 +221,26 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertSame(1, $totals[2026]['unknown']);
     $this->assertEquals(['USD' => new Price('450', 'USD')], $totals[2026]['profit']);
     $this->assertEquals(['USD' => new Price('1000', 'USD')], $totals[2025]['revenue']);
+  }
+
+  /**
+   * Tests that blank dates stay empty, rather than becoming the save time.
+   */
+  public function testBlankDates(): void {
+    $display = $this->container->get('entity_display.repository')->getFormDisplay('commerce_product', 'default');
+    foreach (['domain_sold', 'domain_purchase_date', 'domain_expires'] as $field) {
+      $this->assertSame('commerce_domains_optional_timestamp', $display->getComponent($field)['type'], $field);
+    }
+    $widget = $this->container->get('plugin.manager.field.widget')->getInstance([
+      'field_definition' => FieldConfig::loadByName('commerce_product', 'default', 'domain_sold'),
+      'form_mode' => 'default',
+      'configuration' => ['type' => 'commerce_domains_optional_timestamp', 'settings' => []],
+    ]);
+    $form_state = new FormState();
+    $this->assertSame([], $widget->massageFormValues([['value' => NULL]], [], $form_state));
+    $this->assertSame([], $widget->massageFormValues([['value' => ['date' => '', 'time' => '', 'object' => NULL]]], [], $form_state));
+    $date = DrupalDateTime::createFromTimestamp(self::date('2026-10-01'));
+    $this->assertSame([['value' => self::date('2026-10-01')]], $widget->massageFormValues([['value' => $date]], [], $form_state));
   }
 
   /**

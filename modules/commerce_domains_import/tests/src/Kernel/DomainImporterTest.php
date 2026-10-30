@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains_import\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
+use Drupal\commerce_domains\Registration;
 use Drupal\commerce_domains_import\DomainImporter;
 use Drupal\commerce_domains_import\Event\DomainImportEvent;
 use Drupal\commerce_domains_import\ImportOptions;
@@ -218,6 +219,28 @@ class DomainImporterTest extends ImportKernelTestBase {
     $this->assertEquals(new Price('250', 'USD'), $this->variation('other.net')->getPrice());
 
     $this->assertSame([], $importer->readAccount($provider)->unknown, 'Nothing is left to import.');
+
+    // Domains the registrar doesn't list for sale can come in internal,
+    // unless their row says otherwise.
+    $expires = ['own.com' => NULL, 'sale.com' => NULL, 'said.com' => NULL, 'quiet.com' => NULL];
+    $for_sale = ['own.com' => FALSE, 'sale.com' => TRUE, 'said.com' => FALSE];
+    $csv = ImportParser::parseCsv("domain,internal\nown.com,\nsale.com,\nsaid.com,no\nquiet.com,\n");
+    $rows = $importer->accountRows($csv, $provider, $expires, $for_sale, TRUE);
+    $this->import($rows, ['source' => ImportOptions::SOURCE_REGISTRAR, 'price' => '250']);
+    $internal = fn(string $name) => (bool) $this->product($name)->get('domain_internal')->value;
+    $this->assertTrue($internal('own.com'));
+    $this->assertFalse($this->product('own.com')->isPublished());
+    $this->assertFalse($internal('sale.com'));
+    $this->assertFalse($internal('said.com'), 'The row wins.');
+    $this->assertFalse($internal('quiet.com'), 'A registrar that says nothing changes nothing.');
+    $rows = $importer->accountRows(ImportParser::parseList("off.com"), $provider, ['off.com' => NULL], ['off.com' => FALSE]);
+    $this->import($rows, ['source' => ImportOptions::SOURCE_REGISTRAR, 'price' => '250']);
+    $this->assertFalse($internal('off.com'), 'Only when asked.');
+    $this->assertSame(['own.com' => FALSE, 'sale.com' => TRUE], DomainImporter::forSale([
+      'own.com' => new Registration('own.com', NULL, forSale: FALSE),
+      'sale.com' => new Registration('sale.com', NULL, forSale: TRUE),
+      'quiet.com' => new Registration('quiet.com', NULL),
+    ]));
   }
 
   /**

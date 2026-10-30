@@ -64,7 +64,7 @@ class DomainCosts extends EntityTraitBase {
       ->setLabel(new TranslatableMarkup('Purchased'))
       ->setDescription(new TranslatableMarkup('When you registered or bought the domain.'))
       ->setDisplayOptions('form', [
-        'type' => 'datetime_timestamp',
+        'type' => 'commerce_domains_optional_timestamp',
         'weight' => 31,
       ]);
 
@@ -110,7 +110,7 @@ class DomainCosts extends EntityTraitBase {
       ->setLabel(new TranslatableMarkup('Sold'))
       ->setDescription(new TranslatableMarkup('Filled in when the domain sells on this site or a marketplace reports it sold.'))
       ->setDisplayOptions('form', [
-        'type' => 'datetime_timestamp',
+        'type' => 'commerce_domains_optional_timestamp',
         'weight' => 36,
       ]);
 

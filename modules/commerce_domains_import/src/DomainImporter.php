@@ -11,6 +11,7 @@ use Drupal\commerce_domains\DomainNameParser;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\RegistrarPlan;
+use Drupal\commerce_domains\Registration;
 use Drupal\commerce_domains\RegistrarSync;
 use Drupal\commerce_domains_import\Event\DomainImportEvent;
 use Drupal\commerce_domains_pricing\PriceRules;
@@ -126,10 +127,25 @@ class DomainImporter {
   }
 
   /**
+   * Returns whether the registrar lists each domain for sale.
+   *
+   * @param \Drupal\commerce_domains\Registration[] $registrations
+   *   The account's registrations.
+   *
+   * @return array<string, bool>
+   *   Keyed by domain; domains the registrar says nothing about are left out.
+   */
+  public static function forSale(array $registrations): array {
+    return array_filter(array_map(fn(Registration $registration) => $registration->forSale, $registrations), 'is_bool');
+  }
+
+  /**
    * Turns rows naming domains into rows for a registrar account's domains.
    *
    * Each is recorded at the registrar, with the expiry date the account
    * gives. A domain the account doesn't hold can't be imported from it.
+   * Domains the registrar says aren't for sale can be made internal, unless
+   * their row says.
    *
    * @param \Drupal\commerce_domains_import\ImportRow[] $rows
    *   Rows naming domains, e.g. from ImportParser::parseList().
@@ -137,11 +153,16 @@ class DomainImporter {
    *   The registrar.
    * @param array<string, int|null> $expires
    *   The expiry of every domain in the account, keyed by domain.
+   * @param array<string, bool|null> $for_sale
+   *   Whether the registrar lists each domain for sale, NULL when it doesn't
+   *   say, keyed by domain.
+   * @param bool $unlisted_internal
+   *   Whether domains it doesn't list for sale are internal.
    *
    * @return \Drupal\commerce_domains_import\ImportRow[]
    *   The rows.
    */
-  public function accountRows(array $rows, ProviderInterface $provider, array $expires): array {
+  public function accountRows(array $rows, ProviderInterface $provider, array $expires, array $for_sale = [], bool $unlisted_internal = FALSE): array {
     $account_rows = [];
     foreach ($rows as $row) {
       $name = DomainName::normalize((string) $row->value('domain'));
@@ -153,6 +174,9 @@ class DomainImporter {
       $values = ['registrar' => (string) $provider->id()] + $row->values;
       if ($expires[$name] !== NULL && $row->value('expires') === NULL) {
         $values['expires'] = (string) $expires[$name];
+      }
+      if ($unlisted_internal && ($for_sale[$name] ?? NULL) === FALSE && $row->value('internal') === NULL) {
+        $values['internal'] = 'yes';
       }
       $account_rows[] = new ImportRow($row->line, $row->raw, $values, $row->error);
     }

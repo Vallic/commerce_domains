@@ -84,16 +84,20 @@ class DomainRegistrarFormTest extends DomainsKernelTestBase {
     $form_state = new FormState();
     $form_state->addBuildInfo('args', [$product]);
     $form = $this->container->get('form_builder')->buildForm(DomainRegistrarForm::class, $form_state);
-    $this->assertSame("ns1.park.com\nns2.park.com", $form['nameservers']['#default_value']);
+    // A field for each nameserver, and spares up to four.
+    $this->assertSame(['ns1.park.com', 'ns2.park.com', '', ''], array_map(fn(int $i) => $form['nameservers'][$i]['#default_value'], range(0, 3)));
+    $this->assertArrayNotHasKey(4, $form['nameservers']);
     $this->assertSame('Unlock transfers', (string) $form['actions']['lock']['#value']);
     $this->assertSame('Turn auto-renew on', (string) $form['actions']['renew']['#value']);
 
-    $this->assertSame([], $this->submit($product, 'Save nameservers', ['nameservers' => "NS1.Host.com.\nns2.host.com"])->getErrors());
+    $hosts = ['NS1.Host.com.', ' ns2.host.com', '', ''];
+    $this->assertSame([], $this->submit($product, 'Save nameservers', ['nameservers' => $hosts])->getErrors());
     $this->assertSame(['ns1.host.com', 'ns2.host.com'], $this->account('example.com')['nameservers']);
-    $errors = $this->submit($product, 'Save nameservers', ['nameservers' => 'ns1.host.com'])->getErrors();
-    $this->assertSame('Enter at least two nameservers.', (string) $errors['nameservers']);
-    $errors = $this->submit($product, 'Save nameservers', ['nameservers' => "ns1.host.com\nnot a host"])->getErrors();
-    $this->assertStringContainsString('is not a host name', (string) $errors['nameservers']);
+    $same = ['ns1.host.com', 'NS1.host.com', '', ''];
+    $errors = $this->submit($product, 'Save nameservers', ['nameservers' => $same])->getErrors();
+    $this->assertSame('Enter at least two nameservers.', (string) $errors['nameservers][1']);
+    $errors = $this->submit($product, 'Save nameservers', ['nameservers' => ['ns1.host.com', 'not a host', '', '']])->getErrors();
+    $this->assertStringContainsString('is not a host name', (string) $errors['nameservers][1'], 'The error is on its field.');
 
     $this->submit($product, 'Unlock transfers');
     $this->assertFalse($this->account('example.com')['locked']);

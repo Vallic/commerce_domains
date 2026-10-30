@@ -49,17 +49,24 @@ class ProductHooks {
     $form_object = $form_state->getFormObject();
     $product = $form_object instanceof ContentEntityFormInterface ? $form_object->getEntity() : NULL;
     $sold = $product instanceof ProductInterface && $product->hasField('domain_sold') && !$product->get('domain_sold')->isEmpty();
+    // A tab each, the sale first once the domain sold.
+    $form['domain_owner'] = [
+      '#type' => 'vertical_tabs',
+      '#weight' => 30,
+      '#default_tab' => $sold ? 'edit-domain-sale' : 'edit-domain-costs',
+    ];
     $form['domain_costs'] = [
       '#type' => 'details',
       '#title' => $this->t('Costs and renewal'),
       '#description' => $this->t('What the domain costs to hold, and whether to renew it. They give the profit when it sells.'),
-      '#open' => TRUE,
+      '#group' => 'domain_owner',
       '#weight' => 30,
     ];
     $form['domain_sale'] = [
       '#type' => 'details',
       '#title' => $this->t('Sale'),
-      '#open' => $sold,
+      '#description' => $this->t('Leave it empty until the domain sells: a sold date takes it off sale.'),
+      '#group' => 'domain_owner',
       '#weight' => 31,
     ];
     foreach (self::GROUPS as $group => $fields) {
@@ -72,6 +79,7 @@ class ProductHooks {
         }
       }
     }
+    $form['domain_owner']['#access'] = $form['domain_costs']['#access'] || $form['domain_sale']['#access'];
   }
 
   /**

@@ -27,6 +27,9 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  */
 final class DomainRegistrarForm extends FormBase {
 
+  // The most nameservers a domain can have.
+  protected const MAX_NAMESERVERS = 13;
+
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
     protected DateFormatterInterface $dateFormatter,
@@ -121,12 +124,24 @@ final class DomainRegistrarForm extends FormBase {
     ];
 
     $form['nameservers'] = [
-      '#type' => 'textarea',
+      '#type' => 'fieldset',
       '#title' => $this->t('Nameservers'),
-      '#description' => $this->t("One per line, at least two. Empty now means the domain uses @label's own parking or DNS.", ['@label' => $label]),
-      '#default_value' => implode("\n", $nameservers),
-      '#rows' => 4,
+      '#description' => $this->t("At least two, in order. None now means the domain uses @label's own parking or DNS.", ['@label' => $label]),
+      '#tree' => TRUE,
     ];
+    // One spare field, at least four, up to what DNS allows.
+    $count = min(self::MAX_NAMESERVERS, max(4, count($nameservers) + 1));
+    for ($i = 0; $i < $count; $i++) {
+      $form['nameservers'][$i] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Nameserver @number', ['@number' => $i + 1]),
+        '#title_display' => 'invisible',
+        '#default_value' => $nameservers[$i] ?? '',
+        '#maxlength' => 253,
+        '#size' => 40,
+        '#attributes' => ['placeholder' => 'ns' . ($i + 1) . '.example.com'],
+      ];
+    }
     $form['save_nameservers'] = [
       '#type' => 'submit',
       '#value' => $this->t('Save nameservers'),
@@ -174,14 +189,13 @@ final class DomainRegistrarForm extends FormBase {
    */
   public function validateNameservers(array &$form, FormStateInterface $form_state): void {
     $hosts = $this->nameservers($form_state);
-    if (count($hosts) < 2) {
-      $form_state->setErrorByName('nameservers', $this->t('Enter at least two nameservers.'));
-      return;
-    }
-    foreach ($hosts as $host) {
+    foreach ($hosts as $i => $host) {
       if (!preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $host)) {
-        $form_state->setErrorByName('nameservers', $this->t('%host is not a host name.', ['%host' => $host]));
+        $form_state->setErrorByName('nameservers][' . $i, $this->t('%host is not a host name.', ['%host' => $host]));
       }
+    }
+    if (count(array_unique($hosts)) < 2) {
+      $form_state->setErrorByName('nameservers][' . min(1, count($hosts)), $this->t('Enter at least two nameservers.'));
     }
   }
 
@@ -189,7 +203,7 @@ final class DomainRegistrarForm extends FormBase {
    * Replaces the nameservers.
    */
   public function saveNameservers(array &$form, FormStateInterface $form_state): void {
-    $hosts = $this->nameservers($form_state);
+    $hosts = array_values(array_unique($this->nameservers($form_state)));
     $this->act($form_state, 'nameservers set to ' . implode(', ', $hosts), fn(DomainManagementInterface $plugin, string $name) => $plugin->setNameservers($name, $hosts));
   }
 
@@ -266,12 +280,18 @@ final class DomainRegistrarForm extends FormBase {
   /**
    * Returns the entered nameservers, normalized.
    *
-   * @return string[]
-   *   Lowercase host names without a trailing dot, in order.
+   * @return array<int, string>
+   *   Lowercase host names without a trailing dot, keyed by their field.
    */
   protected function nameservers(FormStateInterface $form_state): array {
-    $hosts = preg_split('/[\s,]+/', strtolower((string) $form_state->getValue('nameservers')), -1, PREG_SPLIT_NO_EMPTY);
-    return array_values(array_unique(array_map(fn(string $host) => rtrim($host, '.'), $hosts)));
+    $hosts = [];
+    foreach ((array) $form_state->getValue('nameservers', []) as $i => $host) {
+      $host = rtrim(strtolower(trim((string) $host)), '.');
+      if ($host !== '') {
+        $hosts[(int) $i] = $host;
+      }
+    }
+    return $hosts;
   }
 
 }

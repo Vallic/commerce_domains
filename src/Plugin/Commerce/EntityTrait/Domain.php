@@ -57,7 +57,7 @@ class Domain extends EntityTraitBase {
       ->setLabel(new TranslatableMarkup('Expires'))
       ->setDescription(new TranslatableMarkup('When the registration runs out.'))
       ->setDisplayOptions('form', [
-        'type' => 'datetime_timestamp',
+        'type' => 'commerce_domains_optional_timestamp',
         'weight' => 11,
       ]);
 

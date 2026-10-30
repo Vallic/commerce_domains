@@ -108,8 +108,15 @@ class DynadotTest extends ProviderTestBase {
         'Locked' => 'yes',
         'RenewOption' => 'auto-renew',
         'Status' => 'active',
+        'isForSale' => 'yes',
       ],
-      ['Name' => 'b.com', 'Expiration' => '1804136767999', 'Locked' => 'no', 'RenewOption' => 'no renew option'],
+      [
+        'Name' => 'b.com',
+        'Expiration' => '1804136767999',
+        'Locked' => 'no',
+        'RenewOption' => 'no renew option',
+        'isForSale' => 'no',
+      ],
       ['Name' => 'c.com'],
     ];
     $plugin = $this->plugin(Dynadot::class, 'dynadot', self::KEYS, [
@@ -117,8 +124,8 @@ class DynadotTest extends ProviderTestBase {
     ]);
     $this->assertInstanceOf(RegistrarInterface::class, $plugin);
     $this->assertEquals([
-      'a.com' => new Registration('a.com', 1804136767, TRUE, TRUE, 'active'),
-      'b.com' => new Registration('b.com', 1804136767, FALSE, FALSE, NULL),
+      'a.com' => new Registration('a.com', 1804136767, TRUE, TRUE, 'active', TRUE),
+      'b.com' => new Registration('b.com', 1804136767, FALSE, FALSE, NULL, FALSE),
       'c.com' => new Registration('c.com', NULL),
     ], $plugin->fetchRegistrations());
     $this->assertCount(1, $this->history, 'One account list serves the whole account.');

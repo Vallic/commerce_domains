@@ -168,6 +168,15 @@ final class ImportForm extends FormBase {
         if (!$count) {
           $form['account']['names']['#description'] = $this->t('Every domain in the @label account is in the catalog already.', $args);
         }
+        $unlisted = count(array_intersect($account['unknown'], array_keys(array_filter($account['for_sale'] ?? [], fn(bool $for_sale) => !$for_sale))));
+        if ($unlisted) {
+          $form['account']['unlisted_internal'] = [
+            '#type' => 'checkbox',
+            '#title' => $this->t('Make the domains @label does not list for sale internal', $args),
+            '#description' => $this->formatPlural($unlisted, 'One of these domains is not for sale at @label: it is imported as internal, never for sale. Untick to import it like the others.', '@count of these domains are not for sale at @label: they are imported as internal, never for sale. Untick to import them like the others.', $args),
+            '#default_value' => TRUE,
+          ];
+        }
       }
     }
 
@@ -352,6 +361,7 @@ final class ImportForm extends FormBase {
       'provider' => (string) $provider->id(),
       'unknown' => $plan->unknown,
       'expires' => array_map(fn(Registration $registration) => $registration->expires, $plan->registrations),
+      'for_sale' => DomainImporter::forSale($plan->registrations),
     ]);
     // Show this account's domains, not what was typed for another.
     $input = $form_state->getUserInput();
@@ -413,7 +423,7 @@ final class ImportForm extends FormBase {
           $form_state->setErrorByName('provider', $this->t('Read the account first.'));
           break;
         }
-        $rows = $this->importer->accountRows(ImportParser::parseList((string) $form_state->getValue('names')), $provider, $account['expires']);
+        $rows = $this->importer->accountRows(ImportParser::parseList((string) $form_state->getValue('names')), $provider, $account['expires'], $account['for_sale'] ?? [], (bool) $form_state->getValue('unlisted_internal'));
         if (!$rows) {
           $form_state->setErrorByName('names', $this->t('Enter at least one domain.'));
         }

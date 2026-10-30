@@ -54,6 +54,7 @@ final class ImportCommands extends DrushCommands {
   #[CLI\Option(name: 'offers', description: 'New domains accept offers; --no-offers turns that off.')]
   #[CLI\Option(name: 'marketplaces', description: 'New domains are listed on marketplaces; --no-marketplaces sells them on this site only.')]
   #[CLI\Option(name: 'unpublished', description: 'Create new domains unpublished.')]
+  #[CLI\Option(name: 'unlisted', description: 'With --from-registrar: what to do with domains the registrar does not list for sale: internal (the default) or import, like the others.')]
   #[CLI\Option(name: 'internal', description: 'Create new domains internal: kept for your own use, never for sale.')]
   #[CLI\Option(name: 'update', description: 'Update the price and sale terms of domains already in the catalog from their row, instead of skipping them.')]
   #[CLI\Option(name: 'lookup-registrars', description: 'For rows without a registrar, look it up in public RDAP and record the provider of that name.')]
@@ -76,6 +77,7 @@ final class ImportCommands extends DrushCommands {
       'marketplaces' => TRUE,
       'unpublished' => FALSE,
       'internal' => FALSE,
+      'unlisted' => 'internal',
       'update' => FALSE,
       'lookup-registrars' => FALSE,
       'dry-run' => FALSE,
@@ -93,7 +95,7 @@ final class ImportCommands extends DrushCommands {
       return self::EXIT_FAILURE;
     }
     $rows = $import->source === ImportOptions::SOURCE_REGISTRAR
-      ? $this->accountRows((string) $options['from-registrar'], $import->dryRun)
+      ? $this->accountRows((string) $options['from-registrar'], $import->dryRun, ($options['unlisted'] ?? 'internal') !== 'import')
       : $this->fileRows($file, $import->source);
     if ($rows === NULL) {
       return self::EXIT_FAILURE;
@@ -197,7 +199,7 @@ final class ImportCommands extends DrushCommands {
    * @return \Drupal\commerce_domains_import\ImportRow[]|null
    *   The rows, or NULL after logging why there are none.
    */
-  protected function accountRows(string $provider_id, bool $dry_run): ?array {
+  protected function accountRows(string $provider_id, bool $dry_run, bool $unlisted_internal = TRUE): ?array {
     /** @var \Drupal\commerce_domains\Entity\ProviderInterface|null $provider */
     $provider = $this->entityTypeManager->getStorage('commerce_domains_provider')->load($provider_id);
     if (!$provider || !$provider->hasCapability(RegistrarInterface::class)) {
@@ -226,7 +228,14 @@ final class ImportCommands extends DrushCommands {
     ]));
     $rows = array_map(fn(string $name) => new ImportRow(0, ['domain' => $name], ['domain' => $name]), $plan->unknown);
     $expires = array_map(fn(Registration $registration) => $registration->expires, $plan->registrations);
-    return $this->importer->accountRows($rows, $provider, $expires);
+    $for_sale = DomainImporter::forSale($plan->registrations);
+    if ($unlisted = count(array_intersect($plan->unknown, array_keys(array_filter($for_sale, fn(bool $listed) => !$listed))))) {
+      $args = ['@count' => $unlisted, '@label' => $provider->label()];
+      $this->io()->text($unlisted_internal
+        ? dt('@count not for sale at @label: imported as internal (--unlisted=import imports them like the others).', $args)
+        : dt('@count not for sale at @label: imported like the others.', $args));
+    }
+    return $this->importer->accountRows($rows, $provider, $expires, $for_sale, $unlisted_internal);
   }
 
   /**

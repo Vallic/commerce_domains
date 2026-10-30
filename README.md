@@ -341,8 +341,11 @@ Import*, for people with *Import domains*, in one of three ways:
 - **From a registrar account**: *Read the account* lists the domains a
   registrar provider's account holds that the catalog lacks, read through
   its API; take out the line of any to leave out. They are recorded at that
-  registrar with the expiry date the account gives, and marked verified. The
-  provider's *Registrations* tab links here when there are such domains.
+  registrar with the expiry date the account gives, and marked verified.
+  Where the registrar says which domains it lists for sale (Dynadot does),
+  those it doesn't list come in internal, unless you untick that or the
+  row says (`--unlisted=import` in Drush). The provider's *Registrations*
+  tab links here when there are such domains.
 
 New domains get the chosen product type, store, sale terms (buy now, offers,
 listed on marketplaces), published status and whether they are internal

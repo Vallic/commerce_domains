@@ -216,6 +216,7 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
     }
     $expiration = $record['Expiration'] ?? NULL;
     $renew = strtolower((string) ($record['RenewOption'] ?? ''));
+    $for_sale = strtolower((string) ($record['isForSale'] ?? ''));
     return new Registration(
       name: DomainName::normalize((string) $record['Name']),
       // Milliseconds since the epoch.
@@ -224,6 +225,7 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
       // "auto-renew", "do not renew", or "no renew option" when unset.
       autoRenew: $renew === '' ? NULL : str_contains($renew, 'auto'),
       status: isset($record['Status']) ? (string) $record['Status'] : NULL,
+      forSale: in_array($for_sale, ['yes', 'no'], TRUE) ? $for_sale === 'yes' : NULL,
     );
   }
 

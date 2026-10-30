@@ -20,6 +20,8 @@ final class Registration {
     public readonly ?bool $autoRenew = NULL,
     // The registrar's own status, e.g. "active" or "redemption".
     public readonly ?string $status = NULL,
+    // Whether the registrar lists it for sale; NULL when it doesn't say.
+    public readonly ?bool $forSale = NULL,
   ) {}
 
 }
