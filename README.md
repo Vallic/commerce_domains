@@ -482,8 +482,17 @@ Commerce Domains Offers (submodule) lets buyers make offers on the site:
    changes.
 
 The settings page also sets the least price that takes offers, in each
-domain's own currency, and whether Atom premium names take them. Sites add
-their own rules by subscribing to `OfferAllowedEvent`.
+domain's own currency, whether Atom premium names take them, and whether
+buyers must give a phone number. With
+[Phone Number](https://www.drupal.org/project/phone_number) installed, the
+phone field has a country list and checks the number. Sites add their own
+rules by subscribing to `OfferAllowedEvent`.
+
+Against spam, the form takes five offers an hour from one visitor. For
+more, add its form ID, `commerce_domains_offer_form`, to
+[Antibot](https://www.drupal.org/project/antibot), which works on cached
+pages. A CAPTCHA point works too, but only where the page isn't cached for
+everyone: a cached form shares one CAPTCHA session among its visitors.
 
 Commerce Domains Offers via Escrow.com (submodule, needs
 [Commerce Escrow](https://www.drupal.org/project/commerce_escrow)) adds a

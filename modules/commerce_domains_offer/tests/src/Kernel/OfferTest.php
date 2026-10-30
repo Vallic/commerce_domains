@@ -244,6 +244,16 @@ class OfferTest extends DomainsKernelTestBase {
     $made = reset($offers);
     $this->assertEquals(new Price('1200', 'USD'), $made->getAmount());
 
+    // A phone number can be required. The Phone Number module's element
+    // gives the full number under "value".
+    $this->config('commerce_domains_offer.settings')->set('require_phone', TRUE)->save();
+    $this->assertArrayHasKey('phone', $submit('1300')->getErrors());
+    $phone = ['value' => '+385911234567', 'country' => 'HR', 'local_number' => '091 123 4567'];
+    $form_state = (new FormState())->setValues(['phone' => $phone]);
+    $this->assertSame('+385911234567', OfferForm::phone($form_state));
+    $this->assertSame('+1 555 0100', OfferForm::phone($form_state->setValues(['phone' => ' +1 555 0100 '])));
+    $this->config('commerce_domains_offer.settings')->set('require_phone', FALSE)->save();
+
     // A domain that doesn't take offers shows no form. Both follow the
     // settings, which can change that.
     $fixed = $this->domain('firm.com', 2000, ['sale_offers' => FALSE]);

@@ -57,6 +57,12 @@ class SettingsForm extends ConfigFormBase {
       '#description' => $this->t("Leave empty for the owner's notification address (Commerce Domains Owner), or else the store's email address."),
       '#config_target' => 'commerce_domains_offer.settings:notify_mail',
     ];
+    $form['require_phone'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Buyers must give a phone number'),
+      '#description' => $this->t('With the Phone Number module, buyers pick their country from a list.'),
+      '#config_target' => 'commerce_domains_offer.settings:require_phone',
+    ];
     return parent::buildForm($form, $form_state);
   }
 

@@ -16,3 +16,11 @@ function commerce_domains_offer_update_11001(): void {
     ->set('premium_offers', $config->get('premium_offers') ?? TRUE)
     ->save();
 }
+
+/**
+ * Adds the setting that makes buyers give a phone number.
+ */
+function commerce_domains_offer_update_11002(): void {
+  $config = \Drupal::configFactory()->getEditable('commerce_domains_offer.settings');
+  $config->set('require_phone', $config->get('require_phone') ?? FALSE)->save();
+}

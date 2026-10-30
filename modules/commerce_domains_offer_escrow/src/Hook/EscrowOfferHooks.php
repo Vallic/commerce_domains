@@ -121,7 +121,7 @@ class EscrowOfferHooks {
       $url = \Drupal::service(EscrowOfferStarter::class)->start($variation, [
         'mail' => $form_state->getValue('mail'),
         'name' => $form_state->getValue('name'),
-        'phone' => $form_state->getValue('phone'),
+        'phone' => OfferForm::phone($form_state),
         'message' => $form_state->getValue('message'),
       ], $account, $store, $amount);
     }

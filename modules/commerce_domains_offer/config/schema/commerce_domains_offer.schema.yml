@@ -14,3 +14,6 @@ commerce_domains_offer.settings:
     notify_mail:
       type: email
       label: 'Address told about new offers'
+    require_phone:
+      type: boolean
+      label: 'Buyers must give a phone number'

@@ -14,6 +14,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Flood\FloodInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Render\ElementInfoManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -38,6 +39,7 @@ final class OfferForm extends FormBase {
     protected OfferManager $offerManager,
     protected FloodInterface $flood,
     protected EntityTypeManagerInterface $entityTypeManager,
+    protected ElementInfoManagerInterface $elementInfo,
   ) {}
 
   /**
@@ -49,6 +51,7 @@ final class OfferForm extends FormBase {
       $container->get(OfferManager::class),
       $container->get('flood'),
       $container->get('entity_type.manager'),
+      $container->get('plugin.manager.element_info'),
     );
   }
 
@@ -100,7 +103,13 @@ final class OfferForm extends FormBase {
       '#type' => 'tel',
       '#title' => $this->t('Phone'),
       '#maxlength' => 64,
+      '#required' => (bool) $this->config('commerce_domains_offer.settings')->get('require_phone'),
     ];
+    // The Phone Number module adds a country list, and checks the number.
+    if ($this->elementInfo->hasDefinition('phone_number')) {
+      $form['phone']['#type'] = 'phone_number';
+      unset($form['phone']['#maxlength']);
+    }
     $form['message'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Message'),
@@ -158,13 +167,24 @@ final class OfferForm extends FormBase {
     $offer = $this->offerManager->submit($variation, $amount, [
       'mail' => $form_state->getValue('mail'),
       'name' => $form_state->getValue('name'),
-      'phone' => $form_state->getValue('phone'),
+      'phone' => self::phone($form_state),
       'message' => $form_state->getValue('message'),
     ], $this->currentUser(), $this->offerPolicy->store($variation));
     $this->messenger()->addStatus($this->t('Thank you, your offer for @domain has been sent. We will answer by email at @mail.', [
       '@domain' => $offer->getDomain(),
       '@mail' => $offer->getEmail(),
     ]));
+  }
+
+  /**
+   * Returns the phone number the buyer gave, in full.
+   *
+   * The Phone Number module's element gives the number with its country
+   * code, under "value".
+   */
+  public static function phone(FormStateInterface $form_state): string {
+    $phone = $form_state->getValue('phone');
+    return trim((string) (is_array($phone) ? ($phone['value'] ?? '') : $phone));
   }
 
   /**

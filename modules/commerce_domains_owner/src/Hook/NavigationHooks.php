@@ -31,14 +31,14 @@ class NavigationHooks {
   /**
    * Implements hook_menu_links_discovered_alter().
    *
-   * Moves the dashboard to Commerce > Domains > Dashboard.
+   * Moves the dashboard to Commerce > Domains > Dashboard, first there.
    */
   #[Hook('menu_links_discovered_alter')]
   public function menuLinksDiscoveredAlter(array &$links): void {
     if (isset($links[self::OVERVIEW_LINK], $links['commerce_domains_owner.dashboard'])) {
       $links['commerce_domains_owner.dashboard']['parent'] = self::OVERVIEW_LINK;
       $links['commerce_domains_owner.dashboard']['title'] = 'Dashboard';
-      $links['commerce_domains_owner.dashboard']['weight'] = -10;
+      $links['commerce_domains_owner.dashboard']['weight'] = -50;
     }
   }
 
