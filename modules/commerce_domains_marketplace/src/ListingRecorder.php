@@ -113,11 +113,29 @@ class ListingRecorder {
           'description' => 'When a sync found the marketplace selling the domain; kept while the listing shows the sale.',
           'type' => 'int',
         ],
-      ],
+      ] + self::statsSchema(),
       'primary key' => ['provider', 'domain'],
       'indexes' => [
         'product_id' => ['product_id'],
         'status' => ['status'],
+      ],
+    ];
+  }
+
+  /**
+   * Returns the table's columns for the interest in each listing.
+   */
+  public static function statsSchema(): array {
+    $count = fn(string $description) => ['description' => $description, 'type' => 'int', 'unsigned' => TRUE];
+    return [
+      'views' => $count('Views of the listing, as the marketplace counts them.'),
+      'leads' => $count('Inquiries and other leads.'),
+      'offers' => $count('Offers made.'),
+      'saves' => $count('Times buyers saved the listing.'),
+      'stats_days' => $count('The days the counts cover, back from when they were read; empty for all time.'),
+      'stats_checked' => [
+        'description' => 'When the counts were last read.',
+        'type' => 'int',
       ],
     ];
   }
@@ -375,6 +393,68 @@ class ListingRecorder {
     }
     $this->write($provider->id(), $rows, FALSE, TRUE);
     return $new;
+  }
+
+  /**
+   * Returns the domains whose listing interest is due a read.
+   *
+   * Those never read first, then the oldest. Rows of domains that aren't
+   * listed there are skipped.
+   *
+   * @param string $provider_id
+   *   The provider ID.
+   * @param int $before
+   *   Counts read since then are fresh.
+   * @param int $limit
+   *   The most domains returned.
+   *
+   * @return string[]
+   *   The domains.
+   */
+  public function statsDue(string $provider_id, int $before, int $limit): array {
+    $query = $this->database->select(self::TABLE, 'l')
+      ->fields('l', ['domain'])
+      ->condition('provider', $provider_id)
+      ->condition('status', self::UNLISTED, '<>');
+    $query->condition($query->orConditionGroup()
+      ->isNull('stats_checked')
+      ->condition('stats_checked', $before, '<'));
+    // Never read (NULL, as 0) first.
+    $query->addExpression('COALESCE(stats_checked, 0)', 'read_at');
+    return $query->orderBy('read_at')
+      ->orderBy('domain')
+      ->range(0, $limit)
+      ->execute()
+      ->fetchCol();
+  }
+
+  /**
+   * Records the interest in listings.
+   *
+   * @param string $provider_id
+   *   The provider ID.
+   * @param string[] $names
+   *   The domains read; those without stats get empty counts.
+   * @param array<string, \Drupal\commerce_domains\ListingStats> $stats
+   *   What the marketplace reported, keyed by domain.
+   */
+  public function recordStats(string $provider_id, array $names, array $stats): void {
+    $now = $this->time->getCurrentTime();
+    foreach ($names as $name) {
+      $found = $stats[$name] ?? NULL;
+      $this->database->update(self::TABLE)
+        ->fields([
+          'views' => $found?->views,
+          'leads' => $found?->leads,
+          'offers' => $found?->offers,
+          'saves' => $found?->saves,
+          'stats_days' => $found?->days,
+          'stats_checked' => $now,
+        ])
+        ->condition('provider', $provider_id)
+        ->condition('domain', $name)
+        ->execute();
+    }
   }
 
   /**

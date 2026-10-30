@@ -8,3 +8,4 @@ notify:
   offer_expired: true
 expiring_days: 60
 off_sale_days: 14
+appraisals_per_day: 50

@@ -8,6 +8,7 @@
 declare(strict_types=1);
 
 use Drupal\commerce_domains\Catalog;
+use Drupal\commerce_domains_owner\Appraiser;
 use Drupal\commerce_domains_owner\Checklist;
 use Drupal\commerce_domains_owner\Notifier;
 use Drupal\commerce_domains_owner\Plugin\Commerce\EntityTrait\DomainCosts;
@@ -67,6 +68,7 @@ function commerce_domains_owner_uninstall(bool $is_syncing): void {
     Notifier::REGISTRAR_CHECKS_KEY,
     Notifier::SYNC_FAILURES_KEY,
     Renewals::OFF_SALE_KEY,
+    Appraiser::COUNT_KEY,
   ]);
 }
 
@@ -87,5 +89,34 @@ function commerce_domains_owner_update_11001(): void {
     $field->setTargetBundle($type->id());
     $field->setName('domain_lease_months');
     $field_manager->createField($field);
+  }
+}
+
+/**
+ * Adds the appraisal fields to the domain product types.
+ */
+function commerce_domains_owner_update_11002(): void {
+  $trait = \Drupal::service('plugin.manager.commerce_entity_trait')->createInstance(DomainCosts::ID);
+  $definitions = array_intersect_key($trait->buildFieldDefinitions(), array_flip(DomainCosts::APPRAISAL_FIELDS));
+  $field_manager = \Drupal::service('commerce.configurable_field_manager');
+  /** @var \Drupal\commerce_product\Entity\ProductTypeInterface $type */
+  foreach (\Drupal::entityTypeManager()->getStorage('commerce_product_type')->loadMultiple() as $type) {
+    if (!in_array(DomainCosts::ID, $type->getTraits(), TRUE)) {
+      continue;
+    }
+    foreach ($definitions as $name => $definition) {
+      if (FieldConfig::loadByName('commerce_product', $type->id(), $name)) {
+        continue;
+      }
+      $field = clone $definition;
+      $field->setTargetEntityTypeId('commerce_product');
+      $field->setTargetBundle($type->id());
+      $field->setName($name);
+      $field_manager->createField($field);
+    }
+  }
+  $config = \Drupal::configFactory()->getEditable('commerce_domains_owner.settings');
+  if ($config->get('appraisals_per_day') === NULL) {
+    $config->set('appraisals_per_day', 50)->save();
   }
 }

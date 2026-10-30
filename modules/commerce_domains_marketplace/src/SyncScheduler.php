@@ -23,7 +23,8 @@ use Drupal\Core\State\StateInterface;
  * single job per provider, which MarketplaceSyncJob pushes in batches.
  *
  * Cron also queues an hourly check of each of those marketplaces, as a sale
- * there changes nothing in the catalog that would queue one.
+ * there changes nothing in the catalog that would queue one, and the reads
+ * of listing views and leads.
  */
 class SyncScheduler implements DestructableInterface {
 
@@ -39,6 +40,15 @@ class SyncScheduler implements DestructableInterface {
 
   // The state key, plus the provider ID, of when its last check was queued.
   public const CHECKED_KEY = 'commerce_domains_marketplace.check_queued.';
+
+  public const STATS_JOB_TYPE = 'commerce_domains_marketplace_stats';
+
+  // How often each listing's views and leads are read.
+  public const STATS_INTERVAL = 86400;
+
+  // How many listings one stats job reads; one request each on most
+  // marketplaces. Each cron run queues one while listings are due.
+  public const STATS_BATCH = 60;
 
   /**
    * Domains to re-check, as keys.
@@ -58,6 +68,7 @@ class SyncScheduler implements DestructableInterface {
     protected EntityTypeManagerInterface $entityTypeManager,
     protected StateInterface $state,
     protected TimeInterface $time,
+    protected StatsReader $statsReader,
   ) {}
 
   /**
@@ -126,6 +137,31 @@ class SyncScheduler implements DestructableInterface {
         // The last check hasn't run yet.
       }
       $this->state->set($key, $now);
+    }
+  }
+
+  /**
+   * Queues a read of listing views and leads, for each marketplace with them.
+   *
+   * Reads are spread over the day: each job takes the next STATS_BATCH
+   * listings due, and a marketplace whose listings are all fresh gets none.
+   * One still waiting is not queued again.
+   */
+  public function queueStats(): void {
+    $queue = $this->queue();
+    if (!$queue) {
+      return;
+    }
+    foreach ($this->statsReader->providers() as $id => $provider) {
+      if (!$this->statsReader->due($provider, 1)) {
+        continue;
+      }
+      try {
+        $queue->enqueueJob(Job::create(self::STATS_JOB_TYPE, ['provider' => $id]));
+      }
+      catch (DuplicateJobException) {
+        // The last one hasn't run yet.
+      }
     }
   }
 

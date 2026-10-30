@@ -203,6 +203,7 @@ final class NameSilo extends MarketplacePluginBase implements DomainManagementIn
       locked: $yes('locked'),
       autoRenew: $yes('auto_renew'),
       status: isset($record['status']) ? strtolower((string) $record['status']) : NULL,
+      registered: self::timestamp($record['created'] ?? NULL),
     );
   }
 

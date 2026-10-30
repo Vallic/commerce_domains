@@ -7,6 +7,8 @@ namespace Drupal\commerce_domains_marketplace\Plugin\views\field;
 use Drupal\commerce_domains_marketplace\ListingRecorder;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\StringTranslation\PluralTranslatableMarkup;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\views\Attribute\ViewsField;
 use Drupal\views\Plugin\views\field\FieldPluginBase;
 use Drupal\views\ResultRow;
@@ -61,6 +63,36 @@ final class ProductListings extends FieldPluginBase {
   }
 
   /**
+   * Describes a listing's views, leads, offers and saves, e.g. "12 views".
+   *
+   * Counts the marketplace doesn't report, and zeros, are left out.
+   */
+  public static function interest(object $row): string {
+    $parts = [];
+    foreach (['views', 'leads', 'offers', 'saves'] as $field) {
+      $count = (int) ($row->$field ?? 0);
+      if ($count > 0) {
+        $parts[] = (string) match ($field) {
+          'views' => new PluralTranslatableMarkup($count, '1 view', '@count views'),
+          'leads' => new PluralTranslatableMarkup($count, '1 lead', '@count leads'),
+          'offers' => new PluralTranslatableMarkup($count, '1 offer', '@count offers'),
+          'saves' => new PluralTranslatableMarkup($count, '1 save', '@count saves'),
+        };
+      }
+    }
+    if (!$parts) {
+      return '';
+    }
+    if (empty($row->stats_days)) {
+      return implode(', ', $parts);
+    }
+    return (string) new TranslatableMarkup('@counts in @days days', [
+      '@counts' => implode(', ', $parts),
+      '@days' => (int) $row->stats_days,
+    ]);
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function query(): void {
@@ -101,7 +133,7 @@ final class ProductListings extends FieldPluginBase {
       if ($row->status === ListingRecorder::SOLD && $row->sold) {
         $status = $this->t('Sold on @date', ['@date' => $this->dateFormatter->format((int) $row->sold, 'short')]);
       }
-      $items[] = [
+      $item = [
         '#type' => 'html_tag',
         '#tag' => 'span',
         '#value' => $this->t('@provider: @status', [
@@ -113,6 +145,18 @@ final class ProductListings extends FieldPluginBase {
           'title' => (string) $row->note,
         ],
       ];
+      if ($interest = self::interest($row)) {
+        $item = [
+          'status' => $item,
+          'interest' => [
+            '#type' => 'html_tag',
+            '#tag' => 'span',
+            '#value' => $interest,
+            '#attributes' => ['class' => ['commerce-domains-listing__interest']],
+          ],
+        ];
+      }
+      $items[] = $item;
     }
     return $items ? [
       '#theme' => 'item_list',

@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains_owner\Kernel;
 use Drupal\commerce_domains\Drush\Commands\RegistrarCommands;
 use Drupal\commerce_domains\Form\DomainRegistrarForm;
 use Drupal\commerce_domains\Form\RegistrationsForm;
+use Drupal\commerce_domains\Hook\ProductFormHooks;
 use Drupal\commerce_domains\RegistrarPlan;
 use Drupal\commerce_domains\RegistrarSync;
 use Drupal\commerce_domains_owner\Costs;
@@ -38,6 +39,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[CoversClass(RegistrarPlan::class)]
 #[CoversClass(RegistrationsForm::class)]
 #[CoversClass(RegistrarCommands::class)]
+#[CoversClass(ProductFormHooks::class)]
 #[Group('commerce_domains')]
 #[RunTestsInSeparateProcesses]
 class CostsTest extends OwnerKernelTestBase {
@@ -290,6 +292,14 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertFalse((bool) $this->reload($lapses)->get('domain_auto_renew')->value);
     $this->assertTrue($this->reload($silent)->get('domain_auto_renew')->isEmpty());
     $this->assertTrue($sync->plan($provider)->isEmpty());
+
+    // Once set from the registrar, the product form locks it.
+    $this->installConfig(['system']);
+    $this->setUpCurrentUser([], [], TRUE);
+    $locked = fn($product): bool => !empty($this->container->get('entity.form_builder')->getForm($this->reload($product), 'edit')['domain_auto_renew']['#disabled']);
+    $this->assertTrue($locked($renews));
+    $this->assertTrue($locked($lapses));
+    $this->assertFalse($locked($silent), 'Editable while the registrar says nothing.');
   }
 
   /**

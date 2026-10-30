@@ -61,14 +61,26 @@ class ListingHooks {
       return;
     }
     $add = [
-      'commerce_domains_marketplace.listings' => ['Marketplace listings', 'view.commerce_domains_listings.page_1', -40],
-      'commerce_domains_marketplace.sync' => ['Sync marketplaces', 'commerce_domains_marketplace.sync', -35],
-      'commerce_domains_marketplace.settings' => ['Settings', 'commerce_domains.configuration', 50],
+      'commerce_domains_marketplace.listings' => [
+        new TranslatableMarkup('Marketplace listings'),
+        'view.commerce_domains_listings.page_1',
+        -40,
+      ],
+      'commerce_domains_marketplace.sync' => [
+        new TranslatableMarkup('Sync marketplaces'),
+        'commerce_domains_marketplace.sync',
+        -35,
+      ],
+      'commerce_domains_marketplace.settings' => [
+        new TranslatableMarkup('Settings'),
+        'commerce_domains.configuration',
+        50,
+      ],
     ];
     foreach ($add as $id => [$title, $route, $weight]) {
       $links[$id] = [
         'id' => $id,
-        'title' => new TranslatableMarkup($title),
+        'title' => $title,
         'route_name' => $route,
         'parent' => $parent,
         'menu_name' => $links[$parent]['menu_name'] ?? 'admin',
@@ -81,13 +93,13 @@ class ListingHooks {
       unset($links['commerce_domains_marketplace.listings']);
     }
     $move = [
-      'entity.commerce_domains_offer.collection' => ['Offers', -30],
-      'entity.commerce_domains_handover.collection' => ['Handovers', -25],
+      'entity.commerce_domains_offer.collection' => [new TranslatableMarkup('Offers'), -30],
+      'entity.commerce_domains_handover.collection' => [new TranslatableMarkup('Handovers'), -25],
     ];
     foreach ($move as $id => [$title, $weight]) {
       if (isset($links[$id])) {
         $links[$id]['parent'] = $parent;
-        $links[$id]['title'] = new TranslatableMarkup($title);
+        $links[$id]['title'] = $title;
         $links[$id]['weight'] = $weight;
       }
     }
@@ -197,6 +209,33 @@ class ListingHooks {
       ];
     }
     $data[$table]['sold']['help'] = $this->t('When a sync found the marketplace selling the domain.');
+    $counts = [
+      'views' => $this->t('Views'),
+      'leads' => $this->t('Leads'),
+      'offers' => $this->t('Offers'),
+      'saves' => $this->t('Saves'),
+    ];
+    foreach ($counts as $field => $title) {
+      $data[$table][$field] = [
+        'title' => $title,
+        'help' => $this->t('As the marketplace counts them: Afternic over the last 30 days, Atom all time. Read daily.'),
+        'field' => ['id' => 'numeric'],
+        'filter' => ['id' => 'numeric'],
+        'sort' => ['id' => 'standard'],
+      ];
+    }
+    $data[$table]['stats_days'] = [
+      'title' => $this->t('Days the counts cover'),
+      'help' => $this->t('Empty for all time.'),
+      'field' => ['id' => 'numeric'],
+    ];
+    $data[$table]['stats_checked'] = [
+      'title' => $this->t('Counts read'),
+      'help' => $this->t('When the views, leads and offers were last read.'),
+      'field' => ['id' => 'date'],
+      'filter' => ['id' => 'date'],
+      'sort' => ['id' => 'date'],
+    ];
     return $data;
   }
 

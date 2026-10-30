@@ -64,6 +64,24 @@ display:
           field: listing
           plugin_id: commerce_domains_listing_summary
           label: Listing
+        views:
+          id: views
+          table: commerce_domains_listing
+          field: views
+          plugin_id: numeric
+          label: Views
+        leads:
+          id: leads
+          table: commerce_domains_listing
+          field: leads
+          plugin_id: numeric
+          label: Leads
+        offers:
+          id: offers
+          table: commerce_domains_listing
+          field: offers
+          plugin_id: numeric
+          label: Offers
         checked:
           id: checked
           table: commerce_domains_listing
@@ -163,6 +181,9 @@ display:
             status: status
             note: note
             listing: listing
+            views: views
+            leads: leads
+            offers: offers
             checked: checked
             pushed: pushed
           default: '-1'
@@ -176,6 +197,15 @@ display:
             status:
               sortable: true
               default_sort_order: asc
+            views:
+              sortable: true
+              default_sort_order: desc
+            leads:
+              sortable: true
+              default_sort_order: desc
+            offers:
+              sortable: true
+              default_sort_order: desc
             checked:
               sortable: true
               default_sort_order: desc

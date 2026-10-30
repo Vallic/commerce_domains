@@ -29,6 +29,7 @@ class GoDaddyTest extends ProviderTestBase {
         'items' => [
           [
             'domain' => 'A.com',
+            'createdAt' => '2016-07-08T09:10:11Z',
             'expiresAt' => '2027-06-12T10:02:10Z',
             'autoRenew' => TRUE,
             'transferLock' => TRUE,
@@ -43,7 +44,7 @@ class GoDaddyTest extends ProviderTestBase {
       ]),
     ]);
     $this->assertEquals([
-      'a.com' => new Registration('a.com', 1812794530, TRUE, TRUE, 'active'),
+      'a.com' => new Registration('a.com', 1812794530, TRUE, TRUE, 'active', registered: 1467969011),
       'b.com' => new Registration('b.com', NULL, NULL, NULL, 'expired'),
     ], $plugin->fetchRegistrations());
     $this->assertSame('GET https://api.godaddy.com/v3/domains/domain-names', $this->call(0));

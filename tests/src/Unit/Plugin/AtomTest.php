@@ -4,7 +4,12 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use Drupal\commerce_domains\Appraisal;
+use Drupal\commerce_domains\Clients\AtomClient;
 use Drupal\commerce_domains\Clients\AtomRegistrarClient;
+use Drupal\commerce_domains\ListingStats;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\AppraisalInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingStatsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Atom;
 use Drupal\Core\Form\FormState;
 use Drupal\commerce_domains\ProviderException;
@@ -17,10 +22,49 @@ use PHPUnit\Framework\Attributes\Group;
  */
 #[CoversClass(Atom::class)]
 #[CoversClass(AtomRegistrarClient::class)]
+#[CoversClass(AtomClient::class)]
 #[Group('commerce_domains')]
 class AtomTest extends ProviderTestBase {
 
   protected const KEYS = ['api_token' => 'atomTOKEN', 'user_id' => '4242'];
+
+  /**
+   * Tests appraising domains.
+   */
+  public function testAppraise(): void {
+    $plugin = $this->plugin(Atom::class, 'atom', self::KEYS, [
+      self::json([
+        'domain_name' => 'a.com',
+        'atom_appraisal' => 4999,
+        'domain_score' => 7.7,
+        'positive_signals' => ['Registered in 8 TLDs', 'Aged Domain (8.20 Years)'],
+        'negative_signals' => ['5 Syllables'],
+        'tld_taken_count' => 8,
+      ]),
+      self::json(['message' => 'Domain name is required']),
+    ]);
+    $this->assertInstanceOf(AppraisalInterface::class, $plugin);
+    $this->assertEquals(new Appraisal('a.com', 4999, 7.7, 8, ['Registered in 8 TLDs', 'Aged Domain (8.20 Years)'], ['5 Syllables']), $plugin->appraise('a.com'));
+    $this->assertSame('GET https://www.atom.com/api/marketplace/domain-appraisal', $this->call(0));
+    $this->assertSame(['api_token' => 'atomTOKEN', 'user_id' => '4242', 'domain_name' => 'a.com'], $this->query(0));
+
+    $this->expectException(ProviderException::class);
+    $this->expectExceptionMessage('Domain name is required');
+    $plugin->appraise('b.com');
+  }
+
+  /**
+   * Tests reading listing analytics.
+   */
+  public function testFetchStats(): void {
+    $plugin = $this->plugin(Atom::class, 'atom', self::KEYS, [
+      self::json(['total_views' => 12, 'total_shortlists' => 2, 'total_offers' => 1]),
+      self::json(['message' => 'Domain name should be there in the request']),
+    ]);
+    $this->assertInstanceOf(ListingStatsInterface::class, $plugin);
+    $this->assertEquals(['a.com' => new ListingStats(12, NULL, 1, 2)], $plugin->fetchStats(['a.com', 'b.com']), 'A domain Atom refuses is left out.');
+    $this->assertSame('GET https://www.atom.com/api/marketplace/domain-analytics', $this->call(0));
+  }
 
   /**
    * Tests that Atom premium names are left to Atom.
@@ -105,6 +149,7 @@ class AtomTest extends ProviderTestBase {
           [
             'domain_name' => 'A.com',
             'status' => 'active',
+            'created_date' => '2019-01-02 03:04:05',
             'expiry_date' => '2027-05-06 07:08:09',
             'auto_renew' => TRUE,
             'transfer_locked' => FALSE,
@@ -120,7 +165,7 @@ class AtomTest extends ProviderTestBase {
       ]),
     ]);
     $this->assertEquals([
-      'a.com' => new Registration('a.com', 1809587289, TRUE, TRUE, 'active'),
+      'a.com' => new Registration('a.com', 1809587289, TRUE, TRUE, 'active', registered: 1546398245),
       'b.com' => new Registration('b.com', NULL, FALSE),
     ], $plugin->fetchRegistrations());
     $this->assertSame('GET https://www.atom.com/api/registrar/v1/domains', $this->call(0));

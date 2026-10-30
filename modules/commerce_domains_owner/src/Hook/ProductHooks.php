@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_owner\Hook;
 
 use Drupal\commerce_domains\Availability;
+use Drupal\commerce_domains_owner\Plugin\Commerce\EntityTrait\DomainCosts;
 use Drupal\commerce_domains_owner\Renewals;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Entity\ContentEntityFormInterface;
@@ -24,7 +25,7 @@ class ProductHooks {
   // The domain's own fields and those of the costs trait, by the form group
   // they go in.
   protected const GROUPS = [
-    'domain_details' => ['domain_expires', 'domain_registrar', 'domain_internal', 'atom_premium'],
+    'domain_details' => ['domain_expires', 'domain_registered', 'domain_registrar', 'domain_internal', 'atom_premium'],
     'domain_costs' => [
       'domain_purchase_price',
       'domain_purchase_date',
@@ -33,6 +34,7 @@ class ProductHooks {
       'domain_renewal',
     ],
     'domain_sale' => ['domain_sale_price', 'domain_sold', 'domain_sold_via', 'domain_lease_months'],
+    'domain_valuation' => DomainCosts::APPRAISAL_FIELDS,
   ];
 
   public function __construct(
@@ -78,6 +80,19 @@ class ProductHooks {
       '#group' => 'domain_owner',
       '#weight' => 31,
     ];
+    $form['domain_valuation'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Valuation'),
+      '#description' => $this->t('From an appraisal service, refreshed every few months; see the portfolio settings.'),
+      '#group' => 'domain_owner',
+      '#weight' => 32,
+    ];
+    // Appraisals aren't edited: a disabled element keeps its stored value.
+    foreach (DomainCosts::APPRAISAL_FIELDS as $field) {
+      if (isset($form[$field])) {
+        $form[$field]['#disabled'] = TRUE;
+      }
+    }
     foreach (self::GROUPS as $group => $fields) {
       // Without access to its fields, a group would show empty.
       $form[$group]['#access'] = FALSE;
@@ -88,7 +103,7 @@ class ProductHooks {
         }
       }
     }
-    $form['domain_owner']['#access'] = $form['domain_details']['#access'] || $form['domain_costs']['#access'] || $form['domain_sale']['#access'];
+    $form['domain_owner']['#access'] = $form['domain_details']['#access'] || $form['domain_costs']['#access'] || $form['domain_sale']['#access'] || $form['domain_valuation']['#access'];
   }
 
   /**

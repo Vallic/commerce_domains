@@ -184,7 +184,10 @@ final class SyncForm extends FormBase {
       $context['results']['sales'][] = new TranslatableMarkup('@provider shows @domain sold: it is now off sale here.', $args + ['@domain' => $name]);
     }
     foreach ($errors as $name => $error) {
-      $context['results']['errors'][] = new TranslatableMarkup('@provider refused @domain: @error', $args + ['@domain' => $name, '@error' => $error]);
+      $context['results']['errors'][] = new TranslatableMarkup('@provider refused @domain: @error', $args + [
+        '@domain' => $name,
+        '@error' => $error,
+      ]);
     }
     $context['message'] = new TranslatableMarkup('@provider done.', $args);
   }

@@ -105,6 +105,7 @@ class DynadotTest extends ProviderTestBase {
       [
         'Name' => 'A.com',
         'Expiration' => '1804136767000',
+        'Registration' => '1467969011000',
         'Locked' => 'yes',
         'RenewOption' => 'auto-renew',
         'Status' => 'active',
@@ -124,7 +125,7 @@ class DynadotTest extends ProviderTestBase {
     ]);
     $this->assertInstanceOf(RegistrarInterface::class, $plugin);
     $this->assertEquals([
-      'a.com' => new Registration('a.com', 1804136767, TRUE, TRUE, 'active', TRUE),
+      'a.com' => new Registration('a.com', 1804136767, TRUE, TRUE, 'active', TRUE, 1467969011),
       'b.com' => new Registration('b.com', 1804136767, FALSE, FALSE, NULL, FALSE),
       'c.com' => new Registration('c.com', NULL),
     ], $plugin->fetchRegistrations());

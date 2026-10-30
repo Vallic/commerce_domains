@@ -53,8 +53,9 @@ final class TestRegistrar extends ProviderPluginBase implements RegistrarInterfa
       throw new ProviderException("Test registrar failed ($fail).", $fail === 'retryable');
     }
     $registrations = [];
+    $registered = $this->state->get('commerce_domains_test.registered', []);
     foreach ($this->state->get('commerce_domains_test.registrations', []) as $name => $expires) {
-      $registrations[$name] = new Registration($name, $expires, TRUE, TRUE, 'active');
+      $registrations[$name] = new Registration($name, $expires, TRUE, TRUE, 'active', registered: $registered[$name] ?? NULL);
     }
     return $names === NULL ? $registrations : array_intersect_key($registrations, array_flip($names));
   }

@@ -11,6 +11,9 @@ use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\Registration;
+use Drupal\commerce_domains\Appraisal;
+use Drupal\commerce_domains\ListingStats;
+use Drupal\commerce_domains\ProviderException;
 
 /**
  * Lists domains on Atom as standard listings.
@@ -28,7 +31,7 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('Atom'),
   description: new TranslatableMarkup('Pushes standard listings through the Atom Seller API, and reads registrations through its Registrar API.'),
 )]
-final class Atom extends MarketplacePluginBase implements RegistrarInterface, CsvExportInterface {
+final class Atom extends MarketplacePluginBase implements RegistrarInterface, CsvExportInterface, AppraisalInterface, ListingStatsInterface {
 
   use RegistrarTrait;
 
@@ -162,6 +165,48 @@ final class Atom extends MarketplacePluginBase implements RegistrarInterface, Cs
   /**
    * {@inheritdoc}
    */
+  public function appraise(string $name): Appraisal {
+    $record = $this->client()->appraise($name);
+    $count = fn(string $key) => is_numeric($record[$key] ?? NULL) ? (int) $record[$key] : NULL;
+    $signals = fn(string $key) => array_values(array_filter((array) ($record[$key] ?? []), 'is_string'));
+    return new Appraisal(
+      name: $name,
+      value: $count('atom_appraisal'),
+      score: is_numeric($record['domain_score'] ?? NULL) ? (float) $record['domain_score'] : NULL,
+      tldCount: $count('tld_taken_count'),
+      positive: $signals('positive_signals'),
+      negative: $signals('negative_signals'),
+    );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function fetchStats(array $names): array {
+    $stats = [];
+    foreach ($names as $name) {
+      try {
+        $record = $this->client()->domainAnalytics($name);
+      }
+      catch (ProviderException $e) {
+        if ($e->retryable) {
+          throw $e;
+        }
+        continue;
+      }
+      $count = fn(string $key) => is_numeric($record[$key] ?? NULL) ? (int) $record[$key] : NULL;
+      $stats[$name] = new ListingStats(
+        views: $count('total_views'),
+        offers: $count('total_offers'),
+        saves: $count('total_shortlists'),
+      );
+    }
+    return $stats;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   protected function registrationRecords(?array $names): iterable {
     $client = $this->registrarClient();
     return self::fewNames($names) ? array_filter(array_map($client->getDomain(...), array_values($names))) : $client->listDomains();
@@ -181,6 +226,7 @@ final class Atom extends MarketplacePluginBase implements RegistrarInterface, Cs
       locked: isset($record['transfer_locked']) ? $record['transfer_locked'] || !empty($record['icann_transfer_lock']) : NULL,
       autoRenew: isset($record['auto_renew']) ? (bool) $record['auto_renew'] : NULL,
       status: isset($record['status']) ? (string) $record['status'] : NULL,
+      registered: self::timestamp($record['created_date'] ?? NULL),
     );
   }
 

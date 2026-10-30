@@ -158,6 +158,14 @@ final class RegistrationsForm extends FormBase {
       ];
       array_splice($build['summary']['#rows'], 1, 0, [$row]);
     }
+    if ($plan->registered) {
+      $row = [
+        $this->t('Registration date to update'),
+        count($plan->registered),
+        $this->t('records when it was registered'),
+      ];
+      array_splice($build['summary']['#rows'], 1, 0, [$row]);
+    }
 
     $date = fn(?int $time) => $time === NULL ? '-' : gmdate('Y-m-d', $time);
     $rows = [];
@@ -175,6 +183,10 @@ final class RegistrationsForm extends FormBase {
     };
     foreach ($plan->autoRenew as $name => [$old, $new]) {
       $change = $this->t('auto-renew: @old → @new', ['@old' => $renews($old), '@new' => $renews($new)]);
+      $rows[] = [$name, $change, $date($plan->registrations[$name]->expires)];
+    }
+    foreach ($plan->registered as $name => [$old, $new]) {
+      $change = $this->t('registered: @old → @new', ['@old' => $date($old), '@new' => $date($new)]);
       $rows[] = [$name, $change, $date($plan->registrations[$name]->expires)];
     }
     foreach ($plan->missing as $name) {

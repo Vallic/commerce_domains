@@ -37,6 +37,9 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
 
   protected const LATER = 1_830_000_000;
 
+  // A registration date.
+  protected const EARLIER = 1_500_000_000;
+
   /**
    * The registrar sync service.
    *
@@ -124,6 +127,28 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $this->assertSame([], $few->missing, 'Names that were not asked about are not missing.');
     $this->assertSame(['parked.com'], $few->unknown);
     $this->assertSame($check, $this->sync->lastCheck('reg'), 'Reading a few names is no whole check.');
+  }
+
+  /**
+   * Tests recording when the registrar says a domain was registered.
+   */
+  public function testRegistered(): void {
+    $provider = $this->createProvider();
+    $this->container->get('state')->set('commerce_domains_test.registered', ['current.com' => self::EARLIER]);
+    $plan = $this->sync->plan($provider);
+    $this->assertSame(['current.com' => [NULL, self::EARLIER]], $plan->registered);
+    $this->assertSame(0, $plan->unchanged, 'Only the date was missing.');
+
+    $this->sync->apply($provider, $plan);
+    $this->assertSame(self::EARLIER, (int) $this->product('current.com')->get('domain_registered')->value);
+    $this->assertSame([], $this->sync->plan($provider)->registered);
+    $this->assertTrue($this->product('renewed.com')->get('domain_registered')->isEmpty(), 'Registrars that say nothing leave it alone.');
+
+    // Like the expiry, the date then follows the registrar.
+    $this->installConfig(['system']);
+    $this->setUpCurrentUser([], [], TRUE);
+    $form = $this->container->get('entity.form_builder')->getForm($this->product('current.com'), 'edit');
+    $this->assertTrue($form['domain_registered']['#disabled']);
   }
 
   /**

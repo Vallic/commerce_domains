@@ -9,6 +9,8 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Clients\AfternicClient;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\ListingStats;
+use Drupal\commerce_domains\ProviderException;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -24,7 +26,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   label: new TranslatableMarkup('Afternic'),
   description: new TranslatableMarkup('Pushes listings through the Afternic Portfolio API.'),
 )]
-final class Afternic extends MarketplacePluginBase implements CsvExportInterface {
+final class Afternic extends MarketplacePluginBase implements CsvExportInterface, ListingStatsInterface {
 
   protected const CREDENTIALS = [
     'api_key' => 'AFTERNIC_API_KEY',
@@ -62,6 +64,9 @@ final class Afternic extends MarketplacePluginBase implements CsvExportInterface
   // ON_HOLD is a purchase under way (Afternic's "pending sale"), SOLD a done
   // one.
   protected const LOCKED_STATUSES = ['ON_HOLD', 'SOLD'];
+
+  // The days of views and leads counted.
+  protected const STATS_DAYS = 30;
 
   /**
    * The UUID generator, for request IDs.
@@ -148,6 +153,32 @@ final class Afternic extends MarketplacePluginBase implements CsvExportInterface
       }
     }
     return array_column($domains, NULL, 'name');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function fetchStats(array $names): array {
+    $stats = [];
+    foreach ($names as $name) {
+      try {
+        $days = $this->client()->domainStats($name, self::STATS_DAYS);
+      }
+      catch (ProviderException $e) {
+        if ($e->retryable) {
+          throw $e;
+        }
+        continue;
+      }
+      if ($days !== NULL) {
+        $stats[$name] = new ListingStats(
+          views: array_sum(array_map('intval', array_column($days, 'views'))),
+          leads: array_sum(array_map('intval', array_column($days, 'leads'))),
+          days: self::STATS_DAYS,
+        );
+      }
+    }
+    return $stats;
   }
 
   /**

@@ -74,3 +74,15 @@ function commerce_domains_marketplace_update_11004(): void {
     $schema->addField(ListingRecorder::TABLE, 'sold', ListingRecorder::schema()['fields']['sold']);
   }
 }
+
+/**
+ * Records the views, leads and offers of each domain's listings.
+ */
+function commerce_domains_marketplace_update_11005(): void {
+  $schema = \Drupal::database()->schema();
+  foreach (ListingRecorder::statsSchema() as $field => $spec) {
+    if (!$schema->fieldExists(ListingRecorder::TABLE, $field)) {
+      $schema->addField(ListingRecorder::TABLE, $field, $spec);
+    }
+  }
+}

@@ -105,6 +105,11 @@ class RegistrarSync {
           $plan->autoRenew[$name] = [$auto_renew, $registration->autoRenew];
           $changed = TRUE;
         }
+        $registered = self::recordedTime($product, 'domain_registered');
+        if ($registration->registered !== NULL && $product->hasField('domain_registered') && $registered !== $registration->registered) {
+          $plan->registered[$name] = [$registered, $registration->registered];
+          $changed = TRUE;
+        }
         if ($changed) {
           $plan->products[$name][] = (int) $product->id();
         }
@@ -116,7 +121,7 @@ class RegistrarSync {
     }
 
     // A domain with one stale listing among several still needs the update.
-    $plan->unchanged = count(array_diff_key($unchanged, $plan->expires, $plan->autoRenew));
+    $plan->unchanged = count(array_diff_key($unchanged, $plan->expires, $plan->autoRenew, $plan->registered));
     $plan->missing = array_values($plan->missing);
     $plan->unknown = array_keys(array_diff_key($plan->registrations, $seen));
     if ($names === NULL) {
@@ -177,7 +182,7 @@ class RegistrarSync {
     if (!$provider->status()) {
       throw new ProviderException(sprintf('%s is disabled.', $provider->label()));
     }
-    $names = array_unique(array_merge(array_keys($plan->expires), array_keys($plan->elsewhere), array_keys($plan->autoRenew)));
+    $names = array_unique(array_merge(array_keys($plan->expires), array_keys($plan->elsewhere), array_keys($plan->autoRenew), array_keys($plan->registered)));
 
     $storage = $this->entityTypeManager->getStorage('commerce_product');
     $updated = 0;
@@ -218,6 +223,9 @@ class RegistrarSync {
     }
     if ($registration->autoRenew !== NULL && $product->hasField('domain_auto_renew')) {
       $values['domain_auto_renew'] = (int) $registration->autoRenew;
+    }
+    if ($registration->registered !== NULL && $product->hasField('domain_registered')) {
+      $values['domain_registered'] = $registration->registered;
     }
     $changed = FALSE;
     foreach ($values as $field => $value) {
@@ -266,6 +274,16 @@ class RegistrarSync {
       }
       $this->state->set($key, $now);
     }
+  }
+
+  /**
+   * Returns a product's recorded date, NULL when it has none.
+   */
+  protected static function recordedTime(ProductInterface $product, string $field): ?int {
+    if (!$product->hasField($field) || $product->get($field)->isEmpty()) {
+      return NULL;
+    }
+    return (int) $product->get($field)->value;
   }
 
   /**

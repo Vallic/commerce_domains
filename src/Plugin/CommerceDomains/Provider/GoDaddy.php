@@ -56,6 +56,7 @@ final class GoDaddy extends ProviderPluginBase implements RegistrarInterface {
       locked: isset($record['transferLock']) ? (bool) $record['transferLock'] : NULL,
       autoRenew: isset($record['autoRenew']) ? (bool) $record['autoRenew'] : NULL,
       status: isset($record['status']) ? strtolower((string) $record['status']) : NULL,
+      registered: self::timestamp($record['createdAt'] ?? NULL),
     );
   }
 

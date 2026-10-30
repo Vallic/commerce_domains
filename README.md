@@ -287,6 +287,19 @@ recorded for products deleted since, and a sale on record isn't acted on
 again. A domain that isn't listed and needn't be has no row. Files from the
 CSV export aren't tracked.
 
+Marketplaces that report it show the interest in each listing beside its
+status, on the overview and as *Views*, *Leads* and *Offers* columns on
+*Marketplace listings*: Afternic's views and leads over the last 30 days,
+and Atom's views, shortlists and offers of all time. Cron reads each listing
+once a day, up to 60 per marketplace each cron run, starting with those
+never read.
+Read some now with Drush:
+
+```bash
+drush cdmst afternic --limit=100
+drush cdmst atom --domains=example.com
+```
+
 Each domain has a *Marketplaces* tab beside *Registrar*: its status on every
 marketplace and whether the CSV files include it, with buttons to check the
 marketplaces again for that domain or push it.
@@ -328,10 +341,17 @@ drush cdrs dynadot
 Turn on *Refresh registration details daily* on the provider to have cron do
 the update once a day.
 
+Syncs also record when the domain was registered, from registrars that say:
+GoDaddy, Namecheap, NameSilo, Dynadot, Spaceship and Atom. After a transfer
+some show the transfer date instead.
+
 Once an enabled registrar API has read the whole account, found the domain
 there and set its expiry date, the date is locked on the product form: it
-follows the registrar. The expiry and auto-renew setting are updated by
-every sync, and whenever the domain's *Registrar* tab reads the registrar.
+follows the registrar. So are the registration date and the auto-renew
+setting once the registrar has set them; turn auto-renew on or off at the
+registrar on the *Expiring soon* page. The expiry, registration date and
+auto-renew setting are updated by every sync, and whenever the domain's
+*Registrar* tab reads the registrar.
 
 A sold domain (Commerce Domains Owner records the sale) is the buyer's to
 manage: it has no *Registrar* tab, and a sync does not count it missing
@@ -592,9 +612,9 @@ installed (turn it on for types added later): the purchase price and date,
 the yearly renewal cost, auto-renew, whether to keep the domain or let it
 expire, and the sale: what it sold for, when, through which marketplace,
 and for a lease to own the number of monthly payments. The product form
-shows them in vertical tabs: *Domain details* (expiry, registrar, internal,
-Atom premium), *Costs and renewal* and *Sale*, the last open once the
-domain sold.
+shows them in vertical tabs: *Domain details* (expiry, registration date,
+registrar, internal, Atom premium), *Costs and renewal*, *Sale*, open once
+the domain sold, and *Valuation*.
 Only people with *View the domain dashboard* or *Manage the domain
 portfolio* see these fields, in forms, Views and JSON:API alike. A sale on
 the site fills in the sale from its order, and cancelling the order clears
@@ -603,6 +623,21 @@ you enter what it brought after commission (for a lease to own, what the
 payments add up to, and their number). Orders on the site are paid at once.
 Auto-renew follows the
 registrar where its API reports it, the way expiry dates do.
+
+- **Appraisals**: with an enabled provider that appraises (Atom, with its
+  seller API token), cron appraises the portfolio: domains never appraised
+  first, then appraisals older than 90 days, up to 50 a day (*Domain
+  portfolio* settings; Atom allows 100 a day on most accounts). Sold domains
+  are skipped. The *Valuation* tab shows the estimate in dollars, the score,
+  how many extensions the same name is registered in, the date, and what
+  raises or lowers the value; Views lists them as fields. A failure, e.g.
+  Atom's limit reached, stops appraisals until the next day. GoDaddy's
+  GoValue API is restricted to GoDaddy's partners, so it isn't supported.
+
+  ```bash
+  drush cdap --limit=20
+  drush cdap --domains=example.com
+  ```
 
 - **Sales and profit** (*Commerce → Domains*): what each sold domain earned,
   and the totals by year. Profit is the sale price minus the purchase price
@@ -677,6 +712,11 @@ Give the API's rate limit in `REQUESTS_PER_MINUTE` to get a setting for it.
   fetch the account's records in `registrationRecords()` and map one to a
   `Registration` in `registration()`. A registrar-only plugin extends
   `ProviderPluginBase`.
+- For listing views, leads and offers, implement `ListingStatsInterface`:
+  `fetchStats()` returns a `ListingStats` per listed domain.
+- For appraisals, implement `AppraisalInterface`: `appraise()` returns an
+  `Appraisal` (value in dollars, score, extensions registered, signals), and
+  throws once the service's daily limit is reached.
 
 Put the HTTP client in `src/Clients`, extending `ApiClient` for retries,
 rate-limit waits and keeping credentials out of error messages.

@@ -22,6 +22,9 @@ final class Registration {
     public readonly ?string $status = NULL,
     // Whether the registrar lists it for sale; NULL when it doesn't say.
     public readonly ?bool $forSale = NULL,
+    // When the registrar's records show it registered, as a Unix time; NULL
+    // when it doesn't say. After a transfer, some show the transfer instead.
+    public readonly ?int $registered = NULL,
   ) {}
 
 }

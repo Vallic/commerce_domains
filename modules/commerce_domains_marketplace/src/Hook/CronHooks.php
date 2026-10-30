@@ -11,7 +11,7 @@ use Drupal\Core\Hook\Attribute\Hook;
  * Cron for Commerce Domains Marketplace.
  *
  * Advanced Queue processes the queue on cron itself; this only adds the
- * hourly sale checks to it.
+ * hourly sale checks and the reads of listing views and leads to it.
  */
 class CronHooks {
 
@@ -25,6 +25,7 @@ class CronHooks {
   #[Hook('cron')]
   public function cron(): void {
     $this->scheduler->queueChecks();
+    $this->scheduler->queueStats();
   }
 
 }

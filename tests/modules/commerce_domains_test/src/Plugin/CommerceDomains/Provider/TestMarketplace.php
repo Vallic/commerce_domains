@@ -6,6 +6,8 @@ namespace Drupal\commerce_domains_test\Plugin\CommerceDomains\Provider;
 
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\ListingStats;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingStatsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplacePluginBase;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\Core\State\StateInterface;
@@ -20,6 +22,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *   "pending" is a sale; "stopped" is only locked.
  * - fail: 'retryable' or 'permanent' to make every call throw.
  * - reject: domains whose save is refused.
+ * - stats: views and leads keyed by domain, over 30 days.
  * - calls: what was called, for assertions.
  *
  * Subclasses keep a marketplace of their own under another STATE_PREFIX.
@@ -28,7 +31,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   id: 'test_marketplace',
   label: new TranslatableMarkup('Test marketplace'),
 )]
-class TestMarketplace extends MarketplacePluginBase {
+class TestMarketplace extends MarketplacePluginBase implements ListingStatsInterface {
 
   // Where the State keys live.
   protected const STATE_PREFIX = 'commerce_domains_test.';
@@ -66,6 +69,20 @@ class TestMarketplace extends MarketplacePluginBase {
   public function buildListing(CatalogItem $item): ?array {
     $price = (int) round($item->price('USD') * $this->priceFactor($item));
     return $price > 0 ? ['price' => $price] : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function fetchStats(array $names): array {
+    $this->failIfAsked();
+    $this->record('stats', $names);
+    $stats = [];
+    $reported = array_intersect_key($this->state->get(static::STATE_PREFIX . 'stats', []), array_flip($names));
+    foreach ($reported as $name => [$views, $leads]) {
+      $stats[$name] = new ListingStats($views, $leads, days: 30);
+    }
+    return $stats;
   }
 
   /**

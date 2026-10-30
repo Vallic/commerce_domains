@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use Drupal\commerce_domains\ListingStats;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Afternic;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingStatsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplacePluginBase;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase;
 use Drupal\commerce_domains\ProviderException;
@@ -141,6 +143,27 @@ class AfternicTest extends ProviderTestBase {
     $this->assertArrayNotHasKey('featured', $sent['b.com']);
 
     $this->assertSame([], $plugin->deleteListings(['c.com']));
+  }
+
+  /**
+   * Tests adding up the last 30 days of views and leads.
+   */
+  public function testFetchStats(): void {
+    $plugin = $this->plugin(Afternic::class, 'afternic', self::KEYS, [
+      self::json([
+        'stats' => [
+          ['date' => '2026-10-01T00:00:00Z', 'leads' => 1, 'views' => 25],
+          ['date' => '2026-10-02T00:00:00Z', 'leads' => 0, 'views' => 5],
+        ],
+      ]),
+      self::json(['message' => 'Not found'], 404),
+      self::json(['message' => 'Invalid domain'], 422),
+    ]);
+    $this->assertInstanceOf(ListingStatsInterface::class, $plugin);
+    $stats = $plugin->fetchStats(['a.com', 'unlisted.com', 'bad.com']);
+    $this->assertEquals(['a.com' => new ListingStats(30, 1, days: 30)], $stats, 'Unlisted and refused domains are left out.');
+    $this->assertSame('GET https://api.afternic.com/v3/aftermarket/customers/my/stats/a.com', $this->call(0));
+    $this->assertSame(['days' => '30'], $this->query(0));
   }
 
   /**

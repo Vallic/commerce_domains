@@ -33,3 +33,6 @@ commerce_domains_owner.settings:
     off_sale_days:
       type: integer
       label: 'Days before its expiry a domain left to expire goes off sale'
+    appraisals_per_day:
+      type: integer
+      label: 'Domains appraised a day'

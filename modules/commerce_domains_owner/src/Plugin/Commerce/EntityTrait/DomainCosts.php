@@ -10,11 +10,12 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\entity\BundleFieldDefinition;
 
 /**
- * Adds what a domain costs to hold, whether to renew it, and its sale.
+ * Adds what a domain costs to hold, whether to renew it, its sale and worth.
  *
  * Together they give the profit of each sold domain; see Costs. The sale
  * fields fill in when the domain sells on the site or a marketplace reports
- * it sold, and can be edited for sales made elsewhere.
+ * it sold, and can be edited for sales made elsewhere. The appraisal fields
+ * are filled in by an appraisal service; see Appraiser.
  */
 #[CommerceEntityTrait(
   id: 'commerce_domains_owner_costs',
@@ -37,6 +38,20 @@ class DomainCosts extends EntityTraitBase {
     'domain_sold_via',
     'domain_lease_months',
     'domain_sale_order',
+    'domain_appraisal',
+    'domain_appraisal_score',
+    'domain_tld_count',
+    'domain_appraised',
+    'domain_appraisal_notes',
+  ];
+
+  // The fields an appraisal fills in; see Appraiser.
+  public const APPRAISAL_FIELDS = [
+    'domain_appraisal',
+    'domain_appraisal_score',
+    'domain_tld_count',
+    'domain_appraised',
+    'domain_appraisal_notes',
   ];
 
   // The longest lease to own taken, in monthly payments.
@@ -143,6 +158,51 @@ class DomainCosts extends EntityTraitBase {
       ->setLabel(new TranslatableMarkup('Sale order'))
       ->setDescription(new TranslatableMarkup('The order the domain sold in on this site.'))
       ->setSetting('unsigned', TRUE);
+
+    // Filled in by Appraiser; shown read-only on the form.
+    $fields['domain_appraisal'] = BundleFieldDefinition::create('commerce_price')
+      ->setLabel(new TranslatableMarkup('Appraisal'))
+      ->setDescription(new TranslatableMarkup("An appraisal service's estimate of what the domain is worth."))
+      ->setDisplayOptions('form', [
+        'type' => 'commerce_price_default',
+        'weight' => 40,
+      ]);
+
+    $fields['domain_appraisal_score'] = BundleFieldDefinition::create('decimal')
+      ->setLabel(new TranslatableMarkup('Appraisal score'))
+      ->setDescription(new TranslatableMarkup("The appraisal service's score of the name, out of 10."))
+      ->setSetting('precision', 4)
+      ->setSetting('scale', 1)
+      ->setDisplayOptions('form', [
+        'type' => 'number',
+        'weight' => 41,
+      ]);
+
+    $fields['domain_tld_count'] = BundleFieldDefinition::create('integer')
+      ->setLabel(new TranslatableMarkup('Extensions registered'))
+      ->setDescription(new TranslatableMarkup('How many extensions the same name is registered in, e.g. 8 when example.com, example.net and six more are taken.'))
+      ->setSetting('unsigned', TRUE)
+      ->setDisplayOptions('form', [
+        'type' => 'number',
+        'weight' => 42,
+      ]);
+
+    $fields['domain_appraised'] = BundleFieldDefinition::create('timestamp')
+      ->setLabel(new TranslatableMarkup('Appraised'))
+      ->setDescription(new TranslatableMarkup('When the appraisal was made.'))
+      ->setDisplayOptions('form', [
+        'type' => 'commerce_domains_optional_timestamp',
+        'weight' => 43,
+      ]);
+
+    $fields['domain_appraisal_notes'] = BundleFieldDefinition::create('string_long')
+      ->setLabel(new TranslatableMarkup('Appraisal signals'))
+      ->setDescription(new TranslatableMarkup('What the appraisal service says raises or lowers the value, one per line.'))
+      ->setDisplayOptions('form', [
+        'type' => 'string_textarea',
+        'weight' => 44,
+        'settings' => ['rows' => 4],
+      ]);
 
     return $fields;
   }

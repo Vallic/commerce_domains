@@ -27,6 +27,15 @@ final class RegistrarPlan {
   public array $autoRenew = [];
 
   /**
+   * Registration dates to update: old and new Unix time, keyed by domain.
+   *
+   * Only for registrars that report the date.
+   *
+   * @var array<string, array{0: int|null, 1: int}>
+   */
+  public array $registered = [];
+
+  /**
    * Product IDs of each domain to update, keyed by domain.
    *
    * @var array<string, int[]>
@@ -76,7 +85,7 @@ final class RegistrarPlan {
    * Whether applying the plan would change nothing.
    */
   public function isEmpty(): bool {
-    return !$this->expires && !$this->elsewhere && !$this->autoRenew;
+    return !$this->expires && !$this->elsewhere && !$this->autoRenew && !$this->registered;
   }
 
 }

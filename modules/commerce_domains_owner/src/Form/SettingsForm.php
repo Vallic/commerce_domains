@@ -117,6 +117,15 @@ class SettingsForm extends ConfigFormBase {
       '#required' => TRUE,
       '#config_target' => 'commerce_domains_owner.settings:off_sale_days',
     ];
+    $form['appraisals_per_day'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Appraise this many domains a day'),
+      '#description' => $this->t("Cron appraises domains never appraised first, then redoes appraisals older than 90 days, up to this many a day. Stay under the appraisal service's daily limit, e.g. Atom's. 0 turns appraisals off."),
+      '#min' => 0,
+      '#max' => 10000,
+      '#required' => TRUE,
+      '#config_target' => 'commerce_domains_owner.settings:appraisals_per_day',
+    ];
     return parent::buildForm($form, $form_state);
   }
 

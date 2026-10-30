@@ -96,6 +96,7 @@ final class Namecheap extends ProviderPluginBase implements DomainManagementInte
       locked: $flag('RegistrarLockStatus'),
       autoRenew: $flag('AutoRenew'),
       status: $flag('IsExpired') ? 'expired' : NULL,
+      registered: self::timestamp($record['Created'] ?? NULL),
     );
   }
 

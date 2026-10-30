@@ -118,13 +118,14 @@ final class DomainRegistrarForm extends FormBase {
     // What the registrar says is the record: keep the product up to date.
     $this->registrarSync->applyRegistration($product, $provider, $registration);
 
-    $expires = $registration->expires ? $this->dateFormatter->format($registration->expires, 'custom', 'Y-m-d') : NULL;
+    $date = fn(?int $time) => $time ? $this->dateFormatter->format($time, 'custom', 'Y-m-d') : $this->t('Unknown');
     $yes_no = fn(?bool $value) => $value === NULL ? $this->t('Unknown') : ($value ? $this->t('Yes') : $this->t('No'));
     $form['details'] = [
       '#type' => 'table',
       '#rows' => [
         [$this->t('Registrar'), $label],
-        [$this->t('Expires'), $expires ?? $this->t('Unknown')],
+        [$this->t('Registered'), $date($registration->registered)],
+        [$this->t('Expires'), $date($registration->expires)],
         [$this->t('Status'), $registration->status ?? $this->t('Unknown')],
         [$this->t('Transfer lock'), $yes_no($registration->locked)],
         [$this->t('Auto-renew'), $yes_no($registration->autoRenew)],

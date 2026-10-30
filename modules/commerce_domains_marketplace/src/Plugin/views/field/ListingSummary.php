@@ -57,7 +57,12 @@ final class ListingSummary extends FieldPluginBase {
         $items[] = [
           '#type' => 'html_tag',
           '#tag' => 'li',
-          '#attributes' => ['class' => ['cd-listing-summary__flag', $value ? 'cd-listing-summary__flag--on' : 'cd-listing-summary__flag--off']],
+          '#attributes' => [
+            'class' => [
+              'cd-listing-summary__flag',
+              $value ? 'cd-listing-summary__flag--on' : 'cd-listing-summary__flag--off',
+            ],
+          ],
           'icon' => [
             '#type' => 'html_tag',
             '#tag' => 'span',
@@ -88,7 +93,14 @@ final class ListingSummary extends FieldPluginBase {
           'details' => [
             '#type' => 'html_tag',
             '#tag' => 'details',
-            'summary' => ['#type' => 'html_tag', '#tag' => 'summary', '#value' => $this->t('@label (@count characters)', ['@label' => $label, '@count' => mb_strlen($value)])],
+            'summary' => [
+              '#type' => 'html_tag',
+              '#tag' => 'summary',
+              '#value' => $this->t('@label (@count characters)', [
+                '@label' => $label,
+                '@count' => mb_strlen($value),
+              ]),
+            ],
             'text' => ['#type' => 'html_tag', '#tag' => 'p', 'value' => ['#plain_text' => $value]],
           ],
         ];
@@ -97,8 +109,18 @@ final class ListingSummary extends FieldPluginBase {
       $items[] = [
         '#type' => 'html_tag',
         '#tag' => 'li',
-        'label' => ['#type' => 'html_tag', '#tag' => 'span', '#attributes' => ['class' => ['cd-listing-summary__label']], 'value' => ['#plain_text' => $label]],
-        'value' => ['#type' => 'html_tag', '#tag' => 'span', '#attributes' => ['class' => ['cd-listing-summary__value']], 'value' => ['#plain_text' => $described]],
+        'label' => [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['cd-listing-summary__label']],
+          'value' => ['#plain_text' => $label],
+        ],
+        'value' => [
+          '#type' => 'html_tag',
+          '#tag' => 'span',
+          '#attributes' => ['class' => ['cd-listing-summary__value']],
+          'value' => ['#plain_text' => $described],
+        ],
       ];
     }
     return [

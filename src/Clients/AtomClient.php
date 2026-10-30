@@ -98,6 +98,44 @@ final class AtomClient extends ApiClient {
   }
 
   /**
+   * Appraises a domain, in or out of the account.
+   *
+   * Counts toward the account's daily appraisals; past them, Atom answers
+   * HTTP 429.
+   *
+   * @return array
+   *   The appraisal, with atom_appraisal in dollars, domain_score,
+   *   tld_taken_count, positive_signals and negative_signals.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function appraise(string $name): array {
+    $response = $this->request('GET', 'domain-appraisal', [RequestOptions::QUERY => ['domain_name' => $name]]);
+    if (!array_key_exists('atom_appraisal', $response)) {
+      $failure = $this->failure($response) ?? (is_string($response['message'] ?? NULL) ? $response['message'] : 'Atom returned no appraisal.');
+      throw new ProviderException($this->redact("Atom GET domain-appraisal: $failure"));
+    }
+    return $response;
+  }
+
+  /**
+   * Fetches a listing's views, shortlists and offers, all time.
+   *
+   * @return array
+   *   Counts as total_views, total_shortlists and total_offers.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function domainAnalytics(string $name): array {
+    $response = $this->request('GET', 'domain-analytics', [RequestOptions::QUERY => ['domain_name' => $name]]);
+    if (!array_key_exists('total_views', $response)) {
+      $failure = $this->failure($response) ?? (is_string($response['message'] ?? NULL) ? $response['message'] : 'Atom returned no analytics.');
+      throw new ProviderException($this->redact("Atom GET domain-analytics: $failure"));
+    }
+    return $response;
+  }
+
+  /**
    * Sends a write and checks the body for a failure reported with HTTP 200.
    *
    * @throws \Drupal\commerce_domains\ProviderException

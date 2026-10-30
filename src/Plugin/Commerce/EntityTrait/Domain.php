@@ -61,6 +61,14 @@ class Domain extends EntityTraitBase {
         'weight' => 11,
       ]);
 
+    $fields['domain_registered'] = BundleFieldDefinition::create('timestamp')
+      ->setLabel(new TranslatableMarkup('Registered'))
+      ->setDescription(new TranslatableMarkup("When the registrar's records show the domain registered. After a transfer, some registrars show the transfer date."))
+      ->setDisplayOptions('form', [
+        'type' => 'commerce_domains_optional_timestamp',
+        'weight' => 11,
+      ]);
+
     $fields['domain_verified'] = BundleFieldDefinition::create('boolean')
       ->setLabel(new TranslatableMarkup('Ownership verified'))
       ->setDescription(new TranslatableMarkup('The seller has proven control of the domain.'))

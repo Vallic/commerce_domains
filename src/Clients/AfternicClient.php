@@ -104,6 +104,25 @@ final class AfternicClient extends ApiClient {
   }
 
   /**
+   * Fetches a listing's daily views and leads.
+   *
+   * @param string $name
+   *   The domain.
+   * @param int $days
+   *   How many days back from today, at most 365.
+   *
+   * @return array[]|null
+   *   One entry a day, with date, views and leads; NULL when the portfolio
+   *   doesn't list the domain.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function domainStats(string $name, int $days): ?array {
+    $response = $this->request('GET', 'stats/' . rawurlencode($name), [RequestOptions::QUERY => ['days' => $days]], [404]);
+    return $response ? ($response['stats'] ?? []) : NULL;
+  }
+
+  /**
    * Collects the failures out of a per-domain batch response.
    *
    * @param string[] $names

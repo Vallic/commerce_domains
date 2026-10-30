@@ -17,6 +17,10 @@ services:
 
   Drupal\commerce_domains_owner\SaleRecorder: ~
 
+  Drupal\commerce_domains_owner\Appraiser:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_owner'
+
   Drupal\commerce_domains_owner\Notifier: ~
 
   Drupal\commerce_domains_owner\Checklist: ~

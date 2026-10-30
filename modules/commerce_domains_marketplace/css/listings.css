@@ -116,3 +116,14 @@
   content: "–";
   color: var(--gin-color-text-light, #55565b);
 }
+
+/* A listing's views, leads and offers, after its status. */
+.commerce-domains-listing__interest {
+  margin-inline-start: 0.375rem;
+  color: var(--gin-color-text-light, #55565b);
+  font-size: 0.8125rem;
+}
+
+.commerce-domains-listing__interest::before {
+  content: "· ";
+}

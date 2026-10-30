@@ -226,6 +226,7 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
       autoRenew: $renew === '' ? NULL : str_contains($renew, 'auto'),
       status: isset($record['Status']) ? (string) $record['Status'] : NULL,
       forSale: in_array($for_sale, ['yes', 'no'], TRUE) ? $for_sale === 'yes' : NULL,
+      registered: is_numeric($record['Registration'] ?? NULL) ? intdiv((int) $record['Registration'], 1000) : NULL,
     );
   }
 

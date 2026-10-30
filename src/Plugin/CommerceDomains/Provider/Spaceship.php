@@ -123,6 +123,7 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
       locked: is_array($statuses) ? in_array('clientTransferProhibited', $statuses, TRUE) : NULL,
       autoRenew: isset($record['autoRenew']) ? (bool) $record['autoRenew'] : NULL,
       status: isset($record['lifecycleStatus']) ? (string) $record['lifecycleStatus'] : NULL,
+      registered: self::timestamp($record['registrationDate'] ?? NULL),
     );
   }
 

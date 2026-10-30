@@ -10,6 +10,8 @@ services:
     arguments:
       $logger: '@logger.channel.commerce_domains_marketplace'
 
+  Drupal\commerce_domains_marketplace\StatsReader: ~
+
   Drupal\commerce_domains_marketplace\SyncScheduler:
     tags:
       - { name: needs_destruction }

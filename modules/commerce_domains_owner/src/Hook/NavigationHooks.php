@@ -42,13 +42,13 @@ class NavigationHooks {
       $links['commerce_domains_owner.dashboard']['title'] = 'Dashboard';
       $links['commerce_domains_owner.dashboard']['weight'] = -50;
       $pages = [
-        'commerce_domains_owner.expiring' => ['Expiring soon', -20],
-        'commerce_domains_owner.profit' => ['Sales and profit', -15],
+        'commerce_domains_owner.expiring' => [new TranslatableMarkup('Expiring soon'), -20],
+        'commerce_domains_owner.profit' => [new TranslatableMarkup('Sales and profit'), -15],
       ];
       foreach ($pages as $id => [$title, $weight]) {
         $links[$id] = [
           'id' => $id,
-          'title' => new TranslatableMarkup($title),
+          'title' => $title,
           'route_name' => $id,
           'parent' => self::OVERVIEW_LINK,
           'menu_name' => $links[self::OVERVIEW_LINK]['menu_name'] ?? 'admin',

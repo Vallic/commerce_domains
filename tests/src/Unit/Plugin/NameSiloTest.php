@@ -140,7 +140,7 @@ class NameSiloTest extends ProviderTestBase {
       self::json(self::reply(['code' => '200', 'detail' => 'Domain is not active, or does not belong to this user'])),
       self::json(self::reply(['code' => '110', 'detail' => 'Invalid API Key'])),
     ]);
-    $this->assertEquals(['a.com' => new Registration('a.com', 1801612800)], $plugin->fetchRegistrations());
+    $this->assertEquals(['a.com' => new Registration('a.com', 1801612800, registered: 1580688000)], $plugin->fetchRegistrations());
     $this->assertEquals(['b.com' => new Registration('b.com', NULL)], $plugin->fetchRegistrations());
     $this->assertEquals(
       ['a.com' => new Registration('a.com', 1801612800, TRUE, FALSE, 'active')],

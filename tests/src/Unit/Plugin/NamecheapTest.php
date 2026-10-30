@@ -68,7 +68,7 @@ class NamecheapTest extends ProviderTestBase {
     ]);
     $registrations = $plugin->fetchRegistrations();
     $this->assertCount(102, $registrations);
-    $this->assertEquals(new Registration('a.com', 1802649600, NULL, FALSE), $registrations['a.com'], 'IsLocked is not the transfer lock.');
+    $this->assertEquals(new Registration('a.com', 1802649600, NULL, FALSE, registered: 1455494400), $registrations['a.com'], 'IsLocked is not the transfer lock.');
     $this->assertSame('expired', $registrations['b.com']->status);
     $this->assertTrue($registrations['b.com']->autoRenew);
 

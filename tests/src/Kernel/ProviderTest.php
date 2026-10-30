@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\AppraisalInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingStatsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
@@ -74,13 +76,17 @@ class ProviderTest extends DomainsKernelTestBase {
     ];
     // Registrars whose API can also change domains.
     $managers = ['dynadot', 'namebright', 'namecheap', 'namesilo', 'porkbun', 'spaceship', 'test_managed_registrar'];
-    $expected = array_unique([...$marketplaces, ...$registrars, ...$csv]);
+    $appraisers = ['atom', 'test_appraiser'];
+    $stats = ['afternic', 'atom', 'test_marketplace'];
+    $expected = array_unique([...$marketplaces, ...$registrars, ...$csv, ...$appraisers]);
     sort($expected);
     $this->assertSame($expected, $ids);
     $this->assertEqualsCanonicalizing($marketplaces, $manager->getPluginIdsWith(MarketplaceInterface::class));
     $this->assertEqualsCanonicalizing($registrars, $manager->getPluginIdsWith(RegistrarInterface::class));
     $this->assertEqualsCanonicalizing($managers, $manager->getPluginIdsWith(DomainManagementInterface::class));
     $this->assertEqualsCanonicalizing($csv, $manager->getPluginIdsWith(CsvExportInterface::class));
+    $this->assertEqualsCanonicalizing($appraisers, $manager->getPluginIdsWith(AppraisalInterface::class));
+    $this->assertEqualsCanonicalizing($stats, $manager->getPluginIdsWith(ListingStatsInterface::class));
 
     foreach ($ids as $id) {
       Provider::create(['id' => $id, 'label' => ucfirst($id), 'plugin' => $id])->save();

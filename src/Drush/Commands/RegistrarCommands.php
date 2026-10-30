@@ -87,6 +87,7 @@ final class RegistrarCommands extends DrushCommands {
       [dt('Expiry to update'), count($plan->expires), ''],
       // Only products that keep it have auto-renew (Commerce Domains Owner).
       ...($plan->autoRenew ? [[dt('Auto-renew to update'), count($plan->autoRenew), '']] : []),
+      ...($plan->registered ? [[dt('Registration date to update'), count($plan->registered), '']] : []),
       [dt('Up to date'), $plan->unchanged, ''],
       [dt('Not in the account'), count($plan->missing), implode(', ', array_slice($plan->missing, 0, 5))],
       [dt('In the account, recorded elsewhere'), count($plan->elsewhere), $elsewhere],
@@ -108,6 +109,10 @@ final class RegistrarCommands extends DrushCommands {
     };
     foreach ($plan->autoRenew as $name => [$old, $new]) {
       $change = dt('auto-renew: @old → @new', ['@old' => $renews($old), '@new' => $renews($new)]);
+      $rows[] = [$name, $change, $date($plan->registrations[$name]->expires)];
+    }
+    foreach ($plan->registered as $name => [$old, $new]) {
+      $change = dt('registered: @old → @new', ['@old' => $date($old), '@new' => $date($new)]);
       $rows[] = [$name, $change, $date($plan->registrations[$name]->expires)];
     }
     foreach ($plan->elsewhere as $name => $registrar) {
