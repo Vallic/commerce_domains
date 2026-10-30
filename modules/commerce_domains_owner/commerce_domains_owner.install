@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Install and uninstall hooks for Commerce Domains Owner.
+ * Install, uninstall and update hooks for Commerce Domains Owner.
  */
 
 declare(strict_types=1);
@@ -68,4 +68,24 @@ function commerce_domains_owner_uninstall(bool $is_syncing): void {
     Notifier::SYNC_FAILURES_KEY,
     Renewals::OFF_SALE_KEY,
   ]);
+}
+
+/**
+ * Adds "Lease to own" to the sale of the domain product types.
+ */
+function commerce_domains_owner_update_11001(): void {
+  $trait = \Drupal::service('plugin.manager.commerce_entity_trait')->createInstance(DomainCosts::ID);
+  $definition = $trait->buildFieldDefinitions()['domain_lease_months'];
+  $field_manager = \Drupal::service('commerce.configurable_field_manager');
+  /** @var \Drupal\commerce_product\Entity\ProductTypeInterface $type */
+  foreach (\Drupal::entityTypeManager()->getStorage('commerce_product_type')->loadMultiple() as $type) {
+    if (!in_array(DomainCosts::ID, $type->getTraits(), TRUE) || FieldConfig::loadByName('commerce_product', $type->id(), 'domain_lease_months')) {
+      continue;
+    }
+    $field = clone $definition;
+    $field->setTargetEntityTypeId('commerce_product');
+    $field->setTargetBundle($type->id());
+    $field->setName('domain_lease_months');
+    $field_manager->createField($field);
+  }
 }

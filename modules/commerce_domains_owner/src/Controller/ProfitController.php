@@ -34,7 +34,7 @@ final class ProfitController implements ContainerInjectionInterface {
       'formula' => [
         '#markup' => '<p>' . $this->t('Profit is what a domain sold for, minus what it cost you, minus the renewals you paid while you held it.') . '</p><p>'
         . $this->t('Renewals paid is the yearly renewal cost times the renewals between the purchase and the sale: one on each anniversary of the expiry date, or of the purchase date for a domain without one. Without a purchase date no renewals count, and without a renewal cost they cost nothing. Costs in another currency than the sale are converted at the current exchange rates of Commerce Exchanger, when it is installed.') . '</p><p>'
-        . $this->t('Sales on this site fill in the price from the order. For a sale elsewhere, enter what you received after commission on the domain.') . '</p>',
+        . $this->t('Sales on this site fill in the price from the order. For a sale elsewhere, enter what you received after commission on the domain. For a lease to own, enter what the payments add up to after commission, and their number: the sale counts in the year it started.') . '</p>',
       ],
       'totals' => $this->salesReport->totalsTable(),
       'sales' => $this->salesReport->table($this->salesReport->soldIds()),

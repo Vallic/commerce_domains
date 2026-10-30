@@ -188,10 +188,17 @@ class CostsTest extends OwnerKernelTestBase {
     ]);
     $this->createDomain('NoPrice.com', 1000, ['domain_sold' => $date('2026-03-01')]);
     $this->createDomain('Held.com');
+    $this->createDomain('Leased.com', 1000, [
+      'domain_purchase_price' => new Price('10', 'USD'),
+      'domain_sale_price' => new Price('3600', 'USD'),
+      'domain_sold' => $date('2024-10-15'),
+      'domain_sold_via' => 'afternic',
+      'domain_lease_months' => 36,
+    ]);
 
     $report = $this->container->get(SalesReport::class);
     $ids = $report->soldIds(10);
-    $this->assertCount(3, $ids, 'Domains not sold are left out.');
+    $this->assertCount(4, $ids, 'Domains not sold are left out.');
     $table = $report->table($ids);
     $rows = array_values($table['#rows']);
     $this->assertSame('NoPrice.com', (string) $rows[0][0]['data']['#title'], 'Latest sale first.');
@@ -199,10 +206,16 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertSame('This site, order 7', (string) $rows[2][2]['data']['#title']);
     $this->assertSame('$900.00', $rows[2][6]);
     $this->assertSame('No sale price.', (string) $rows[0][6]['data']['#markup']);
+    $this->assertSame('$500.00', $rows[1][3], 'Paid at once.');
+    // A lease to own counts its payments in full, and says when it ends.
+    $this->assertSame('$3,600.00, lease to own over 36 months to 2027-10', $rows[3][3]);
+    $this->assertSame('$3,590.00', $rows[3][6]);
 
     $totals = $report->totals();
-    $this->assertSame([2026, 2025], array_keys($totals));
+    $this->assertSame([2026, 2025, 2024], array_keys($totals));
     $this->assertSame(2, $totals[2026]['sales']);
+    $this->assertSame(0, $totals[2026]['leases']);
+    $this->assertSame(1, $totals[2024]['leases']);
     $this->assertSame(1, $totals[2026]['unknown']);
     $this->assertEquals(['USD' => new Price('450', 'USD')], $totals[2026]['profit']);
     $this->assertEquals(['USD' => new Price('1000', 'USD')], $totals[2025]['revenue']);

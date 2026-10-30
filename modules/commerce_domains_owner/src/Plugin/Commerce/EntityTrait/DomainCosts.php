@@ -35,8 +35,12 @@ class DomainCosts extends EntityTraitBase {
     'domain_sale_price',
     'domain_sold',
     'domain_sold_via',
+    'domain_lease_months',
     'domain_sale_order',
   ];
+
+  // The longest lease to own taken, in monthly payments.
+  public const MAX_LEASE_MONTHS = 120;
 
   // The renewal decisions. Without one, the domain is undecided.
   public const KEEP = 'keep';
@@ -118,6 +122,19 @@ class DomainCosts extends EntityTraitBase {
       ->setDisplayOptions('form', [
         'type' => 'options_select',
         'weight' => 37,
+      ]);
+
+    // Empty for a sale paid at once.
+    $fields['domain_lease_months'] = BundleFieldDefinition::create('integer')
+      ->setLabel(new TranslatableMarkup('Lease to own'))
+      ->setDescription(new TranslatableMarkup('For a lease to own, the number of monthly payments; Sold for is then what they add up to. Empty for a sale paid at once.'))
+      ->setSetting('unsigned', TRUE)
+      ->setSetting('min', 1)
+      ->setSetting('max', self::MAX_LEASE_MONTHS)
+      ->setSetting('suffix', ' months')
+      ->setDisplayOptions('form', [
+        'type' => 'number',
+        'weight' => 38,
       ]);
 
     // Set with the sale on this site, so a cancelled order undoes it. Not on

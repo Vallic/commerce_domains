@@ -553,12 +553,15 @@ Commerce Domains Owner (submodule) adds a *Domain costs and sale* trait,
 turned on for the product types that sell domains when the module is
 installed (turn it on for types added later): the purchase price and date,
 the yearly renewal cost, auto-renew, whether to keep the domain or let it
-expire, and the sale: what it sold for, when, and through which marketplace.
+expire, and the sale: what it sold for, when, through which marketplace,
+and for a lease to own the number of monthly payments.
 Only people with *View the domain dashboard* or *Manage the domain
 portfolio* see these fields, in forms, Views and JSON:API alike. A sale on
 the site fills in the sale from its order, and cancelling the order clears
 it; a sale a marketplace reports fills in the date and the marketplace, and
-you enter what it brought after commission. Auto-renew follows the
+you enter what it brought after commission (for a lease to own, what the
+payments add up to, and their number). Orders on the site are paid at once.
+Auto-renew follows the
 registrar where its API reports it, the way expiry dates do.
 
 - **Sales and profit** (*Commerce → Domains*): what each sold domain earned,
@@ -567,7 +570,10 @@ registrar where its API reports it, the way expiry dates do.
   the renewals while the domain was held: one on each anniversary of its
   expiry date (or of its purchase date, without one) between the purchase
   and the sale. Costs in another currency than the sale are converted at
-  Commerce Exchanger's rates, when it is installed.
+  Commerce Exchanger's rates, when it is installed. A lease to own counts
+  in full in the year it started, with the month its payments end; if the
+  buyer stops paying, clear the sale fields and put the domain back on
+  sale.
 - **Expiring soon**: the domains that expire within 60 days, and those that
   expired in the last 30, which registrars still renew. *Keep* or *Let
   expire* each one. A domain left to expire goes off sale (its product is

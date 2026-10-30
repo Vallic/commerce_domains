@@ -66,6 +66,7 @@ class MarketplaceNotificationsTest extends OwnerKernelTestBase {
     $this->assertSame('Sold on Afternic: Market.com', (string) $mails[0]['subject']);
     $body = self::body($mails[0]);
     $this->assertStringContainsString('Afternic reports Market.com as SOLD.', $body);
+    $this->assertStringContainsString('for a lease to own the number of monthly payments', $body);
     $this->assertStringContainsString($product->toUrl('edit-form', ['absolute' => TRUE])->toString(), $body);
     $product = $this->reload($product);
     $this->assertSame($this->now, (int) $product->get('domain_sold')->value);

@@ -131,7 +131,8 @@ class NotificationsTest extends OwnerKernelTestBase {
     // Placed orders wait for validation, and can be cancelled meanwhile.
     OrderType::load('default')->setWorkflowId('order_default_validation')->save();
     $this->createProvider('dynadot');
-    $sold = $this->createDomain('Sold.com', 1500, ['domain_registrar' => 'dynadot']);
+    // Left from a lease to own the buyer stopped paying.
+    $sold = $this->createDomain('Sold.com', 1500, ['domain_registrar' => 'dynadot', 'domain_lease_months' => 12]);
     $other = $this->createDomain('Other.com', 500);
     $order = $this->createOrder([$sold, $other]);
     (new Transfer(Transfer::PUSH, 'ana-at-dynadot'))->toOrder($order);
@@ -153,11 +154,12 @@ class NotificationsTest extends OwnerKernelTestBase {
     $this->assertEquals(new Price('1500', 'USD'), Costs::price($product, 'domain_sale_price'));
     $this->assertSame((int) $order->id(), (int) $product->get('domain_sale_order')->value);
     $this->assertTrue($product->get('domain_sold_via')->isEmpty());
+    $this->assertTrue($product->get('domain_lease_months')->isEmpty(), 'Orders are paid at once.');
 
     // Cancelling the order undoes the sale.
     $this->transition(Order::load($order->id()), 'cancel');
     $product = $this->reload($sold);
-    foreach (['domain_sold', 'domain_sale_price', 'domain_sale_order'] as $field) {
+    foreach (['domain_sold', 'domain_sale_price', 'domain_lease_months', 'domain_sale_order'] as $field) {
       $this->assertTrue($product->get($field)->isEmpty(), $field);
     }
 

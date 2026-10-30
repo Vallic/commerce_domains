@@ -102,7 +102,7 @@ class OwnerHooks {
     $paragraphs = [
       $this->t('@provider reports @domain as @status.', $args, $options),
       $params['url'] !== ''
-        ? $this->t("Enter what you received on the domain's Sold for field to see its profit:\n@url", $args, $options)
+        ? $this->t("Enter what you received on the domain's Sold for field to see its profit, and for a lease to own the number of monthly payments:\n@url", $args, $options)
         : $this->t('It is no longer in the catalog.', $args, $options),
     ];
     return [$this->t('Sold on @provider: @domain', $args, $options), $paragraphs];

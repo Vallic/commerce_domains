@@ -27,7 +27,7 @@ class ProductHooks {
       'domain_auto_renew',
       'domain_renewal',
     ],
-    'domain_sale' => ['domain_sale_price', 'domain_sold', 'domain_sold_via'],
+    'domain_sale' => ['domain_sale_price', 'domain_sold', 'domain_sold_via', 'domain_lease_months'],
   ];
 
   public function __construct(

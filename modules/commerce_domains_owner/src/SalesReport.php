@@ -71,7 +71,7 @@ class SalesReport {
         ['data' => $product->toLink()->toRenderable()],
         $this->dateFormatter->format((int) $product->get('domain_sold')->value, 'custom', 'Y-m-d'),
         ['data' => $this->channel($product)],
-        $this->money($profit->salePrice),
+        $this->soldFor($product, $profit->salePrice),
         $this->money($profit->purchasePrice),
         $profit->renewalsPaid
           ? $this->formatPlural($profit->renewals, '@paid (1 renewal)', '@paid (@count renewals)', $paid)
@@ -98,9 +98,10 @@ class SalesReport {
   /**
    * Adds up the sales of every sold domain, by year and currency.
    *
-   * @return array<int, array{sales: int, unknown: int, revenue: \Drupal\commerce_price\Price[], profit: \Drupal\commerce_price\Price[]}>
+   * @return array<int, array{sales: int, leases: int, unknown: int, revenue: \Drupal\commerce_price\Price[], profit: \Drupal\commerce_price\Price[]}>
    *   Totals keyed by year, latest first. Revenue and profit are keyed by
-   *   currency; unknown counts the sales without a profit.
+   *   currency; leases counts the leases to own among the sales, unknown
+   *   the sales without a profit.
    */
   public function totals(): array {
     $storage = $this->entityTypeManager->getStorage('commerce_product');
@@ -110,8 +111,11 @@ class SalesReport {
       /** @var \Drupal\commerce_product\Entity\ProductInterface $product */
       foreach ($storage->loadMultiple($chunk) as $product) {
         $year = (int) $this->dateFormatter->format((int) $product->get('domain_sold')->value, 'custom', 'Y');
-        $totals[$year] ??= ['sales' => 0, 'unknown' => 0, 'revenue' => [], 'profit' => []];
+        $totals[$year] ??= ['sales' => 0, 'leases' => 0, 'unknown' => 0, 'revenue' => [], 'profit' => []];
         $totals[$year]['sales']++;
+        if (self::leaseMonths($product)) {
+          $totals[$year]['leases']++;
+        }
         $profit = $this->costs->profit($product);
         if ($profit->salePrice) {
           self::addTo($totals[$year]['revenue'], $profit->salePrice);
@@ -139,6 +143,7 @@ class SalesReport {
       $rows[] = [
         (string) $year,
         $total['sales'],
+        $total['leases'] ?: '',
         $amounts($total['revenue']),
         $amounts($total['profit']),
         $total['unknown'] ?: '',
@@ -149,6 +154,7 @@ class SalesReport {
       '#header' => [
         $this->t('Year'),
         $this->t('Domains sold'),
+        $this->t('Leases to own'),
         $this->t('Sold for'),
         $this->t('Profit'),
         $this->t('Without a profit'),
@@ -169,6 +175,31 @@ class SalesReport {
     }
     $provider = $product->get('domain_sold_via')->entity;
     return ['#plain_text' => $provider ? $provider->label() : $this->t('Elsewhere')];
+  }
+
+  /**
+   * Says what a domain sold for, with the term of a lease to own.
+   */
+  public function soldFor(ProductInterface $product, ?Price $price): string {
+    $months = self::leaseMonths($product);
+    if (!$months) {
+      return $this->money($price);
+    }
+    $sold = new \DateTimeImmutable('@' . (int) $product->get('domain_sold')->value);
+    $args = [
+      '@price' => $this->money($price),
+      '@ends' => $this->dateFormatter->format($sold->modify(sprintf('+%d months', $months))->getTimestamp(), 'custom', 'Y-m'),
+    ];
+    return $price
+      ? (string) $this->formatPlural($months, '@price, lease to own over 1 month to @ends', '@price, lease to own over @count months to @ends', $args)
+      : (string) $this->formatPlural($months, 'Lease to own over 1 month to @ends', 'Lease to own over @count months to @ends', $args);
+  }
+
+  /**
+   * Returns the monthly payments of a domain's lease to own, or 0.
+   */
+  public static function leaseMonths(ProductInterface $product): int {
+    return $product->hasField('domain_lease_months') ? (int) $product->get('domain_lease_months')->value : 0;
   }
 
   /**

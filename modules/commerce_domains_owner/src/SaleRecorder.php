@@ -16,8 +16,8 @@ use Drupal\commerce_product\Entity\ProductVariationInterface;
  *
  * A sale on this site comes from its order, which a cancelled order undoes.
  * A sale a marketplace reports gets the date and the marketplace; the owner
- * enters what it brought. Sale records aren't edits, so the product keeps
- * its changed time.
+ * enters what it brought, and the payments of a lease to own. Sale records
+ * aren't edits, so the product keeps its changed time.
  */
 class SaleRecorder {
 
@@ -45,6 +45,10 @@ class SaleRecorder {
         $product->set('domain_sold', $time)
           ->set('domain_sold_via', NULL)
           ->set('domain_sale_order', $order->id());
+        // Orders are paid at once.
+        if ($product->hasField('domain_lease_months')) {
+          $product->set('domain_lease_months', NULL);
+        }
       }
       $product->set('domain_sale_price', $price);
       $this->save($product);
@@ -76,8 +80,10 @@ class SaleRecorder {
     $undone = [];
     foreach (self::domainItems($order) as [, $product]) {
       if ($this->isSaleOf($product, $order)) {
-        foreach (['domain_sold', 'domain_sale_price', 'domain_sold_via', 'domain_sale_order'] as $field) {
-          $product->set($field, NULL);
+        foreach (['domain_sold', 'domain_sale_price', 'domain_sold_via', 'domain_lease_months', 'domain_sale_order'] as $field) {
+          if ($product->hasField($field)) {
+            $product->set($field, NULL);
+          }
         }
         $this->save($product);
         $undone[] = $product;
