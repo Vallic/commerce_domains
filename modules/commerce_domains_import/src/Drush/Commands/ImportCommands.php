@@ -150,7 +150,7 @@ final class ImportCommands extends DrushCommands {
       buyNow: (bool) $options['buy-now'],
       offers: (bool) $options['offers'],
       published: !$options['unpublished'],
-      internal: (bool) $options['internal'],
+      internal: (bool) ($options['internal'] ?? FALSE),
       existing: $options['update'] ? ImportOptions::UPDATE : ImportOptions::SKIP,
       lookupRegistrars: (bool) $options['lookup-registrars'],
       dryRun: (bool) $options['dry-run'],
