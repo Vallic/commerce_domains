@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_owner\Hook;
 
+use Drupal\commerce_domains\Availability;
 use Drupal\commerce_domains_owner\Renewals;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Entity\ContentEntityFormInterface;
@@ -13,6 +14,8 @@ use Drupal\Core\StringTranslation\StringTranslationTrait;
 
 /**
  * Groups the cost fields on the product form, and follows decisions.
+ *
+ * A sale entered by hand takes the domain off sale.
  */
 class ProductHooks {
 
@@ -32,6 +35,7 @@ class ProductHooks {
 
   public function __construct(
     protected Renewals $renewals,
+    protected Availability $availability,
   ) {}
 
   /**
@@ -78,6 +82,24 @@ class ProductHooks {
   #[Hook('commerce_product_presave')]
   public function productPresave(ProductInterface $product): void {
     $this->renewals->restore($product);
+  }
+
+  /**
+   * Implements hook_ENTITY_TYPE_update() for commerce_product.
+   *
+   * Takes a domain off sale once its sale is entered by hand, so the
+   * marketplace syncs its save queued remove its listings. Sales recorded
+   * from an order or a marketplace leave that to them.
+   */
+  #[Hook('commerce_product_update')]
+  public function productUpdate(ProductInterface $product): void {
+    if ($product->isSyncing() || !$product->hasField('domain_sold') || $product->get('domain_sold')->isEmpty()) {
+      return;
+    }
+    $original = $product->getOriginal();
+    if ($original instanceof ProductInterface && $original->get('domain_sold')->isEmpty()) {
+      $this->availability->markProductSold($product);
+    }
   }
 
   /**

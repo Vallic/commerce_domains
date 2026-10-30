@@ -71,6 +71,17 @@ class Domain extends EntityTraitBase {
         'settings' => ['display_label' => TRUE],
       ]);
 
+    // Not for sale, so its product stays unpublished; see Availability.
+    $fields['domain_internal'] = BundleFieldDefinition::create('boolean')
+      ->setLabel(new TranslatableMarkup('Internal'))
+      ->setDescription(new TranslatableMarkup('A domain you keep for your own use: never for sale, on this site or on marketplaces, so it stays unpublished. Renewals and registrar checks still count it.'))
+      ->setDefaultValue(FALSE)
+      ->setDisplayOptions('form', [
+        'type' => 'boolean_checkbox',
+        'weight' => 13,
+        'settings' => ['display_label' => TRUE],
+      ]);
+
     return $fields;
   }
 

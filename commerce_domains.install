@@ -54,3 +54,23 @@ function commerce_domains_update_11002(): void {
     $config->setData($data)->save();
   }
 }
+
+/**
+ * Adds "Internal" to the domain product types.
+ */
+function commerce_domains_update_11003(): void {
+  $trait = \Drupal::service('plugin.manager.commerce_entity_trait')->createInstance('commerce_domains_domain');
+  $definition = $trait->buildFieldDefinitions()['domain_internal'];
+  $field_manager = \Drupal::service('commerce.configurable_field_manager');
+  /** @var \Drupal\commerce_product\Entity\ProductTypeInterface $type */
+  foreach (\Drupal::entityTypeManager()->getStorage('commerce_product_type')->loadMultiple() as $type) {
+    if (!in_array('commerce_domains_domain', $type->getTraits(), TRUE) || FieldConfig::loadByName('commerce_product', $type->id(), 'domain_internal')) {
+      continue;
+    }
+    $field = clone $definition;
+    $field->setTargetEntityTypeId('commerce_product');
+    $field->setTargetBundle($type->id());
+    $field->setName('domain_internal');
+    $field_manager->createField($field);
+  }
+}

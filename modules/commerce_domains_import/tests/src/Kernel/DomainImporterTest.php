@@ -82,13 +82,13 @@ class DomainImporterTest extends ImportKernelTestBase {
   public function testCsv(): void {
     Provider::create(['id' => 'dynadot', 'label' => 'Dynadot'])->save();
     Provider::create(['id' => 'afternic', 'label' => 'Afternic', 'plugin' => 'afternic'])->save();
-    $csv = "Domain Name,Selling Price,Currency,Buy Now,Offers,Min Offer,Description,Registrar,Expires,Premium,Score\n"
-      . "One.com,\"5,000\",EUR,no,yes,2000,The first,Dynadot,2027-03-01,yes,9.5\n"
-      . "two.com,100,,,,,,,,,1\n"
-      . "three.com,100,,,,,,Afternic,,,\n"
-      . "four.com,100,,maybe,,,,,,,\n"
-      . "refused.com,100,,,,,,,,,\n"
-      . "five.com,100,,,,,,DYNADOT,,,\n";
+    $csv = "Domain Name,Selling Price,Currency,Buy Now,Offers,Min Offer,Description,Registrar,Expires,Premium,Score,Internal\n"
+      . "One.com,\"5,000\",EUR,no,yes,2000,The first,Dynadot,2027-03-01,yes,9.5,\n"
+      . "two.com,100,,,,,,,,,1,\n"
+      . "three.com,100,,,,,,Afternic,,,,\n"
+      . "four.com,100,,maybe,,,,,,,,\n"
+      . "refused.com,100,,,,,,,,,,\n"
+      . "five.com,100,,,,,,DYNADOT,,,,yes\n";
 
     $events = [];
     $this->container->get('event_dispatcher')->addListener(DomainImportEvent::NAME, function (DomainImportEvent $event) use (&$events) {
@@ -140,6 +140,15 @@ class DomainImporterTest extends ImportKernelTestBase {
     $this->assertTrue((bool) $this->variation('two.com')->get('sale_buy_now')->value, 'New domains take the default terms.');
     $this->assertTrue($this->product('two.com')->get('domain_registrar')->isEmpty());
     $this->assertSame('dynadot', $this->product('five.com')->get('domain_registrar')->target_id);
+    $this->assertTrue((bool) $this->product('five.com')->get('domain_internal')->value);
+    $this->assertFalse($this->product('five.com')->isPublished(), 'Internal domains stay unpublished.');
+    $this->assertFalse((bool) $this->product('two.com')->get('domain_internal')->value);
+
+    // The import can make all its new domains internal.
+    $report = $this->import(ImportParser::parseList("six.com 100\n"), ['internal' => TRUE]);
+    $this->assertSame(['six.com'], $report->created);
+    $this->assertTrue((bool) $this->product('six.com')->get('domain_internal')->value);
+    $this->assertFalse($this->product('six.com')->isPublished());
   }
 
   /**

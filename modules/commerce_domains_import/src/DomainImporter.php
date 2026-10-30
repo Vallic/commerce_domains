@@ -320,6 +320,7 @@ class DomainImporter {
    */
   protected function apply(ImportRow $row, ProductInterface $product, ProductVariationInterface $variation, ImportOptions $options, bool $is_new): void {
     $premium = self::read($row, 'atom_premium', ImportParser::flag(...));
+    $internal = self::read($row, 'internal', ImportParser::flag(...));
     $buy_now = self::read($row, 'buy_now', ImportParser::flag(...));
     $offers = self::read($row, 'offers', ImportParser::flag(...));
     $amount = self::read($row, 'price', ImportParser::amount(...));
@@ -329,6 +330,10 @@ class DomainImporter {
 
     if ($premium !== NULL && $product->hasField('atom_premium')) {
       $product->set('atom_premium', $premium);
+    }
+    // Internal domains go unpublished when saved.
+    if ($product->hasField('domain_internal') && ($internal !== NULL || $is_new)) {
+      $product->set('domain_internal', $internal ?? $options->internal);
     }
 
     // A price without a currency is in the row's currency, else in the one

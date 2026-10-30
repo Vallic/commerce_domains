@@ -36,6 +36,9 @@ final class ImportOptions {
     public readonly bool $offers = TRUE,
     // Whether new domains are published.
     public readonly bool $published = TRUE,
+    // Whether new domains are internal: kept for the owner's use, never for
+    // sale, and so unpublished.
+    public readonly bool $internal = FALSE,
     // SKIP or UPDATE domains already in the catalog. Updates take the row's
     // price and sale terms; whatever the row leaves out stays as it is.
     public readonly string $existing = self::SKIP,

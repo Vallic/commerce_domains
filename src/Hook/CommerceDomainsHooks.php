@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Hook;
 
+use Drupal\commerce_domains\Availability;
+use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Hook\Attribute\Hook;
+use Drupal\Core\Hook\Order\Order;
 
 /**
  * Hook implementations for Commerce Domains.
@@ -22,6 +25,18 @@ class CommerceDomainsHooks {
     /** @var \Drupal\Core\Entity\EntityTypeInterface[] $entity_types */
     // Only applies to product types with the domain trait.
     $entity_types['commerce_product']->addConstraint('CommerceDomainsDomainTitle');
+  }
+
+  /**
+   * Implements hook_ENTITY_TYPE_presave() for commerce_product.
+   *
+   * Keeps internal domains unpublished, whatever else would publish them.
+   */
+  #[Hook('commerce_product_presave', order: Order::Last)]
+  public function productPresave(ProductInterface $product): void {
+    if (Availability::isInternal($product) && $product->isPublished()) {
+      $product->setUnpublished();
+    }
   }
 
 }

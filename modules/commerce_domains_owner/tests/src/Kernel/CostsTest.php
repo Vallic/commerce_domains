@@ -222,6 +222,23 @@ class CostsTest extends OwnerKernelTestBase {
   }
 
   /**
+   * Tests that a sale entered by hand takes the domain off sale.
+   */
+  public function testSaleByHand(): void {
+    $product = $this->createDomain('Hand.com');
+    $product->set('domain_purchase_price', new Price('10', 'USD'))->save();
+    $this->assertTrue((bool) $this->reload($product)->getVariations()[0]->get('in_stock')->value, 'Other edits leave it on sale.');
+
+    $product->set('domain_sold', self::date('2026-10-01'))->save();
+    $this->assertFalse((bool) $this->reload($product)->getVariations()[0]->get('in_stock')->value);
+
+    // Sales recorded by the site save as syncing, and see to it themselves.
+    $quiet = $this->createDomain('Quiet.com');
+    $quiet->set('domain_sold', self::date('2026-10-01'))->setSyncing(TRUE)->save();
+    $this->assertTrue((bool) $this->reload($quiet)->getVariations()[0]->get('in_stock')->value);
+  }
+
+  /**
    * Tests auto-renew following the registrar, like the expiry date.
    */
   public function testAutoRenewFollowsRegistrar(): void {

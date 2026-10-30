@@ -14,6 +14,9 @@ use Drupal\commerce_domains\Registration;
 /**
  * Lists Unstoppable-registered domains for sale; reads registrations.
  *
+ * The portfolio holds domains added for sale while registered elsewhere
+ * too; registrations are those the domain lookup finds.
+ *
  * Listings take offers above the minimum, and are created with a ten-year
  * expiry rather than the 90 days Unstoppable defaults to. Listings that are
  * mid-sale or awaiting approval are left alone.
@@ -202,21 +205,27 @@ final class Unstoppable extends MarketplacePluginBase implements RegistrarInterf
    */
   protected function registrationRecords(?array $names): iterable {
     $client = $this->client();
-    // Single domains come with the transfer flag; the portfolio list doesn't.
-    return self::fewNames($names) ? $client->getDomains($names) : $client->listDomains();
+    // The portfolio also lists domains only added for sale, registered
+    // elsewhere; looking each up finds just those registered here, with
+    // their transfer flag.
+    if (!self::fewNames($names)) {
+      $names = array_filter(array_map(fn(array $domain) => $domain['name'] ?? NULL, $client->listDomains()), 'is_string');
+    }
+    foreach (array_chunk(array_values($names), UnstoppableClient::BATCH_SIZE) as $chunk) {
+      yield from $client->getDomains($chunk);
+    }
   }
 
   /**
    * {@inheritdoc}
    */
   protected function registration(array $record): ?Registration {
-    // Portfolio records have the dates at the top, single domains under
-    // lifecycle.
-    $name = $record['name'] ?? $record['domain'] ?? NULL;
-    if (!is_string($name)) {
+    // Only records of the domain lookup, which finds registered domains.
+    $name = $record['domain'] ?? NULL;
+    if (!is_string($name) || empty($record['found'])) {
       return NULL;
     }
-    $lifecycle = $record['lifecycle'] ?? $record;
+    $lifecycle = $record['lifecycle'] ?? [];
     // No auto-renewal subscription at all means it won't renew.
     $auto_renew = array_key_exists('autoRenewal', $lifecycle) ? ($lifecycle['autoRenewal']['status'] ?? NULL) === 'active' : NULL;
     $transfer_out = $record['flags']['DNS_TRANSFER_OUT']['status'] ?? NULL;

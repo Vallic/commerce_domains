@@ -35,6 +35,7 @@ class DomainProductTest extends DomainsKernelTestBase {
     'domain_registrar' => 'entity_reference',
     'domain_expires' => 'timestamp',
     'domain_verified' => 'boolean',
+    'domain_internal' => 'boolean',
     'atom_premium' => 'boolean',
   ];
 

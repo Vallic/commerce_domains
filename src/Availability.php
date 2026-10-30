@@ -11,8 +11,9 @@ use Drupal\commerce_product\Entity\ProductVariationInterface;
  * Decides whether a domain is for sale.
  *
  * Published product, active variation, and in stock where the variation has
- * an in_stock field (commerce_escrow's item trait adds one). Sites with
- * another stock model can replace this service.
+ * an in_stock field (commerce_escrow's item trait adds one). Internal
+ * domains never are. Sites with another stock model can replace this
+ * service.
  *
  * A sold domain goes out of stock, or, without stock, its variation is
  * unpublished; either way it is no longer for sale here, and the next
@@ -25,10 +26,17 @@ class Availability {
    * Whether a domain variation is for sale.
    */
   public function isForSale(ProductInterface $product, ProductVariationInterface $variation): bool {
-    if (!$product->isPublished() || !$variation->isPublished()) {
+    if (!$product->isPublished() || !$variation->isPublished() || self::isInternal($product)) {
       return FALSE;
     }
     return !$variation->hasField('in_stock') || (bool) $variation->get('in_stock')->value;
+  }
+
+  /**
+   * Whether a domain is internal: kept for the owner's use, not for sale.
+   */
+  public static function isInternal(ProductInterface $product): bool {
+    return $product->hasField('domain_internal') && (bool) $product->get('domain_internal')->value;
   }
 
   /**

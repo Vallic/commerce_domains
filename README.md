@@ -113,6 +113,11 @@ marketplace sync then removes their listings, at once where pushes are
 automatic. A sale on a marketplace does the same; see
 [Sales on marketplaces](#sales-on-marketplaces).
 
+Domains you keep for your own use are marked *Internal* on the product
+form: never for sale, on the site or on marketplaces, and their product
+stays unpublished whatever publishes it. Renewals and registrar checks
+still count them. Untick it, and publish the product, to sell one.
+
 Marketplaces get the variation price. In other currencies, or to price a
 marketplace differently, choose a price list on the provider
 ([Commerce Pricelist](https://www.drupal.org/project/commerce_pricelist)):
@@ -329,16 +334,17 @@ Import*, for people with *Import domains*, in one of three ways:
 - **Upload a CSV file** with a header row. Columns go by their header, in any
   order and case: `domain` (or *domain name*; required), `price` (or *selling
   price*), `currency`, `buy_now` and `offers` (yes or no), `minimum_offer`,
-  `description`, `registrar` (a provider's ID or name), `expires` (a date)
-  and `atom_premium` (yes or no).
+  `description`, `registrar` (a provider's ID or name), `expires` (a date),
+  and `atom_premium` and `internal` (yes or no).
 - **From a registrar account**: *Read the account* lists the domains a
   registrar provider's account holds that the catalog lacks, read through
   its API; take out the line of any to leave out. They are recorded at that
   registrar with the expiry date the account gives, and marked verified. The
   provider's *Registrations* tab links here when there are such domains.
 
-New domains get the chosen product type, store, sale terms (buy now, offers)
-and published status where their row says nothing. A row without a price
+New domains get the chosen product type, store, sale terms (buy now, offers),
+published status and whether they are internal where their row says
+nothing. A row without a price
 gets the price of the first matching pricing rule (Commerce Domains Pricing),
 else the import's default price. Domains already in the catalog are skipped,
 or updated: the row's price and sale terms replace theirs, and whatever the
@@ -369,6 +375,8 @@ drush cdi names.txt --price=2500 --currency=EUR --no-buy-now
 drush cdi domains.csv --update
 # Import the Dynadot domains the catalog lacks, unpublished.
 drush cdi --from-registrar=dynadot --unpublished
+# Import domains kept for your own use: internal, never for sale.
+drush cdi own.txt --internal
 ```
 
 Sites map their own columns by subscribing to `DomainImportEvent`. It holds

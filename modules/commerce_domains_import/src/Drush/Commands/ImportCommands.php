@@ -53,6 +53,7 @@ final class ImportCommands extends DrushCommands {
   #[CLI\Option(name: 'buy-now', description: 'New domains sell at their price straight away; --no-buy-now makes them take offers only.')]
   #[CLI\Option(name: 'offers', description: 'New domains accept offers; --no-offers turns that off.')]
   #[CLI\Option(name: 'unpublished', description: 'Create new domains unpublished.')]
+  #[CLI\Option(name: 'internal', description: 'Create new domains internal: kept for your own use, never for sale.')]
   #[CLI\Option(name: 'update', description: 'Update the price and sale terms of domains already in the catalog from their row, instead of skipping them.')]
   #[CLI\Option(name: 'lookup-registrars', description: 'For rows without a registrar, look it up in public RDAP and record the provider of that name.')]
   #[CLI\Option(name: 'dry-run', description: 'Report what the import would do, without saving anything.')]
@@ -72,6 +73,7 @@ final class ImportCommands extends DrushCommands {
       'buy-now' => TRUE,
       'offers' => TRUE,
       'unpublished' => FALSE,
+      'internal' => FALSE,
       'update' => FALSE,
       'lookup-registrars' => FALSE,
       'dry-run' => FALSE,
@@ -148,6 +150,7 @@ final class ImportCommands extends DrushCommands {
       buyNow: (bool) $options['buy-now'],
       offers: (bool) $options['offers'],
       published: !$options['unpublished'],
+      internal: (bool) $options['internal'],
       existing: $options['update'] ? ImportOptions::UPDATE : ImportOptions::SKIP,
       lookupRegistrars: (bool) $options['lookup-registrars'],
       dryRun: (bool) $options['dry-run'],

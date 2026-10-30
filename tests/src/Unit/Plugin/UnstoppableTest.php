@@ -21,19 +21,34 @@ class UnstoppableTest extends ProviderTestBase {
   protected const KEYS = ['api_key' => 'ud_mcp_Key1'];
 
   /**
-   * Tests reading the portfolio page by page.
+   * Tests reading the portfolio page by page, then looking its domains up.
+   *
+   * Domains only added for sale, registered elsewhere, are in the portfolio
+   * but not found by the lookup.
    */
   public function testFetchRegistrations(): void {
     $plugin = $this->registrar(Unstoppable::class, 'unstoppable', self::KEYS, [
       self::json([
         'domains' => [
           ['name' => 'A.com', 'expiresAt' => '2027-03-04T00:00:00.000Z', 'autoRenewal' => ['status' => 'active']],
+          ['name' => 'added.com', 'expiresAt' => '2026-11-13T09:12:44.000Z', 'autoRenewal' => NULL],
         ],
-        'pagination' => ['total' => 2, 'hasMore' => TRUE, 'nextOffset' => 100],
+        'pagination' => ['total' => 3, 'hasMore' => TRUE, 'nextOffset' => 100],
       ]),
       self::json([
         'domains' => [['name' => 'b.com', 'autoRenewal' => NULL, 'transferStatus' => 'pending']],
-        'pagination' => ['total' => 2, 'hasMore' => FALSE, 'nextOffset' => NULL],
+        'pagination' => ['total' => 3, 'hasMore' => FALSE, 'nextOffset' => NULL],
+      ]),
+      self::json([
+        'domains' => [
+          [
+            'domain' => 'A.com',
+            'found' => TRUE,
+            'lifecycle' => ['expiresAt' => '2027-03-04T00:00:00.000Z', 'autoRenewal' => ['status' => 'active']],
+          ],
+          ['domain' => 'added.com', 'found' => FALSE, 'error' => 'You do not own domain "added.com"'],
+          ['domain' => 'b.com', 'found' => TRUE, 'lifecycle' => ['autoRenewal' => NULL, 'transferStatus' => 'pending']],
+        ],
       ]),
     ]);
     $this->assertEquals([
@@ -43,6 +58,8 @@ class UnstoppableTest extends ProviderTestBase {
     $this->assertSame('POST https://api.unstoppabledomains.com/mcp/v1/actions/ud_portfolio_list', $this->call(0));
     $this->assertSame(['offset' => 0, 'limit' => 100, 'status' => 'all', 'registryType' => 'dns'], $this->body(0));
     $this->assertSame(100, $this->body(1)['offset']);
+    $this->assertSame('POST https://api.unstoppabledomains.com/mcp/v1/actions/ud_domain_get', $this->call(2));
+    $this->assertSame(['domains' => ['A.com', 'added.com', 'b.com']], $this->body(2));
     $this->assertSame('Bearer ud_mcp_Key1', $this->header(0, 'Authorization'));
   }
 

@@ -52,11 +52,25 @@ class CatalogTest extends DomainsKernelTestBase {
     $this->createDomain('Unpublished.com', 1000, ['status' => FALSE]);
     $this->createDomain('Inactive.com', 1000, [], ['status' => FALSE]);
     $this->createDomain('Sold.com', 1000, [], ['in_stock' => FALSE]);
+    $internal = $this->createDomain('Internal.com', 1000, ['domain_internal' => TRUE]);
 
     $items = $this->catalog->load();
-    $this->assertSame(['sale.com', 'unpublished.com', 'inactive.com', 'sold.com'], array_keys($items));
-    $this->assertSame(['sale.com' => TRUE, 'unpublished.com' => FALSE, 'inactive.com' => FALSE, 'sold.com' => FALSE], array_map(fn(CatalogItem $item) => $item->forSale, $items));
+    $this->assertSame(['sale.com', 'unpublished.com', 'inactive.com', 'sold.com', 'internal.com'], array_keys($items));
+    $this->assertSame([
+      'sale.com' => TRUE,
+      'unpublished.com' => FALSE,
+      'inactive.com' => FALSE,
+      'sold.com' => FALSE,
+      'internal.com' => FALSE,
+    ], array_map(fn(CatalogItem $item) => $item->forSale, $items));
     $this->assertSame('Sale.com', $items['sale.com']->title);
+
+    // Internal domains stay unpublished, whoever publishes them.
+    $this->assertFalse($internal->isPublished());
+    $internal->setPublished()->save();
+    $this->assertFalse($internal->isPublished());
+    $internal->set('domain_internal', FALSE)->setPublished()->save();
+    $this->assertTrue($this->availability()->isForSale($internal, $internal->getVariations()[0]));
   }
 
   /**
@@ -121,6 +135,13 @@ class CatalogTest extends DomainsKernelTestBase {
     $this->createDomain('a.com');
     $this->assertSame(['default'], $this->catalog->productTypes());
     $this->assertSame(['a.com'], array_keys($this->catalog->load()));
+  }
+
+  /**
+   * Returns the availability service.
+   */
+  protected function availability(): Availability {
+    return $this->container->get(Availability::class);
   }
 
 }

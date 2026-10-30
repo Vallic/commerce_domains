@@ -28,6 +28,7 @@ final class ImportParser {
     'registrar' => ['registrar', 'registrar_name'],
     'expires' => ['expires', 'expiry', 'expiry_date', 'expiration', 'expiration_date', 'expires_on', 'expire_date'],
     'atom_premium' => ['atom_premium', 'premium'],
+    'internal' => ['internal', 'not_for_sale'],
   ];
 
   /**

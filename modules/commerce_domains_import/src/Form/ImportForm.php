@@ -131,7 +131,7 @@ final class ImportForm extends FormBase {
     $form['csv'] = [
       '#type' => 'file',
       '#title' => $this->t('CSV file'),
-      '#description' => $this->t('A header row names the columns, in any order and case: <em>domain</em> (or <em>domain name</em>; required), <em>price</em> (or <em>selling price</em>), <em>currency</em>, <em>buy_now</em> and <em>offers</em> (yes or no), <em>minimum_offer</em>, <em>description</em>, <em>registrar</em> (a domain provider, by name or ID), <em>expires</em> (a date) and <em>atom_premium</em> (yes or no). Other columns are left to the site.'),
+      '#description' => $this->t('A header row names the columns, in any order and case: <em>domain</em> (or <em>domain name</em>; required), <em>price</em> (or <em>selling price</em>), <em>currency</em>, <em>buy_now</em> and <em>offers</em> (yes or no), <em>minimum_offer</em>, <em>description</em>, <em>registrar</em> (a domain provider, by name or ID), <em>expires</em> (a date), <em>atom_premium</em> and <em>internal</em> (yes or no). Other columns are left to the site.'),
       '#attributes' => ['accept' => '.csv,.txt,text/csv'],
       '#states' => ['visible' => [':input[name="source"]' => ['value' => ImportOptions::SOURCE_CSV]]],
     ];
@@ -225,6 +225,13 @@ final class ImportForm extends FormBase {
       '#description' => $this->t('Put new domains on sale at once.'),
       '#default_value' => $choices['published'] ?? TRUE,
     ];
+    $form['defaults']['internal'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Internal'),
+      '#description' => $this->t('Domains you keep for your own use: never for sale, on this site or on marketplaces, so they stay unpublished.'),
+      '#default_value' => $choices['internal'] ?? FALSE,
+    ];
+    $form['defaults']['published']['#states']['disabled'][':input[name="internal"]'] = ['checked' => TRUE];
 
     $form['existing'] = [
       '#type' => 'radios',
@@ -432,6 +439,7 @@ final class ImportForm extends FormBase {
       'buy_now' => $options->buyNow,
       'offers' => $options->offers,
       'published' => $options->published,
+      'internal' => $options->internal,
       'existing' => $options->existing,
       'lookup' => $options->lookupRegistrars,
     ]);
@@ -462,6 +470,7 @@ final class ImportForm extends FormBase {
       buyNow: (bool) $form_state->getValue('buy_now'),
       offers: (bool) $form_state->getValue('offers'),
       published: (bool) $form_state->getValue('published'),
+      internal: (bool) $form_state->getValue('internal'),
       existing: (string) $form_state->getValue('existing'),
       lookupRegistrars: (bool) $form_state->getValue('lookup'),
       dryRun: (bool) $form_state->getValue('dry_run'),
