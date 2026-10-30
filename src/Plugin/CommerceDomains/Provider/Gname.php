@@ -157,6 +157,7 @@ final class Gname extends MarketplacePluginBase implements RegistrarInterface {
       name: DomainName::normalize((string) $record['ym']),
       expires: self::timestamp($record['dqsj'] ?? NULL, self::TIMEZONE),
       status: is_scalar($status) ? strtolower((string) $status) : NULL,
+      registered: self::timestamp($record['zcsj'] ?? NULL, self::TIMEZONE),
     );
   }
 

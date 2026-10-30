@@ -55,14 +55,14 @@ class GnameTest extends ProviderTestBase {
         'count' => '2',
         'page' => 1,
         'data' => [
-          ['id' => '1202', 'ym' => 'A.com', 'dqsj' => '2021-08-02', 'zt' => '0', 'ztstr' => 'normal'],
+          ['id' => '1202', 'ym' => 'A.com', 'zcsj' => '2020-08-02', 'dqsj' => '2021-08-02', 'zt' => '0', 'ztstr' => 'normal'],
           ['id' => '1203', 'ym' => 'b.com', 'dqsj' => '', 'zt' => '53'],
         ],
       ]),
       self::json(['code' => -1, 'msg' => 'Sorry,Authentication TOKEN error', 'data' => '']),
     ]);
     $this->assertEquals([
-      'a.com' => new Registration('a.com', 1627833600, NULL, NULL, 'normal'),
+      'a.com' => new Registration('a.com', 1627833600, NULL, NULL, 'normal', registered: 1596297600),
       'b.com' => new Registration('b.com', NULL, NULL, NULL, '53'),
     ], $plugin->fetchRegistrations());
 
