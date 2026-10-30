@@ -23,6 +23,9 @@ commerce_domains.provider.*:
     registration_sync:
       type: boolean
       label: 'Refresh registration details daily'
+    marketplace:
+      type: boolean
+      label: 'Domains are listed for sale here'
 
 commerce_domains.provider_plugin.*:
   type: mapping

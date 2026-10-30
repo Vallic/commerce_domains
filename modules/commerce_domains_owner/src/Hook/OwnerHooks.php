@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_owner\Hook;
 
 use Drupal\commerce_domains_owner\Appraiser;
+use Drupal\commerce_domains_owner\MarketplaceSales;
 use Drupal\commerce_domains_owner\Notifier;
 use Drupal\commerce_domains_owner\Renewals;
 use Drupal\Core\Hook\Attribute\Hook;
@@ -21,6 +22,7 @@ class OwnerHooks {
     protected Renewals $renewals,
     protected Notifier $notifier,
     protected Appraiser $appraiser,
+    protected MarketplaceSales $marketplaceSales,
   ) {}
 
   /**
@@ -28,7 +30,8 @@ class OwnerHooks {
    *
    * Takes domains left to expire off sale when due, tells the owner about
    * domains gone from a registrar, sends the day's digest of expiring
-   * domains, and appraises a few more.
+   * domains, appraises a few more, and once a day fills in sales from the
+   * marketplaces' sales reports.
    */
   #[Hook('cron')]
   public function cron(): void {
@@ -36,6 +39,7 @@ class OwnerHooks {
     $this->notifier->registrarChecks();
     $this->notifier->digest();
     $this->appraiser->cron();
+    $this->marketplaceSales->cron();
   }
 
   /**

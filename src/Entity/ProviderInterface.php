@@ -44,6 +44,26 @@ interface ProviderInterface extends ConfigEntityInterface, EntityWithPluginColle
   public function hasCapability(string $capability): bool;
 
   /**
+   * Whether domains are listed for sale here.
+   *
+   * TRUE for providers whose plugin lists domains (by API or CSV file), and
+   * for those marked as a marketplace, whose listings are made by hand.
+   */
+  public function isMarketplace(): bool;
+
+  /**
+   * Marks the provider as a marketplace domains are listed on by hand.
+   *
+   * Providers whose plugin lists domains are marketplaces either way.
+   */
+  public function setMarketplace(bool $marketplace): static;
+
+  /**
+   * Whether the plugin lists domains, by API or as a CSV file to upload.
+   */
+  public function listsByApi(): bool;
+
+  /**
    * Returns the keys (Key module) the plugin reads credentials from.
    *
    * @return array<string, string>

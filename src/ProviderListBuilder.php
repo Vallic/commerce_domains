@@ -42,6 +42,9 @@ class ProviderListBuilder extends ConfigEntityListBuilder {
       DomainManagementInterface::class => $this->t('Domain management'),
     ];
     $capabilities = array_filter($names, fn(string $interface) => $plugin instanceof $interface, ARRAY_FILTER_USE_KEY);
+    if ($entity->isMarketplace() && !$entity->listsByApi()) {
+      $capabilities['manual'] = $this->t('Marketplace, listed by hand');
+    }
     $row['label'] = $entity->label();
     $row['plugin'] = $plugin ? $plugin->label() : $this->t('None');
     $row['capabilities'] = $capabilities ? implode(', ', array_map('strval', $capabilities)) : $this->t('Registrar name only');

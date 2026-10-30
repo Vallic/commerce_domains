@@ -102,7 +102,7 @@ class ProviderForm extends EntityForm {
     $form['plugin'] = [
       '#type' => 'select',
       '#title' => $this->t('API'),
-      '#description' => $this->t('Leave empty for a registrar that is only recorded on domains.'),
+      '#description' => $this->t('Leave empty for a registrar or marketplace without an API, recorded on domains only.'),
       '#options' => $options,
       '#default_value' => $this->entity->getPluginId(),
       '#empty_option' => $this->t('- None -'),
@@ -111,6 +111,18 @@ class ProviderForm extends EntityForm {
         'callback' => '::ajaxRefresh',
         'wrapper' => 'commerce-domains-provider-form',
       ],
+    ];
+
+    // Marketplaces whose API lists domains need no say.
+    $by_api = $this->entity->listsByApi();
+    $form['is_marketplace'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Marketplace'),
+      '#description' => $by_api
+        ? $this->t('Its API lists domains for sale.')
+        : $this->t("Domains are listed for sale here, by hand: it can be picked under Not listed on and Sold through, and shows on each domain's Marketplaces tab. Nothing is synced."),
+      '#default_value' => $this->entity->isMarketplace(),
+      '#disabled' => $by_api,
     ];
 
     if ($plugin = $this->entity->getPlugin()) {
@@ -184,6 +196,9 @@ class ProviderForm extends EntityForm {
       if ($form_state->hasValue($key)) {
         $entity->set($key, $form_state->getValue($key));
       }
+    }
+    if ($form_state->hasValue('is_marketplace') && !$entity->listsByApi()) {
+      $entity->setMarketplace((bool) $form_state->getValue('is_marketplace'));
     }
     // Only there with the Key module, which builds the choices.
     if ($form_state->hasValue('credential_keys')) {

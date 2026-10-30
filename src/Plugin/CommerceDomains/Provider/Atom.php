@@ -13,6 +13,7 @@ use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\Registration;
 use Drupal\commerce_domains\Appraisal;
 use Drupal\commerce_domains\ListingStats;
+use Drupal\commerce_domains\MarketplaceSale;
 use Drupal\commerce_domains\ProviderException;
 
 /**
@@ -31,7 +32,7 @@ use Drupal\commerce_domains\ProviderException;
   label: new TranslatableMarkup('Atom'),
   description: new TranslatableMarkup('Pushes standard listings through the Atom Seller API, and reads registrations through its Registrar API.'),
 )]
-final class Atom extends MarketplacePluginBase implements RegistrarInterface, CsvExportInterface, AppraisalInterface, ListingStatsInterface {
+final class Atom extends MarketplacePluginBase implements RegistrarInterface, CsvExportInterface, AppraisalInterface, ListingStatsInterface, SalesReportInterface {
 
   use RegistrarTrait;
 
@@ -202,6 +203,37 @@ final class Atom extends MarketplacePluginBase implements RegistrarInterface, Cs
       );
     }
     return $stats;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Sale dates are taken as UTC; Atom doesn't say.
+   */
+  public function fetchSales(?array $names = NULL): array {
+    $sales = [];
+    foreach ($this->client()->allSales() as $record) {
+      $name = $record['Domain Name'] ?? $record['domain_name'] ?? NULL;
+      if (!is_string($name) || $name === '') {
+        continue;
+      }
+      $name = DomainName::normalize($name);
+      $amount = fn(string $key) => is_numeric($record[$key] ?? NULL) && (float) $record[$key] > 0 ? (float) $record[$key] : NULL;
+      $terms = is_string($record['sale_terms'] ?? NULL) ? $record['sale_terms'] : '';
+      $sale = new MarketplaceSale(
+        name: $name,
+        sold: self::timestamp($record['sale_date'] ?? NULL),
+        price: $amount('sale_amount'),
+        received: $amount('sale_amount_net'),
+        leaseMonths: preg_match('/(\d+)\s*installment/i', $terms, $match) && (int) $match[1] > 1 ? (int) $match[1] : NULL,
+        status: is_string($record['transfer_status'] ?? NULL) ? $record['transfer_status'] : NULL,
+      );
+      // The latest sale wins, for a domain sold more than once.
+      if (!isset($sales[$name]) || (int) $sale->sold >= (int) $sales[$name]->sold) {
+        $sales[$name] = $sale;
+      }
+    }
+    return $names === NULL ? $sales : array_intersect_key($sales, array_flip($names));
   }
 
   /**

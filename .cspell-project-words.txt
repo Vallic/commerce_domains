@@ -23,6 +23,7 @@ cdcsv
 cdms
 cdmst
 cdrs
+cdsales
 daaz
 dnx
 domainitems

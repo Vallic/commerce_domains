@@ -136,6 +136,44 @@ final class AtomClient extends ApiClient {
   }
 
   /**
+   * Fetches every sale of the account's domains.
+   *
+   * @return array[]
+   *   Sales with "Domain Name", sale_date (e.g. "Apr 10, 2026 11:24:36"),
+   *   sale_amount and sale_amount_net in dollars (net is 0 until worked
+   *   out), sale_terms ("Outright" or "6 installments") and transfer_status.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function allSales(): array {
+    $sales = [];
+    $seen = [];
+    for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+      $response = $this->request('GET', 'all-sales', [
+        RequestOptions::QUERY => ['page' => $page, 'limit' => self::PAGE_SIZE],
+      ]);
+      $batch = $this->records($response);
+      if ($batch === NULL) {
+        if ($failure = $this->failure($response)) {
+          throw new ProviderException($this->redact("Atom GET all-sales: $failure"), TRUE);
+        }
+        break;
+      }
+      // Pages past the last may repeat the first.
+      $first = json_encode($batch[0] ?? NULL);
+      if (!$batch || isset($seen[$first])) {
+        break;
+      }
+      $seen[$first] = TRUE;
+      array_push($sales, ...$batch);
+      if (count($batch) < self::PAGE_SIZE) {
+        break;
+      }
+    }
+    return $sales;
+  }
+
+  /**
    * Sends a write and checks the body for a failure reported with HTTP 200.
    *
    * @throws \Drupal\commerce_domains\ProviderException

@@ -13,7 +13,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Offers the providers that list domains: marketplaces and CSV exports.
+ * Offers the providers that list domains: by API, CSV file or by hand.
  */
 #[EntityReferenceSelection(
   id: 'commerce_domains_listing:provider',
@@ -51,8 +51,12 @@ final class ListingSelection extends DefaultSelection {
       ...$this->providerPluginManager->getPluginIdsWith(MarketplaceInterface::class),
       ...$this->providerPluginManager->getPluginIdsWith(CsvExportInterface::class),
     ]);
-    // No plugin lists domains: nothing to offer.
-    return $query->condition('plugin', $plugin_ids ?: [''], 'IN');
+    // Plugins that list domains, and providers listed on by hand.
+    $listing = $query->orConditionGroup()->condition('marketplace', TRUE);
+    if ($plugin_ids) {
+      $listing->condition('plugin', $plugin_ids, 'IN');
+    }
+    return $query->condition($listing);
   }
 
 }

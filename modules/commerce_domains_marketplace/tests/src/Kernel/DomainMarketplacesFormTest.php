@@ -33,6 +33,8 @@ class DomainMarketplacesFormTest extends MarketplaceKernelTestBase {
     $this->setUpCurrentUser([], ['administer commerce_domains providers']);
     $this->createProvider('test');
     Provider::create(['id' => 'daaz', 'label' => 'DaaZ', 'plugin' => 'daaz'])->save();
+    Provider::create(['id' => 'dan', 'label' => 'Dan', 'marketplace' => TRUE])->save();
+    Provider::create(['id' => 'hover', 'label' => 'Hover'])->save();
     $product = $this->createDomain('Example.com', 1000);
     $this->assertTrue(DomainMarketplacesForm::access($product)->isAllowed());
 
@@ -41,6 +43,9 @@ class DomainMarketplacesFormTest extends MarketplaceKernelTestBase {
     $this->assertSame('For sale, and listed on every marketplace below.', (string) $form['summary']['#markup']);
     $this->assertSame('Not checked yet', (string) $form['listings']['#rows']['test'][1]);
     $this->assertSame('In the CSV file', (string) $form['listings']['#rows']['daaz'][1]);
+    $this->assertSame('To list', (string) $form['listings']['#rows']['dan'][1]);
+    $this->assertSame('No API: list or remove it there by hand.', (string) $form['listings']['#rows']['dan'][2]);
+    $this->assertArrayNotHasKey('hover', $form['listings']['#rows'], 'A registrar only.');
 
     // Checking reads, and records what is pending.
     $form_state = (new FormState())->addBuildInfo('args', [$product])->setValues(['op' => 'Check marketplaces']);

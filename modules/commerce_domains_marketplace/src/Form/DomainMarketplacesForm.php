@@ -69,7 +69,7 @@ final class DomainMarketplacesForm extends FormBase {
   }
 
   /**
-   * Returns the enabled providers that list domains, by API or CSV file.
+   * Returns the enabled providers that list domains: by API, file or hand.
    *
    * @return \Drupal\commerce_domains\Entity\ProviderInterface[]
    *   The providers.
@@ -77,8 +77,7 @@ final class DomainMarketplacesForm extends FormBase {
   protected function providers(): array {
     /** @var \Drupal\commerce_domains\Entity\ProviderInterface[] $providers */
     $providers = $this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple();
-    return array_filter($providers, fn(ProviderInterface $provider) => $provider->status()
-      && ($provider->hasCapability(MarketplaceInterface::class) || $provider->hasCapability(CsvExportInterface::class)));
+    return array_filter($providers, fn(ProviderInterface $provider) => $provider->status() && $provider->isMarketplace());
   }
 
   /**
@@ -116,11 +115,20 @@ final class DomainMarketplacesForm extends FormBase {
           $date($row->pushed ?? NULL),
         ];
       }
-      else {
+      elseif ($provider->hasCapability(CsvExportInterface::class)) {
         $table[$id] = [
           $provider->label(),
           $this->inCsv($provider, $item) ? $this->t('In the CSV file') : $this->t('Left out of the CSV file'),
           $this->t('Uploaded by hand.'),
+          '',
+          '',
+        ];
+      }
+      else {
+        $table[$id] = [
+          $provider->label(),
+          $item && $item->forSale && $item->terms->listsOn((string) $id) ? $this->t('To list') : $this->t('To leave off'),
+          $this->t('No API: list or remove it there by hand.'),
           '',
           '',
         ];

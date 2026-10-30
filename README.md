@@ -57,6 +57,13 @@ it is held at, and the marketplaces it is listed on.
   domains can be recorded there, and nothing is synced. A domain's registrar
   can be any registrar, with or without an API, but not a marketplace-only
   provider such as Afternic.
+
+  Tick *Marketplace* on a provider without a listing API to record that you
+  list domains there by hand. It can then be picked under *Not listed on*
+  and *Sold through*, in bulk edits and imports, and the domain's
+  *Marketplaces* tab says whether to list it there or leave it off. Nothing
+  is synced, so add and remove its listings yourself. Providers whose plugin
+  lists domains, by API or CSV file, are marketplaces anyway.
 - **Conditions** for promotions, payment gateways and shipping methods, under
   *Domains*: the registrar, Atom premium (or not), and the sale terms (buy
   now, offers, lease-to-own; each required, ruled out or either). Each comes
@@ -621,6 +628,17 @@ the site fills in the sale from its order, and cancelling the order clears
 it; a sale a marketplace reports fills in the date and the marketplace, and
 you enter what it brought after commission (for a lease to own, what the
 payments add up to, and their number). Orders on the site are paid at once.
+A marketplace with a sales report (Atom) fills those in too: the sale date
+replaces when the sale was found, and what it brought after commission and
+the number of payments are filled in where empty, so your entries stand.
+Cron reads the reports once a day, as the amounts are often worked out days
+after the sale; a domain already off sale with no sale recorded gets its
+sale recorded too. Sales on the site or another marketplace stand.
+
+```sh
+drush cdsales atom --dry-run
+drush cdsales atom --domains=example.com
+```
 Auto-renew follows the
 registrar where its API reports it, the way expiry dates do.
 
@@ -717,6 +735,9 @@ Give the API's rate limit in `REQUESTS_PER_MINUTE` to get a setting for it.
 - For appraisals, implement `AppraisalInterface`: `appraise()` returns an
   `Appraisal` (value in dollars, score, extensions registered, signals), and
   throws once the service's daily limit is reached.
+- For sales reports, implement `SalesReportInterface`: `fetchSales()`
+  returns a `MarketplaceSale` per sold domain (date, price, what the seller
+  received, lease payments).
 
 Put the HTTP client in `src/Clients`, extending `ApiClient` for retries,
 rate-limit waits and keeping credentials out of error messages.

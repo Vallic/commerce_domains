@@ -59,6 +59,8 @@ class SaleTermsTraitTest extends DomainsKernelTestBase {
   public function testMarketplaceChoice(): void {
     Provider::create(['id' => 'daaz', 'label' => 'DaaZ', 'plugin' => 'daaz'])->save();
     Provider::create(['id' => 'reg', 'label' => 'Registrar', 'plugin' => 'test_registrar'])->save();
+    Provider::create(['id' => 'hover', 'label' => 'Hover'])->save();
+    Provider::create(['id' => 'dan', 'label' => 'Dan', 'marketplace' => TRUE])->save();
     $this->createDomain('here.com', 1000, [], ['sale_marketplaces' => FALSE]);
     $this->createDomain('some.com', 1000, [], ['sale_not_listed_on' => ['daaz']]);
     $items = $this->container->get('Drupal\commerce_domains\Catalog')->load();
@@ -69,10 +71,10 @@ class SaleTermsTraitTest extends DomainsKernelTestBase {
     $this->assertSame(['daaz'], $items['some.com']->terms->notListedOn);
     $this->assertTrue($items['here.com']->forSale, 'Still for sale on the site.');
 
-    // Only providers that list domains are offered.
+    // Only providers that list domains are offered, by API or by hand.
     $field = FieldConfig::loadByName('commerce_product_variation', 'default', 'sale_not_listed_on');
     $options = $this->container->get('plugin.manager.entity_reference_selection')->getSelectionHandler($field)->getReferenceableEntities();
-    $this->assertSame(['daaz'], array_keys($options['commerce_domains_provider']));
+    $this->assertEqualsCanonicalizing(['daaz', 'dan'], array_keys($options['commerce_domains_provider']));
   }
 
   /**

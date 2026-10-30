@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_owner\EventSubscriber;
 
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\SalesReportInterface;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains_marketplace\Event\SoldElsewhereEvent;
 use Drupal\commerce_domains_marketplace\Event\SyncFailedEvent;
 use Drupal\commerce_domains_owner\Notifier;
@@ -37,10 +39,23 @@ class MarketplaceSubscriber implements EventSubscriberInterface {
 
   /**
    * Records the sale on the domain, and mails the owner.
+   *
+   * A marketplace with a sales report fills in the sale; when the report
+   * can't be read, cron's daily read does it later.
    */
   public function onSoldElsewhere(SoldElsewhereEvent $event): void {
     if ($event->product) {
-      $this->recorder->recordElsewhere($event->product, $event->provider, $this->time->getRequestTime());
+      $plugin = $event->provider->getPlugin();
+      $sale = NULL;
+      if ($plugin instanceof SalesReportInterface) {
+        try {
+          $sale = $plugin->fetchSales([$event->domain])[$event->domain] ?? NULL;
+        }
+        catch (ProviderException) {
+          // Recorded without the details, which cron adds later.
+        }
+      }
+      $this->recorder->recordElsewhere($event->product, $event->provider, $this->time->getRequestTime(), $sale);
     }
     $this->notifier->soldElsewhere($event->provider, $event->domain, $event->product, $event->status);
   }

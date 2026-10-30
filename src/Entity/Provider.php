@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Entity;
 
 use Drupal\commerce_domains\Form\ProviderForm;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginInterface;
 use Drupal\commerce_domains\ProviderListBuilder;
 use Drupal\Core\Config\Entity\ConfigEntityBase;
@@ -61,6 +63,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
     'configuration',
     'credential_keys',
     'registration_sync',
+    'marketplace',
   ],
 )]
 class Provider extends ConfigEntityBase implements ProviderInterface {
@@ -108,6 +111,13 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
   protected bool $registration_sync = FALSE;
 
   /**
+   * Whether domains are listed for sale here, by hand when there is no API.
+   *
+   * @var bool
+   */
+  protected bool $marketplace = FALSE;
+
+  /**
    * The collection holding the plugin.
    *
    * @var \Drupal\Core\Plugin\DefaultSingleLazyPluginCollection|null
@@ -150,6 +160,28 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
    */
   public function hasCapability(string $capability): bool {
     return $this->getPlugin() instanceof $capability;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isMarketplace(): bool {
+    return $this->marketplace || $this->listsByApi();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setMarketplace(bool $marketplace): static {
+    $this->marketplace = $marketplace;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function listsByApi(): bool {
+    return $this->hasCapability(MarketplaceInterface::class) || $this->hasCapability(CsvExportInterface::class);
   }
 
   /**

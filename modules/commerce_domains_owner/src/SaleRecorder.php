@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_owner;
 
+use Drupal\commerce_domains\Availability;
 use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains\MarketplaceSale;
+use Drupal\commerce_domains_owner\Plugin\Commerce\EntityTrait\DomainCosts;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_order\Entity\OrderItemInterface;
 use Drupal\commerce_price\Price;
@@ -15,11 +18,16 @@ use Drupal\commerce_product\Entity\ProductVariationInterface;
  * Records a domain's sale on its product: when, for how much, and where.
  *
  * A sale on this site comes from its order, which a cancelled order undoes.
- * A sale a marketplace reports gets the date and the marketplace; the owner
- * enters what it brought, and the payments of a lease to own. Sale records
+ * A sale a marketplace reports gets the date and the marketplace; what it
+ * brought and the payments of a lease to own come from the marketplace's
+ * sales report where it has one, else the owner enters them. Sale records
  * aren't edits, so the product keeps its changed time.
  */
 class SaleRecorder {
+
+  public function __construct(
+    protected Availability $availability,
+  ) {}
 
   /**
    * Records the domains of an order as sold on this site.
@@ -101,15 +109,84 @@ class SaleRecorder {
    * @return bool
    *   Whether the sale was recorded.
    */
-  public function recordElsewhere(ProductInterface $product, ProviderInterface $provider, int $time): bool {
+  public function recordElsewhere(ProductInterface $product, ProviderInterface $provider, int $time, ?MarketplaceSale $sale = NULL): bool {
     if (!$product->hasField('domain_sold') || !$product->get('domain_sold')->isEmpty()) {
       return FALSE;
     }
     $product->set('domain_sold', $time)
       ->set('domain_sold_via', $provider->id())
       ->set('domain_sale_order', NULL);
+    foreach ($sale ? $this->saleChanges($product, $provider, $sale) : [] as $field => $value) {
+      $product->set($field, $value);
+    }
     $this->save($product);
     return TRUE;
+  }
+
+  /**
+   * Returns what a marketplace's report of a sale adds to the domain.
+   *
+   * Only for a sale recorded as made there, or a domain off sale with no
+   * sale recorded: a sale on this site or elsewhere stands. The report's
+   * date replaces the time the sale was found; what it brought and the
+   * lease are only filled in when empty, so the owner's entries stand.
+   *
+   * @return array<string, mixed>
+   *   New values, keyed by field name; empty when nothing changes.
+   */
+  public function saleChanges(ProductInterface $product, ProviderInterface $provider, MarketplaceSale $sale): array {
+    if (!$product->hasField('domain_sold')) {
+      return [];
+    }
+    $recorded = !$product->get('domain_sold')->isEmpty();
+    $via = $product->get('domain_sold_via')->isEmpty() ? NULL : (string) $product->get('domain_sold_via')->target_id;
+    if ($recorded ? ($via !== $provider->id() || !$product->get('domain_sale_order')->isEmpty()) : $this->forSale($product)) {
+      return [];
+    }
+    $changes = [];
+    if ($sale->sold !== NULL && (int) $product->get('domain_sold')->value !== $sale->sold) {
+      $changes['domain_sold'] = $sale->sold;
+    }
+    if ($via === NULL) {
+      $changes['domain_sold_via'] = $provider->id();
+    }
+    if ($sale->received !== NULL && $product->get('domain_sale_price')->isEmpty()) {
+      $changes['domain_sale_price'] = new Price((string) $sale->received, $sale->currency);
+    }
+    if ($sale->leaseMonths !== NULL && $product->hasField('domain_lease_months') && $product->get('domain_lease_months')->isEmpty()) {
+      $changes['domain_lease_months'] = min($sale->leaseMonths, DomainCosts::MAX_LEASE_MONTHS);
+    }
+    // Only a sale with a date can be recorded.
+    return !$recorded && !isset($changes['domain_sold']) ? [] : $changes;
+  }
+
+  /**
+   * Fills in a domain's sale from a marketplace's report of it.
+   *
+   * @return array<string, mixed>
+   *   The values set, keyed by field name.
+   */
+  public function fillSale(ProductInterface $product, ProviderInterface $provider, MarketplaceSale $sale): array {
+    $changes = $this->saleChanges($product, $provider, $sale);
+    if ($changes) {
+      foreach ($changes as $field => $value) {
+        $product->set($field, $value);
+      }
+      $this->save($product);
+    }
+    return $changes;
+  }
+
+  /**
+   * Whether any variation of the domain is for sale.
+   */
+  protected function forSale(ProductInterface $product): bool {
+    foreach ($product->getVariations() as $variation) {
+      if ($this->availability->isForSale($product, $variation)) {
+        return TRUE;
+      }
+    }
+    return FALSE;
   }
 
   /**

@@ -8,8 +8,10 @@ use Drupal\commerce_domains\Appraisal;
 use Drupal\commerce_domains\Clients\AtomClient;
 use Drupal\commerce_domains\Clients\AtomRegistrarClient;
 use Drupal\commerce_domains\ListingStats;
+use Drupal\commerce_domains\MarketplaceSale;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\AppraisalInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingStatsInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\SalesReportInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Atom;
 use Drupal\Core\Form\FormState;
 use Drupal\commerce_domains\ProviderException;
@@ -64,6 +66,37 @@ class AtomTest extends ProviderTestBase {
     $this->assertInstanceOf(ListingStatsInterface::class, $plugin);
     $this->assertEquals(['a.com' => new ListingStats(12, NULL, 1, 2)], $plugin->fetchStats(['a.com', 'b.com']), 'A domain Atom refuses is left out.');
     $this->assertSame('GET https://www.atom.com/api/marketplace/domain-analytics', $this->call(0));
+  }
+
+  /**
+   * Tests reading the sales report.
+   */
+  public function testFetchSales(): void {
+    $sale = fn(string $name, string $date, int $amount, int $net, string $terms, ?string $transfer = NULL) => [
+      'Domain Name' => $name,
+      'sales_type' => 'Premium',
+      'sale_date' => $date,
+      'sale_amount' => $amount,
+      'sale_amount_net' => $net,
+      'sale_terms' => $terms,
+      'transfer_status' => $transfer,
+      'added_on' => 'Feb 02, 2026 16:16:19',
+    ];
+    $plugin = $this->plugin(Atom::class, 'atom', self::KEYS, [
+      self::json([
+        $sale('OnBold.com', 'Apr 10, 2026 11:24:36', 4800, 3360, '6 installments', 'AuthCode Sent'),
+        $sale('Jovra.com', 'Oct 30, 2026 02:58:29', 2309, 0, 'Outright'),
+        $sale('Jovra.com', 'Jan 05, 2024 10:00:00', 1000, 700, 'Outright'),
+      ]),
+      self::json([]),
+    ]);
+    $this->assertInstanceOf(SalesReportInterface::class, $plugin);
+    $this->assertEquals([
+      'onbold.com' => new MarketplaceSale('onbold.com', 1775820276, 4800.0, 3360.0, 'USD', 6, 'AuthCode Sent'),
+      'jovra.com' => new MarketplaceSale('jovra.com', 1793329109, 2309.0, NULL, 'USD', NULL, NULL),
+    ], $plugin->fetchSales(), 'The latest sale of each; no net amount until Atom works it out.');
+    $this->assertSame('GET https://www.atom.com/api/marketplace/all-sales', $this->call(0));
+    $this->assertSame(['api_token' => 'atomTOKEN', 'user_id' => '4242', 'page' => '1', 'limit' => '100'], $this->query(0));
   }
 
   /**

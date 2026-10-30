@@ -9,7 +9,6 @@ use Drupal\commerce_domains\Catalog;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\DomainNameParser;
 use Drupal\commerce_domains\Entity\ProviderInterface;
-use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\RegistrarPlan;
 use Drupal\commerce_domains\Registration;
 use Drupal\commerce_domains\RegistrarSync;
@@ -626,7 +625,7 @@ class DomainImporter {
       $this->marketplaces = [];
       /** @var \Drupal\commerce_domains\Entity\ProviderInterface $provider */
       foreach ($this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple() as $id => $provider) {
-        if ($provider->hasCapability(MarketplaceInterface::class)) {
+        if ($provider->isMarketplace()) {
           $this->marketplaces[mb_strtolower((string) $id)] = (string) $id;
           $this->marketplaces[mb_strtolower((string) $provider->label())] = (string) $id;
         }

@@ -55,7 +55,14 @@ class GnameTest extends ProviderTestBase {
         'count' => '2',
         'page' => 1,
         'data' => [
-          ['id' => '1202', 'ym' => 'A.com', 'zcsj' => '2020-08-02', 'dqsj' => '2021-08-02', 'zt' => '0', 'ztstr' => 'normal'],
+          [
+            'id' => '1202',
+            'ym' => 'A.com',
+            'zcsj' => '2020-08-02',
+            'dqsj' => '2021-08-02',
+            'zt' => '0',
+            'ztstr' => 'normal',
+          ],
           ['id' => '1203', 'ym' => 'b.com', 'dqsj' => '', 'zt' => '53'],
         ],
       ]),
