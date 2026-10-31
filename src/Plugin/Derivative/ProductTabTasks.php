@@ -31,6 +31,10 @@ final class ProductTabTasks extends DeriverBase implements ContainerDeriverInter
   public function getDerivativeDefinitions($base_plugin_definition): array {
     $this->derivatives = [];
     foreach ($this->productTabs->tabs() as $operation => $tab) {
+      // Its own page brings its own tab.
+      if (isset($tab['route'])) {
+        continue;
+      }
       $this->derivatives[$operation] = [
         'title' => $tab['title'],
         'route_name' => 'commerce_domains.product_tab.' . $operation,

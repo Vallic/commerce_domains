@@ -34,6 +34,10 @@ final class ProductTabRoutes implements ContainerInjectionInterface {
   public function routes(): array {
     $routes = [];
     foreach ($this->productTabs->tabs() as $operation => $tab) {
+      // A tab with a page of its own.
+      if (isset($tab['route'])) {
+        continue;
+      }
       $routes['commerce_domains.product_tab.' . $operation] = new Route(
         '/product/{commerce_product}/' . $tab['path'],
         [

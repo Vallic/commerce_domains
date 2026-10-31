@@ -30,9 +30,10 @@ class ProductTabs {
   /**
    * Returns the tabs, keyed by form operation.
    *
-   * @return array<string, array{title: \Stringable|string, path: string, fields: string[], weight: int, read_only: bool}>
-   *   Each tab's title, its path below /product/{id}/, the fields it edits,
-   *   its weight among the product's tabs, and whether it only shows them.
+   * @return array<string, array{title: \Stringable|string, path?: string, route?: string, fields: string[], weight: int, read_only: bool}>
+   *   Each tab's title, its path below /product/{id}/ (or the route of a
+   *   page of its own that shows the tab's form), the fields it edits, its
+   *   weight among the product's tabs, and whether it only shows them.
    */
   public function tabs(): array {
     // Kept once found: early in a rebuild the hooks may not answer yet.

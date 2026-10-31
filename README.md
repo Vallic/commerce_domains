@@ -678,11 +678,15 @@ installed (turn it on for types added later): the purchase price and date,
 the yearly renewal cost, auto-renew, whether to keep the domain or let it
 expire, and the sale: what it sold for, when, through which marketplace,
 and for a lease to own the number of monthly payments. Each domain has
-tabs beside *Edit* for them, each with its own Save: *Details* (expiry,
-registration date, registrar, internal, Atom premium), *Costs* (purchase,
-renewal cost, auto-renew, keep or let expire), *Sale* and *Valuation*
-(shown only). The Edit form leaves those fields out; adding a domain still
-shows them. *Sale* has *Undo sale* for a sale entered by hand or found on
+tabs beside *Edit* for them, each with its own Save: *Registrar* (the
+registrar, expiry and registration date, with the account there below for
+registrars whose API manages domains), *Costs* (purchase, renewal cost,
+auto-renew, keep or let expire), *Sale* and *Valuation* (shown only).
+Internal and Atom premium stay on Edit, which leaves the tabs' fields out;
+adding a domain still shows them. The registrar is chosen by hand for
+registrars without an API, and locked once a registrar's API holds the
+domain, like the dates; a transfer away is recorded by the new registrar's
+sync. *Sale* has *Undo sale* for a sale entered by hand or found on
 a marketplace: it clears the sale and puts the domain back on sale. A sale
 on the site is undone by canceling its order. Other modules add tabs with
 `hook_commerce_domains_product_tabs()` (see `ProductTabs`).

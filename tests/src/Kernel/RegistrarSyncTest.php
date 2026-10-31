@@ -147,7 +147,7 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     // Like the expiry, the date then follows the registrar.
     $this->installConfig(['system']);
     $this->setUpCurrentUser([], [], TRUE);
-    $form = $this->container->get('entity.form_builder')->getForm($this->product('current.com'), 'domain_details');
+    $form = $this->container->get('entity.form_builder')->getForm($this->product('current.com'), 'domain_registrar');
     $this->assertTrue($form['domain_registered']['#disabled']);
   }
 
@@ -165,7 +165,7 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
       assert($product instanceof ProductInterface);
       return $product;
     };
-    $locked = fn(string $name): bool => !empty($this->container->get('entity.form_builder')->getForm($load($name), 'domain_details')['domain_expires']['#disabled']);
+    $locked = fn(string $name): bool => !empty($this->container->get('entity.form_builder')->getForm($load($name), 'domain_registrar')['domain_expires']['#disabled']);
 
     $this->assertFalse($locked('current.com'), 'Editable until the account is read.');
     $this->sync->plan(Provider::load('reg'));

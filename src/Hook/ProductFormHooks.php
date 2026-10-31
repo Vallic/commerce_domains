@@ -36,6 +36,12 @@ class ProductFormHooks {
       return;
     }
     $args = ['@registrar' => $provider->label()];
+    // The registrar's API holds the domain; after a transfer away, the new
+    // registrar's sync records the move.
+    if (isset($form['domain_registrar'])) {
+      $form['domain_registrar']['#disabled'] = TRUE;
+      $form['domain_registrar']['widget']['#description'] = $this->t("@registrar's API holds the domain. After a transfer, the new registrar's sync records the move.", $args);
+    }
     // Until the registrar's details are applied, a field stays editable. A
     // disabled element keeps its stored value, whatever is submitted.
     foreach (['domain_expires', 'domain_registered'] as $field) {

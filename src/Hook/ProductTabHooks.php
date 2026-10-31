@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Hook;
 
+use Drupal\commerce_domains\Controller\RegistrarTabController;
 use Drupal\commerce_domains\Form\DomainTabForm;
 use Drupal\commerce_domains\ProductTabs;
 use Drupal\Core\Entity\Display\EntityFormDisplayInterface;
@@ -27,11 +28,12 @@ class ProductTabHooks {
   #[Hook('commerce_domains_product_tabs')]
   public function productTabs(): array {
     return [
-      'domain_details' => [
-        'title' => new TranslatableMarkup('Details'),
-        'path' => 'details',
-        'fields' => ['domain_expires', 'domain_registered', 'domain_registrar', 'domain_internal', 'atom_premium'],
-        'weight' => 5,
+      // On the Registrar tab, above the account at the registrar.
+      RegistrarTabController::TAB => [
+        'title' => new TranslatableMarkup('Registrar'),
+        'route' => 'commerce_domains.product_registrar',
+        'fields' => ['domain_registrar', 'domain_expires', 'domain_registered'],
+        'weight' => 20,
       ],
     ];
   }

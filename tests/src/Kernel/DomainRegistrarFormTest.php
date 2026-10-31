@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
+use Drupal\commerce_domains\Controller\RegistrarTabController;
 use Drupal\commerce_domains\Form\DomainRegistrarForm;
+use Drupal\commerce_domains\RegistrarSync;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Tests\user\Traits\UserCreationTrait;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -17,9 +20,12 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  * Tests managing a domain at its registrar.
  */
 #[CoversClass(DomainRegistrarForm::class)]
+#[CoversClass(RegistrarTabController::class)]
 #[Group('commerce_domains')]
 #[RunTestsInSeparateProcesses]
 class DomainRegistrarFormTest extends DomainsKernelTestBase {
+
+  use UserCreationTrait;
 
   protected const KEY = 'commerce_domains_test.managed';
 
@@ -74,6 +80,35 @@ class DomainRegistrarFormTest extends DomainsKernelTestBase {
     $this->assertFalse(DomainRegistrarForm::access($this->createDomain('Read.com', 1000, ['domain_registrar' => 'reg']))->isAllowed(), 'A registrar that only reads.');
     $this->assertFalse(DomainRegistrarForm::access($this->createDomain('Hover.com', 1000, ['domain_registrar' => 'hover']))->isAllowed(), 'A registrar without an API.');
     $this->assertFalse(DomainRegistrarForm::access($this->createDomain('Nowhere.com'))->isAllowed());
+  }
+
+  /**
+   * Tests the Registrar tab: its fields for every domain, the account below.
+   */
+  public function testTab(): void {
+    $this->installConfig(['system']);
+    $this->setUpCurrentUser([], [
+      'administer commerce_product',
+      'administer commerce_store',
+      'manage domains at registrars',
+    ]);
+    $controller = RegistrarTabController::create($this->container);
+    $hover = $this->createDomain('Hover.com', 1000, ['domain_registrar' => 'hover']);
+    $page = $controller->page($hover);
+    $this->assertArrayHasKey('domain_registrar', $page['fields']);
+    $this->assertArrayHasKey('domain_expires', $page['fields']);
+    $this->assertArrayNotHasKey('account', $page, 'No API to manage it with.');
+    $this->assertEmpty($page['fields']['domain_registrar']['#disabled'] ?? NULL, 'Chosen by hand.');
+    $this->assertTrue(RegistrarTabController::access($hover, $this->container->get('current_user'))->isAllowed());
+
+    // Once the registrar's API holds the domain, the choice is locked.
+    $example = $this->createDomain('Example.com', 1000, ['domain_registrar' => 'managed']);
+    $this->container->get(RegistrarSync::class)->plan(Provider::load('managed'));
+    $example = $this->entityTypeManager->getStorage('commerce_product')->loadUnchanged($example->id());
+    $this->assertInstanceOf(ProductInterface::class, $example);
+    $page = $controller->page($example);
+    $this->assertTrue($page['fields']['domain_registrar']['#disabled']);
+    $this->assertArrayHasKey('details', $page['account']);
   }
 
   /**

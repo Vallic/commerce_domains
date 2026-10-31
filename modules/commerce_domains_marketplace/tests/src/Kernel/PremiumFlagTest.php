@@ -66,10 +66,10 @@ class PremiumFlagTest extends MarketplaceKernelTestBase {
     $this->installConfig(['system']);
     $this->setUpCurrentUser([], [], TRUE);
     $product = Product::load(1);
-    $form = $this->container->get('entity.form_builder')->getForm($product, 'domain_details');
+    $form = $this->container->get('entity.form_builder')->getForm($product, 'edit');
     $this->assertTrue($form['atom_premium']['#disabled']);
     Provider::load('atom')->setStatus(FALSE)->save();
-    $form = $this->container->get('entity.form_builder')->getForm(Product::load(1), 'domain_details');
+    $form = $this->container->get('entity.form_builder')->getForm(Product::load(1), 'edit');
     $this->assertArrayNotHasKey('#disabled', $form['atom_premium']);
   }
 

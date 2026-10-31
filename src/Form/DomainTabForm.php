@@ -91,7 +91,13 @@ class DomainTabForm extends ContentEntityForm {
    */
   public static function access(ProductInterface $commerce_product, RouteMatchInterface $route_match, AccountInterface $account): AccessResultInterface {
     $operation = (string) $route_match->getRouteObject()?->getDefault('_entity_form');
-    $operation = substr($operation, strlen('commerce_product.'));
+    return self::tabAccess(substr($operation, strlen('commerce_product.')), $commerce_product, $account);
+  }
+
+  /**
+   * Allows a tab, by its operation; see access().
+   */
+  public static function tabAccess(string $operation, ProductInterface $commerce_product, AccountInterface $account): AccessResultInterface {
     $tab = \Drupal::service(ProductTabs::class)->tab($operation);
     if (!$tab || !$commerce_product->hasField('domain')) {
       return AccessResult::forbidden()->addCacheableDependency($commerce_product);

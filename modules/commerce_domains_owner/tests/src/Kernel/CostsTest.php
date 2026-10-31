@@ -96,8 +96,9 @@ class CostsTest extends OwnerKernelTestBase {
     foreach (['domain_expires', 'domain_registrar', 'domain_purchase_price', 'domain_sold', 'domain_appraisal'] as $field) {
       $this->assertArrayNotHasKey($field, $built, $field);
     }
+    $this->assertArrayHasKey('domain_internal', $built, 'Internal and Atom premium stay on Edit.');
     $tabs = [
-      'domain_details' => ['domain_expires', 'domain_registrar'],
+      'domain_registrar' => ['domain_expires', 'domain_registrar', 'domain_registered'],
       'domain_costs' => ['domain_purchase_price', 'domain_renewal'],
       'domain_sale' => ['domain_sold', 'domain_sale_price'],
       'domain_valuation' => ['domain_appraisal'],
@@ -126,8 +127,9 @@ class CostsTest extends OwnerKernelTestBase {
     $tab = fn(string $operation) => Url::fromRoute('commerce_domains.product_tab.' . $operation, ['commerce_product' => $product->id()]);
     $this->assertFalse($tab('domain_costs')->access($staff));
     $this->assertTrue($tab('domain_valuation')->access($staff));
-    $this->assertTrue($tab('domain_details')->access($staff));
-    $this->assertFalse($tab('domain_details')->access($buyer));
+    $registrar = Url::fromRoute('commerce_domains.product_registrar', ['commerce_product' => $product->id()]);
+    $this->assertTrue($registrar->access($staff), 'Every domain has a Registrar tab.');
+    $this->assertFalse($registrar->access($buyer));
     $manager = $this->createUser(['administer commerce_product', 'administer commerce_store', 'manage domain portfolio']);
     $this->assertTrue($tab('domain_costs')->access($manager));
 

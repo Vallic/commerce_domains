@@ -32,7 +32,7 @@ class ProductTabsTest extends OwnerKernelTestBase {
   public function testEntityTypesBuild(): void {
     $this->entityTypeManager->clearCachedDefinitions();
     $definition = $this->entityTypeManager->getDefinition('commerce_product');
-    foreach (['domain_details', 'domain_costs', 'domain_sale', 'domain_valuation'] as $operation) {
+    foreach (['domain_registrar', 'domain_costs', 'domain_sale', 'domain_valuation'] as $operation) {
       $this->assertSame(DomainTabForm::class, $definition->getFormClass($operation), $operation);
     }
   }
