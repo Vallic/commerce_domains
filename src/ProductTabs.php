@@ -35,14 +35,26 @@ class ProductTabs {
    *   its weight among the product's tabs, and whether it only shows them.
    */
   public function tabs(): array {
-    if ($this->tabs === NULL) {
-      $this->tabs = [];
-      foreach ($this->moduleHandler->invokeAll('commerce_domains_product_tabs') as $operation => $tab) {
-        $this->tabs[$operation] = $tab + ['weight' => 0, 'read_only' => FALSE, 'fields' => []];
-      }
-      uasort($this->tabs, fn(array $a, array $b) => $a['weight'] <=> $b['weight']);
+    // Kept once found: early in a rebuild the hooks may not answer yet.
+    if (!$this->tabs) {
+      $this->tabs = self::collect($this->moduleHandler);
     }
     return $this->tabs;
+  }
+
+  /**
+   * Asks the modules for their tabs.
+   *
+   * @return array<string, array>
+   *   The tabs, keyed by form operation, lightest first.
+   */
+  public static function collect(ModuleHandlerInterface $module_handler): array {
+    $tabs = [];
+    foreach ($module_handler->invokeAll('commerce_domains_product_tabs') as $operation => $tab) {
+      $tabs[$operation] = $tab + ['weight' => 0, 'read_only' => FALSE, 'fields' => []];
+    }
+    uasort($tabs, fn(array $a, array $b) => $a['weight'] <=> $b['weight']);
+    return $tabs;
   }
 
   /**

@@ -7,6 +7,7 @@ namespace Drupal\commerce_domains\Hook;
 use Drupal\commerce_domains\Form\DomainTabForm;
 use Drupal\commerce_domains\ProductTabs;
 use Drupal\Core\Entity\Display\EntityFormDisplayInterface;
+use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 
@@ -17,6 +18,7 @@ class ProductTabHooks {
 
   public function __construct(
     protected ProductTabs $productTabs,
+    protected ModuleHandlerInterface $moduleHandler,
   ) {}
 
   /**
@@ -43,7 +45,9 @@ class ProductTabHooks {
     if (!isset($entity_types['commerce_product'])) {
       return;
     }
-    foreach (array_keys($this->productTabs->tabs()) as $operation) {
+    // Asked afresh: entity types are cached, so a list kept from earlier in
+    // the request would leave the tabs without forms until the next rebuild.
+    foreach (array_keys(ProductTabs::collect($this->moduleHandler)) as $operation) {
       $entity_types['commerce_product']->setFormClass($operation, DomainTabForm::class);
     }
   }
