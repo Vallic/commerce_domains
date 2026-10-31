@@ -45,34 +45,6 @@ class ProductHooks {
   ) {}
 
   /**
-   * Implements hook_commerce_domains_product_tabs().
-   */
-  #[Hook('commerce_domains_product_tabs')]
-  public function productTabs(): array {
-    return [
-      'domain_costs' => [
-        'title' => $this->t('Costs'),
-        'path' => 'costs',
-        'fields' => self::TABS['domain_costs'],
-        'weight' => 6,
-      ],
-      'domain_sale' => [
-        'title' => $this->t('Sale'),
-        'path' => 'sale',
-        'fields' => self::TABS['domain_sale'],
-        'weight' => 7,
-      ],
-      'domain_valuation' => [
-        'title' => $this->t('Valuation'),
-        'path' => 'valuation',
-        'fields' => self::TABS['domain_valuation'],
-        'weight' => 8,
-        'read_only' => TRUE,
-      ],
-    ];
-  }
-
-  /**
    * Implements hook_form_BASE_FORM_ID_alter() for commerce_product_form.
    *
    * On any product form with the costs fields: appraisals are shown, not
