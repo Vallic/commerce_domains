@@ -41,7 +41,7 @@ use Drupal\views\EntityViewsData;
     'views_data' => EntityViewsData::class,
   ],
   links: [
-    'collection' => '/admin/commerce/domain-handovers',
+    'collection' => '/admin/commerce/domains/handovers',
   ],
   admin_permission: 'hand over domains',
   base_table: 'commerce_domains_handover',

@@ -7,6 +7,7 @@ namespace Drupal\commerce_domains_marketplace\Hook;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\PremiumListingsInterface;
 use Drupal\commerce_domains_marketplace\MarketplaceSettings;
 use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Entity\EntityInterface;
@@ -26,6 +27,27 @@ class MarketplaceHooks {
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
   ) {}
+
+  /**
+   * Implements hook_form_BASE_FORM_ID_alter() for commerce_product_form.
+   *
+   * Locks the Atom premium flag while a marketplace sets it from its
+   * listings. A disabled element keeps its stored value.
+   */
+  #[Hook('form_commerce_product_form_alter')]
+  public function productFormAlter(array &$form, FormStateInterface $form_state): void {
+    if (!isset($form['atom_premium'])) {
+      return;
+    }
+    /** @var \Drupal\commerce_domains\Entity\ProviderInterface $provider */
+    foreach ($this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple() as $provider) {
+      if ($provider->status() && $provider->hasCapability(PremiumListingsInterface::class)) {
+        $form['atom_premium']['#disabled'] = TRUE;
+        $form['atom_premium']['widget']['value']['#description'] = $this->t("Follows @provider: each check sets it from the domain's listing there. A domain @provider doesn't list keeps it.", ['@provider' => $provider->label()]);
+        return;
+      }
+    }
+  }
 
   /**
    * Implements hook_form_FORM_ID_alter() for commerce_domains_provider_form.

@@ -1,5 +1,5 @@
 entity.commerce_domains_handover.collection:
-  path: '/admin/commerce/domain-handovers'
+  path: '/admin/commerce/domains/handovers'
   defaults:
     _entity_list: 'commerce_domains_handover'
     _title: 'Domain handovers'
@@ -44,7 +44,7 @@ commerce_domains_handover.start:
 # Each step is a confirmation form, so it only happens on a POST with the
 # form's token.
 commerce_domains_handover.step:
-  path: '/admin/commerce/domain-handovers/{commerce_domains_handover}/{transition}'
+  path: '/admin/commerce/domains/handovers/{commerce_domains_handover}/{transition}'
   defaults:
     _form: '\Drupal\commerce_domains_handover\Form\HandoverStepForm'
     _title: 'Domain handover'

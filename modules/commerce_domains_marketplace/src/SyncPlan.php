@@ -71,6 +71,15 @@ final class SyncPlan {
   public array $salesToRecord = [];
 
   /**
+   * Catalog domains whose Atom premium flag the listings change.
+   *
+   * The new flag, keyed by domain name; a dry run only lists them.
+   *
+   * @var array<string, bool>
+   */
+  public array $premium = [];
+
+  /**
    * The catalog domains that were for sale here when the check began.
    *
    * @var array<string, true>

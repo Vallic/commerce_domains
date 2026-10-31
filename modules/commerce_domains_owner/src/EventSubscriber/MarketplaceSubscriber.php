@@ -40,22 +40,25 @@ class MarketplaceSubscriber implements EventSubscriberInterface {
   /**
    * Records the sale on the domain, and mails the owner.
    *
-   * A marketplace with a sales report fills in the sale; when the report
-   * can't be read, cron's daily read does it later.
+   * A marketplace with a sales report fills in the sale, once the report
+   * says what it brought: until then nothing is recorded, and cron's daily
+   * read records it later. The domain is off sale either way.
    */
   public function onSoldElsewhere(SoldElsewhereEvent $event): void {
-    if ($event->product) {
-      $plugin = $event->provider->getPlugin();
-      $sale = NULL;
-      if ($plugin instanceof SalesReportInterface) {
-        try {
-          $sale = $plugin->fetchSales([$event->domain])[$event->domain] ?? NULL;
-        }
-        catch (ProviderException) {
-          // Recorded without the details, which cron adds later.
-        }
+    $plugin = $event->provider->getPlugin();
+    if ($event->product && $plugin instanceof SalesReportInterface) {
+      try {
+        $sale = $plugin->fetchSales([$event->domain])[$event->domain] ?? NULL;
       }
-      $this->recorder->recordElsewhere($event->product, $event->provider, $this->time->getRequestTime(), $sale);
+      catch (ProviderException) {
+        $sale = NULL;
+      }
+      if ($sale?->received !== NULL) {
+        $this->recorder->recordElsewhere($event->product, $event->provider, $this->time->getRequestTime(), $sale);
+      }
+    }
+    elseif ($event->product) {
+      $this->recorder->recordElsewhere($event->product, $event->provider, $this->time->getRequestTime());
     }
     $this->notifier->soldElsewhere($event->provider, $event->domain, $event->product, $event->status);
   }

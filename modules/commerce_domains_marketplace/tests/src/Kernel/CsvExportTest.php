@@ -139,7 +139,7 @@ class CsvExportTest extends MarketplaceKernelTestBase {
     $this->assertArrayNotHasKey('csv_export', $list_builder->getOperations(Provider::load('daaz')), 'Without access, no link.');
     $this->setUpCurrentUser([], ['administer commerce_domains providers']);
     $operations = $list_builder->getOperations(Provider::load('daaz'));
-    $this->assertSame('/admin/commerce/config/domain-providers/daaz/csv', $operations['csv_export']['url']->toString());
+    $this->assertSame('/admin/commerce/domains/settings/providers/daaz/csv', $operations['csv_export']['url']->toString());
     $this->assertArrayNotHasKey('csv_export', $list_builder->getOperations(Provider::load('test')));
   }
 

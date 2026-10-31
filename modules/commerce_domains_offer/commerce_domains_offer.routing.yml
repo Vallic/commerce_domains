@@ -1,5 +1,5 @@
 entity.commerce_domains_offer.collection:
-  path: '/admin/commerce/domain-offers'
+  path: '/admin/commerce/domains/offers'
   defaults:
     _entity_list: 'commerce_domains_offer'
     _title: 'Domain offers'
@@ -7,7 +7,7 @@ entity.commerce_domains_offer.collection:
     _permission: 'administer domain offers'
 
 entity.commerce_domains_offer.canonical:
-  path: '/admin/commerce/domain-offers/{commerce_domains_offer}'
+  path: '/admin/commerce/domains/offers/{commerce_domains_offer}'
   defaults:
     _form: '\Drupal\commerce_domains_offer\Form\OfferAdminForm'
     _title: 'Domain offer'
@@ -20,7 +20,7 @@ entity.commerce_domains_offer.canonical:
         type: 'entity:commerce_domains_offer'
 
 entity.commerce_domains_offer.delete_form:
-  path: '/admin/commerce/domain-offers/{commerce_domains_offer}/delete'
+  path: '/admin/commerce/domains/offers/{commerce_domains_offer}/delete'
   defaults:
     _entity_form: 'commerce_domains_offer.delete'
     _title: 'Delete offer'
@@ -45,7 +45,7 @@ commerce_domains_offer.buyer:
         type: 'entity:commerce_domains_offer'
 
 commerce_domains_offer.settings:
-  path: '/admin/commerce/config/domain-offers'
+  path: '/admin/commerce/domains/settings/offers'
   defaults:
     _form: '\Drupal\commerce_domains_offer\Form\SettingsForm'
     _title: 'Domain offers'

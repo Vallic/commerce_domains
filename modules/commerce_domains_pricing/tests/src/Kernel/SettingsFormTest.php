@@ -41,7 +41,7 @@ class SettingsFormTest extends DomainsKernelTestBase {
    */
   public function testAccess(): void {
     $url = Url::fromRoute('commerce_domains_pricing.settings');
-    $this->assertSame('/admin/commerce/config/domain-pricing', $url->toString());
+    $this->assertSame('/admin/commerce/domains/settings/pricing', $url->toString());
     // User 1 may do anything; the next ones have their permissions only.
     $this->createUser();
     $this->assertFalse($url->access($this->createUser([

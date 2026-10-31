@@ -18,9 +18,10 @@ use Psr\Log\LoggerInterface;
  *
  * A marketplace's listing only shows that a domain sold, and the time the
  * sale was found is recorded; the report adds the sale date, what it
- * brought after commission, and the payments of a lease to own. Cron reads
- * each report once a day, as amounts are often worked out days after a
- * sale. See SaleRecorder::saleChanges() for what is filled in.
+ * brought after commission, and the payments of a lease to own. A sale is
+ * only recorded once the report says what it brought. Cron reads each
+ * report once a day, as amounts are often worked out days after a sale.
+ * See SaleRecorder::saleChanges() for what is filled in.
  */
 class MarketplaceSales {
 

@@ -7,10 +7,8 @@ namespace Drupal\commerce_domains_test\Plugin\CommerceDomains\Provider;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\ListingStats;
-use Drupal\commerce_domains\MarketplaceSale;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingStatsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplacePluginBase;
-use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\SalesReportInterface;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\Core\State\StateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
@@ -33,7 +31,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   id: 'test_marketplace',
   label: new TranslatableMarkup('Test marketplace'),
 )]
-class TestMarketplace extends MarketplacePluginBase implements ListingStatsInterface, SalesReportInterface {
+class TestMarketplace extends MarketplacePluginBase implements ListingStatsInterface {
 
   // Where the State keys live.
   protected const STATE_PREFIX = 'commerce_domains_test.';
@@ -85,21 +83,6 @@ class TestMarketplace extends MarketplacePluginBase implements ListingStatsInter
       $stats[$name] = new ListingStats($views, $leads, days: 30);
     }
     return $stats;
-  }
-
-  /**
-   * {@inheritdoc}
-   *
-   * Sales come from state "sales": [sold, received, lease months] by domain.
-   */
-  public function fetchSales(?array $names = NULL): array {
-    $this->failIfAsked();
-    $this->record('sales', $names);
-    $sales = [];
-    foreach ($this->state->get(static::STATE_PREFIX . 'sales', []) as $name => [$sold, $received, $months]) {
-      $sales[$name] = new MarketplaceSale($name, $sold, $received, $received, leaseMonths: $months, status: 'done');
-    }
-    return $names === NULL ? $sales : array_intersect_key($sales, array_flip($names));
   }
 
   /**

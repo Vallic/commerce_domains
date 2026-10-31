@@ -119,7 +119,9 @@ final class MarketplaceCommands extends DrushCommands {
     $locked = array_map(fn($name, $reason) => "$name $reason", array_keys($other_locks), $other_locks);
     $sales = array_map(fn($name, $status) => "$name $status", array_keys($plan->sales), $plan->sales);
     $unmanaged = dt('not in the catalog, or left to @label; never touched', ['@label' => $label]);
+    $premium = array_map(fn($name, $flag) => $name . ($flag ? ' on' : ' off'), array_keys($plan->premium), $plan->premium);
     $this->io()->table([dt('Change'), dt('Domains'), dt('Notes')], [
+      ...($plan->premium ? [[dt('Atom premium'), count($plan->premium), implode(', ', array_slice($premium, 0, 5))]] : []),
       [dt('Add'), count($plan->create), ''],
       [dt('Update'), count($plan->update), implode(', ', $updates)],
       [dt('Remove'), count($plan->delete), trim(implode(', ', array_slice($plan->delete, 0, 5)) . $removal)],

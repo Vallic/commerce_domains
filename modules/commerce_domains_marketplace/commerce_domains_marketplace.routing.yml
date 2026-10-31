@@ -1,5 +1,5 @@
 entity.commerce_domains_provider.csv_export:
-  path: '/admin/commerce/config/domain-providers/{commerce_domains_provider}/csv'
+  path: '/admin/commerce/domains/settings/providers/{commerce_domains_provider}/csv'
   defaults:
     _form: '\Drupal\commerce_domains_marketplace\Form\CsvExportForm'
     _title_callback: '\Drupal\commerce_domains_marketplace\Form\CsvExportForm::title'

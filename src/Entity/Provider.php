@@ -45,11 +45,11 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
     ],
   ],
   links: [
-    'collection' => '/admin/commerce/config/domain-providers',
-    'add-form' => '/admin/commerce/config/domain-providers/add',
-    'edit-form' => '/admin/commerce/config/domain-providers/{commerce_domains_provider}',
-    'delete-form' => '/admin/commerce/config/domain-providers/{commerce_domains_provider}/delete',
-    'registrations' => '/admin/commerce/config/domain-providers/{commerce_domains_provider}/registrations',
+    'collection' => '/admin/commerce/domains/settings/providers',
+    'add-form' => '/admin/commerce/domains/settings/providers/add',
+    'edit-form' => '/admin/commerce/domains/settings/providers/{commerce_domains_provider}',
+    'delete-form' => '/admin/commerce/domains/settings/providers/{commerce_domains_provider}/delete',
+    'registrations' => '/admin/commerce/domains/settings/providers/{commerce_domains_provider}/registrations',
   ],
   admin_permission: 'administer commerce_domains providers',
   label_count: [

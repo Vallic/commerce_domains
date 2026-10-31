@@ -41,7 +41,7 @@ class ConfigurationMenuTest extends DomainsKernelTestBase {
     foreach ($settings as $id) {
       $this->assertSame('commerce_domains.configuration', $links->getDefinition($id)['parent'], $id);
     }
-    $this->assertSame('/admin/commerce/config/domains', $links->createInstance('commerce_domains.configuration')->getUrlObject()->toString());
+    $this->assertSame('/admin/commerce/domains/settings', $links->createInstance('commerce_domains.configuration')->getUrlObject()->toString());
 
     $this->setUpCurrentUser([], [
       'access commerce administration pages',

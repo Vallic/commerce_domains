@@ -8,6 +8,7 @@ use Drupal\commerce_domains\Availability;
 use Drupal\commerce_domains\Catalog;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\PremiumListingsInterface;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains_marketplace\Event\MarketplaceEvents;
 use Drupal\commerce_domains_marketplace\Event\SoldElsewhereEvent;
@@ -104,8 +105,55 @@ class MarketplaceSync {
     // leaves them to the marketplace, or their rows would go.
     $plan->unmanaged = array_keys(array_diff_key($plan->current, $managed, array_flip($plan->removed)));
     $this->recordSales($provider, $plugin, $plan, $dry_run);
+    $this->followPremium($provider, $plugin, $plan, $items, $dry_run);
     $this->recorder->recordCheck($provider, $plan);
     return $plan;
+  }
+
+  /**
+   * Sets listed domains' Atom premium flag from the marketplace's listings.
+   *
+   * Only domains the marketplace lists change: one it doesn't list keeps
+   * its flag, so a partial or failed read never turns it off. The saved
+   * product queues the syncs of the marketplaces whose prices follow it.
+   *
+   * @param \Drupal\commerce_domains\Entity\ProviderInterface $provider
+   *   The marketplace.
+   * @param \Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface $plugin
+   *   Its plugin.
+   * @param \Drupal\commerce_domains_marketplace\SyncPlan $plan
+   *   The check, with the current listings.
+   * @param array<string, \Drupal\commerce_domains\CatalogItem> $items
+   *   The catalog domains checked.
+   * @param bool $dry_run
+   *   TRUE to only list the changes in $plan->premium.
+   */
+  protected function followPremium(ProviderInterface $provider, MarketplaceInterface $plugin, SyncPlan $plan, array $items, bool $dry_run): void {
+    if (!$plugin instanceof PremiumListingsInterface) {
+      return;
+    }
+    foreach (array_intersect_key($plan->current, $items) as $name => $current) {
+      $premium = $plugin->isPremium($current);
+      if ($premium !== $items[$name]->atomPremium) {
+        $plan->premium[(string) $name] = $premium;
+      }
+    }
+    if ($dry_run || !$plan->premium) {
+      return;
+    }
+    $storage = $this->entityTypeManager->getStorage('commerce_product');
+    foreach ($plan->premium as $name => $premium) {
+      $product = $storage->load($plan->catalog[$name]);
+      if ($product instanceof ProductInterface && $product->hasField('atom_premium')) {
+        $product->set('atom_premium', $premium)->save();
+        $this->logger->notice('@provider lists @domain as @kind: its Atom premium flag is now @flag.', [
+          '@provider' => $provider->label(),
+          '@domain' => $name,
+          '@kind' => $premium ? 'premium' : 'standard',
+          '@flag' => $premium ? 'on' : 'off',
+        ]);
+      }
+    }
   }
 
   /**

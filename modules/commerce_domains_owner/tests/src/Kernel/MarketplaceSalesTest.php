@@ -73,7 +73,7 @@ class MarketplaceSalesTest extends OwnerKernelTestBase {
    * Tests a sale found on the marketplace, filled in from its report.
    */
   public function testSoldElsewhere(): void {
-    $provider = $this->createProvider('market', 'test_marketplace');
+    $provider = $this->createProvider('market', 'test_atom');
     $product = $this->createDomain('Lease.com');
     $this->setSales(['lease.com' => [self::SOLD, 3360.0, 6]]);
     $this->container->get('event_dispatcher')->dispatch(new SoldElsewhereEvent($provider, 'lease.com', $product, 'Transfer Complete'), 'commerce_domains_marketplace.sold_elsewhere');
@@ -84,18 +84,23 @@ class MarketplaceSalesTest extends OwnerKernelTestBase {
     $this->assertPrice('3360', $product);
     $this->assertSame(6, (int) $product->get('domain_lease_months')->value);
 
-    // A report that can't be read still records the sale.
+    // No sale is recorded before the report says what it brought, nor when
+    // it can't be read: cron records it later.
+    $this->setSales(['pending.com' => [self::SOLD, NULL, NULL]]);
+    $pending = $this->createDomain('Pending.com');
+    $this->container->get('event_dispatcher')->dispatch(new SoldElsewhereEvent($provider, 'pending.com', $pending, 'Transfer Complete'), 'commerce_domains_marketplace.sold_elsewhere');
+    $this->assertTrue($this->reload($pending)->get('domain_sold')->isEmpty());
     $this->container->get('state')->set('commerce_domains_test.fail', 'retryable');
     $other = $this->createDomain('Other.com');
     $this->container->get('event_dispatcher')->dispatch(new SoldElsewhereEvent($provider, 'other.com', $other, 'SOLD'), 'commerce_domains_marketplace.sold_elsewhere');
-    $this->assertSame($this->now, (int) $this->reload($other)->get('domain_sold')->value);
+    $this->assertTrue($this->reload($other)->get('domain_sold')->isEmpty());
   }
 
   /**
    * Tests the daily fill, what it leaves alone, and Drush.
    */
   public function testFill(): void {
-    $this->createProvider('market', 'test_marketplace');
+    $this->createProvider('market', 'test_atom');
     $found = $this->createDomain('Found.com', 1000, ['domain_sold' => $this->now, 'domain_sold_via' => 'market']);
     $entered = $this->createDomain('Entered.com', 1000, [
       'domain_sold' => $this->now,
@@ -132,7 +137,7 @@ class MarketplaceSalesTest extends OwnerKernelTestBase {
 
     // Cron fills in once a day.
     $sales = $this->container->get(MarketplaceSales::class);
-    $this->assertSame(3, $sales->cron());
+    $this->assertSame(2, $sales->cron());
     $this->assertSame(0, $sales->cron(), 'Read once a day.');
 
     $found = $this->reload($found);
@@ -144,17 +149,18 @@ class MarketplaceSalesTest extends OwnerKernelTestBase {
     $this->assertSame($this->now, (int) $this->reload($site)->get('domain_sold')->value, 'A sale on this site stands.');
     $this->assertTrue($this->reload($site)->get('domain_sold_via')->isEmpty());
     $this->assertSame($this->now, (int) $this->reload($elsewhere)->get('domain_sold')->value, 'A sale on another marketplace stands.');
-    $off = $this->reload($off);
-    $this->assertSame(self::SOLD, (int) $off->get('domain_sold')->value, 'A domain off sale gets its sale recorded.');
-    $this->assertSame('market', $off->get('domain_sold_via')->target_id);
-    $this->assertTrue($off->get('domain_sale_price')->isEmpty(), 'Not worked out yet.');
+    $this->assertTrue($this->reload($off)->get('domain_sold')->isEmpty(), 'No sale without what it brought.');
     $this->assertTrue($this->reload($selling)->get('domain_sold')->isEmpty(), 'Still for sale: left to the marketplace sync.');
 
-    // Once the amount is worked out, Drush fills it in.
+    // Once the amount is worked out, the sale of a domain off sale is
+    // recorded; here by Drush.
     $this->setSales(['off.com' => [self::SOLD, 1616.3, NULL]]);
     $this->assertSame(0, $command->sales('market', ['domains' => 'Off.com', 'dry-run' => FALSE]));
     $this->assertStringContainsString('Filled in the sale of 1 domains.', $this->output->fetch());
-    $this->assertPrice('1616.3', $this->reload($off));
+    $off = $this->reload($off);
+    $this->assertSame(self::SOLD, (int) $off->get('domain_sold')->value);
+    $this->assertSame('market', $off->get('domain_sold_via')->target_id);
+    $this->assertPrice('1616.3', $off);
   }
 
 }

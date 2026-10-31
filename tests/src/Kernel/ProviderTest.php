@@ -10,6 +10,7 @@ use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingStatsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\PremiumListingsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\SalesReportInterface;
 use Drupal\commerce_domains\ProviderPluginManager;
@@ -44,6 +45,7 @@ class ProviderTest extends DomainsKernelTestBase {
       'gname',
       'namesilo',
       'spaceship',
+      'test_atom',
       'test_marketplace',
       'unstoppable',
     ];
@@ -79,8 +81,9 @@ class ProviderTest extends DomainsKernelTestBase {
     // Registrars whose API can also change domains.
     $managers = ['dynadot', 'namebright', 'namecheap', 'namesilo', 'porkbun', 'spaceship', 'test_managed_registrar'];
     $appraisers = ['atom', 'test_appraiser'];
-    $stats = ['afternic', 'atom', 'test_marketplace'];
-    $sales = ['atom', 'test_marketplace'];
+    $stats = ['afternic', 'atom', 'test_atom', 'test_marketplace'];
+    // Atom, and the test plugin like it.
+    $atom_like = ['atom', 'test_atom'];
     $expected = array_unique([...$marketplaces, ...$registrars, ...$csv, ...$appraisers]);
     sort($expected);
     $this->assertSame($expected, $ids);
@@ -90,7 +93,8 @@ class ProviderTest extends DomainsKernelTestBase {
     $this->assertEqualsCanonicalizing($csv, $manager->getPluginIdsWith(CsvExportInterface::class));
     $this->assertEqualsCanonicalizing($appraisers, $manager->getPluginIdsWith(AppraisalInterface::class));
     $this->assertEqualsCanonicalizing($stats, $manager->getPluginIdsWith(ListingStatsInterface::class));
-    $this->assertEqualsCanonicalizing($sales, $manager->getPluginIdsWith(SalesReportInterface::class));
+    $this->assertEqualsCanonicalizing($atom_like, $manager->getPluginIdsWith(SalesReportInterface::class));
+    $this->assertEqualsCanonicalizing($atom_like, $manager->getPluginIdsWith(PremiumListingsInterface::class));
 
     foreach ($ids as $id) {
       Provider::create(['id' => $id, 'label' => ucfirst($id), 'plugin' => $id])->save();

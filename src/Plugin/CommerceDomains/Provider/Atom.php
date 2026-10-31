@@ -32,7 +32,7 @@ use Drupal\commerce_domains\ProviderException;
   label: new TranslatableMarkup('Atom'),
   description: new TranslatableMarkup('Pushes standard listings through the Atom Seller API, and reads registrations through its Registrar API.'),
 )]
-final class Atom extends MarketplacePluginBase implements RegistrarInterface, CsvExportInterface, AppraisalInterface, ListingStatsInterface, SalesReportInterface {
+final class Atom extends MarketplacePluginBase implements RegistrarInterface, CsvExportInterface, AppraisalInterface, ListingStatsInterface, SalesReportInterface, PremiumListingsInterface {
 
   use RegistrarTrait;
 
@@ -127,6 +127,13 @@ final class Atom extends MarketplacePluginBase implements RegistrarInterface, Cs
       return 'premium listing, managed by Atom';
     }
     return $this->saleStatus($current);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isPremium(array $current): bool {
+    return ($current['type'] ?? NULL) === 'premium';
   }
 
   /**

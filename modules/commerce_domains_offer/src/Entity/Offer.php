@@ -45,9 +45,9 @@ use Drupal\views\EntityViewsData;
     ],
   ],
   links: [
-    'canonical' => '/admin/commerce/domain-offers/{commerce_domains_offer}',
-    'collection' => '/admin/commerce/domain-offers',
-    'delete-form' => '/admin/commerce/domain-offers/{commerce_domains_offer}/delete',
+    'canonical' => '/admin/commerce/domains/offers/{commerce_domains_offer}',
+    'collection' => '/admin/commerce/domains/offers',
+    'delete-form' => '/admin/commerce/domains/offers/{commerce_domains_offer}/delete',
   ],
   admin_permission: 'administer domain offers',
   base_table: 'commerce_domains_offer',

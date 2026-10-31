@@ -127,7 +127,8 @@ class SaleRecorder {
    * Returns what a marketplace's report of a sale adds to the domain.
    *
    * Only for a sale recorded as made there, or a domain off sale with no
-   * sale recorded: a sale on this site or elsewhere stands. The report's
+   * sale recorded, once the report says what it brought: a sale on this
+   * site or elsewhere stands. The report's
    * date replaces the time the sale was found; what it brought and the
    * lease are only filled in when empty, so the owner's entries stand.
    *
@@ -156,8 +157,8 @@ class SaleRecorder {
     if ($sale->leaseMonths !== NULL && $product->hasField('domain_lease_months') && $product->get('domain_lease_months')->isEmpty()) {
       $changes['domain_lease_months'] = min($sale->leaseMonths, DomainCosts::MAX_LEASE_MONTHS);
     }
-    // Only a sale with a date can be recorded.
-    return !$recorded && !isset($changes['domain_sold']) ? [] : $changes;
+    // Only a sale with a date and an amount can be recorded.
+    return !$recorded && (!isset($changes['domain_sold']) || $sale->received === NULL) ? [] : $changes;
   }
 
   /**

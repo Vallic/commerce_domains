@@ -10,7 +10,10 @@ it is held at, and the marketplaces it is listed on.
   on every save, using the Public Suffix List, so `example.co.uk` splits into
   `example` and `co.uk`), plus a registrar, an expiry date and an ownership
   flag. Titles must be registrable domain names.
-- **An Atom premium trait** for names Atom lists as premium.
+- **An Atom premium trait** for names Atom lists as premium. With Atom
+  enabled, each Atom check sets it from the listing (on for a premium
+  listing, off for a standard one; unlisted domains keep it), and the
+  product form locks it.
 - **A sale terms trait** for variations: buy now, accept offers, minimum
   offer, floor price and lease-to-own. Empty fields are worked out from the
   price, the same way for every marketplace; each marketplace lists what it
@@ -631,9 +634,11 @@ payments add up to, and their number). Orders on the site are paid at once.
 A marketplace with a sales report (Atom) fills those in too: the sale date
 replaces when the sale was found, and what it brought after commission and
 the number of payments are filled in where empty, so your entries stand.
-Cron reads the reports once a day, as the amounts are often worked out days
-after the sale; a domain already off sale with no sale recorded gets its
-sale recorded too. Sales on the site or another marketplace stand.
+A sale is only recorded once the report says what it brought: until then
+the domain is off sale but has no sale, so saving it, e.g. as internal,
+stores none. Cron reads the reports once a day, as the amounts are often
+worked out days after the sale, and then records the sale of a domain off
+sale with none recorded. Sales on the site or another marketplace stand.
 
 ```sh
 drush cdsales atom --dry-run

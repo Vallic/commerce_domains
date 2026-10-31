@@ -32,7 +32,7 @@ commerce_domains_owner.profit:
     _admin_route: TRUE
 
 commerce_domains_owner.settings:
-  path: '/admin/commerce/config/domain-portfolio'
+  path: '/admin/commerce/domains/settings/portfolio'
   defaults:
     _form: '\Drupal\commerce_domains_owner\Form\SettingsForm'
     _title: 'Domain portfolio'

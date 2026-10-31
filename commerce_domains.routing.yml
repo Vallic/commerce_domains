@@ -1,5 +1,5 @@
 entity.commerce_domains_provider.registrations:
-  path: '/admin/commerce/config/domain-providers/{commerce_domains_provider}/registrations'
+  path: '/admin/commerce/domains/settings/providers/{commerce_domains_provider}/registrations'
   defaults:
     _form: '\Drupal\commerce_domains\Form\RegistrationsForm'
     _title_callback: '\Drupal\commerce_domains\Form\RegistrationsForm::title'
@@ -43,7 +43,7 @@ commerce_domains.lander:
 # Groups the settings of the module and its submodules under Commerce →
 # Configuration, whose page only lists links that have links of their own.
 commerce_domains.configuration:
-  path: '/admin/commerce/config/domains'
+  path: '/admin/commerce/domains/settings'
   defaults:
     _controller: '\Drupal\system\Controller\SystemController::systemAdminMenuBlockPage'
     _title: 'Domains'
