@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\PorkbunClient;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Porkbun;
 use Drupal\commerce_domains\ProviderException;
@@ -115,6 +116,54 @@ class PorkbunTest extends ProviderTestBase {
       }
     }
     $this->assertCount(4, $this->history, 'Unsupported operations make no call.');
+  }
+
+  /**
+   * Tests reading DNS records and writing only what changes.
+   */
+  public function testDnsRecords(): void {
+    $zone = [
+      'status' => 'SUCCESS',
+      'records' => [
+        ['id' => '101', 'name' => 'a.com', 'type' => 'A', 'content' => '192.0.2.1', 'ttl' => '600', 'prio' => '0'],
+        ['id' => '102', 'name' => 'www.a.com', 'type' => 'CNAME', 'content' => 'a.com', 'ttl' => '600', 'prio' => NULL],
+        ['id' => '103', 'name' => 'a.com', 'type' => 'TXT', 'content' => 'old', 'ttl' => '600', 'prio' => NULL],
+      ],
+    ];
+    $ours = ['status' => 'SUCCESS', 'ns' => ['curitiba.ns.porkbun.com', 'maceio.ns.porkbun.com']];
+    $plugin = $this->registrar(Porkbun::class, 'porkbun', self::KEYS, [
+      self::json($ours),
+      self::json($zone),
+      self::json(['status' => 'SUCCESS', 'ns' => ['ns1.elsewhere.net']]),
+      // The write: nameservers and zone read again, then one delete, one
+      // create and one TTL change.
+      self::json($ours),
+      self::json($zone),
+      self::json(['status' => 'SUCCESS']),
+      self::json(['status' => 'SUCCESS', 'id' => '104']),
+      self::json(['status' => 'SUCCESS']),
+    ]);
+    $records = $plugin->getDnsRecords('a.com');
+    $this->assertEquals([
+      new DnsRecord('A', '@', '192.0.2.1', ttl: 600, id: '101'),
+      new DnsRecord('CNAME', 'www', 'a.com', ttl: 600, id: '102'),
+      new DnsRecord('TXT', '@', 'old', ttl: 600, id: '103'),
+    ], $records);
+    $this->assertSame('GET https://api.porkbun.com/api/json/v3/dns/retrieve/a.com', $this->call(1));
+    $this->assertNull($plugin->getDnsRecords('b.com'), 'Nameservers elsewhere: the records there do not apply.');
+
+    $plugin->setDnsRecords('a.com', [
+      $records[0]->withTtl(3600),
+      $records[1],
+      new DnsRecord('TXT', '@', 'new'),
+    ]);
+    $this->assertSame('POST https://api.porkbun.com/api/json/v3/dns/delete/a.com/103', $this->call(5));
+    $this->assertSame('POST https://api.porkbun.com/api/json/v3/dns/create/a.com', $this->call(6));
+    $this->assertSame(['name' => '', 'type' => 'TXT', 'content' => 'new', 'ttl' => '600'], $this->body(6));
+    $this->assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $this->header(6, 'Idempotency-Key'));
+    $this->assertSame('POST https://api.porkbun.com/api/json/v3/dns/edit/a.com/101', $this->call(7));
+    $this->assertSame(['name' => '', 'type' => 'A', 'content' => '192.0.2.1', 'ttl' => '3600'], $this->body(7));
+    $this->assertCount(8, $this->history, 'The CNAME that stays is not written.');
   }
 
 }

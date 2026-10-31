@@ -65,6 +65,58 @@ final class GoDaddyClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's DNS records.
+   *
+   * @return array<int, array<string, mixed>>
+   *   Records with recordId, name (relative, "@" for the domain itself),
+   *   type, data, ttl, and priority, weight, port, service, protocol, flag
+   *   and tag where the type has them.
+   */
+  public function listDnsRecords(string $name): array {
+    $records = [];
+    $path = 'v3/domains/zones/' . rawurlencode($name) . '/dns-records?pageSize=100';
+    for ($page = 0; $path !== NULL && $page < self::MAX_PAGES; $page++) {
+      $response = $this->request('GET', $path);
+      array_push($records, ...($response['items'] ?? []));
+      $path = self::nextPath($response['links'] ?? []);
+    }
+    return $records;
+  }
+
+  /**
+   * Creates a DNS record.
+   *
+   * @param string $name
+   *   The domain.
+   * @param array<string, mixed> $record
+   *   The name, type, data, ttl, and priority, flag and tag where set.
+   */
+  public function createDnsRecord(string $name, array $record): void {
+    $this->request('POST', 'v3/domains/zones/' . rawurlencode($name) . '/dns-records', [RequestOptions::JSON => $record]);
+  }
+
+  /**
+   * Replaces a DNS record: fields left out are reset.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string $id
+   *   The record's ID.
+   * @param array<string, mixed> $record
+   *   The name, type, data, ttl, and the fields of its type.
+   */
+  public function replaceDnsRecord(string $name, string $id, array $record): void {
+    $this->request('PUT', 'v3/domains/zones/' . rawurlencode($name) . '/dns-records/' . rawurlencode($id), [RequestOptions::JSON => $record]);
+  }
+
+  /**
+   * Deletes a DNS record; one already gone is fine.
+   */
+  public function deleteDnsRecord(string $name, string $id): void {
+    $this->request('DELETE', 'v3/domains/zones/' . rawurlencode($name) . '/dns-records/' . rawurlencode($id), [], [404]);
+  }
+
+  /**
    * Returns the path of the next page, from a page's links.
    *
    * Links to another host are ignored, so the token never leaves GoDaddy.

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Dynadot;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
@@ -222,7 +224,12 @@ class DynadotTest extends ProviderTestBase {
     $this->assertSame(['ns1.example.net', 'ns2.example.net'], $plugin->getNameservers('a.com'));
     $plugin->setNameservers('a.com', ['ns1.host.com', 'ns2.host.com']);
     $query = array_diff_key($this->query(1), ['key' => TRUE]);
-    $this->assertSame(['command' => 'set_ns', 'domain' => 'a.com', 'ns0' => 'ns1.host.com', 'ns1' => 'ns2.host.com'], $query);
+    $this->assertSame([
+      'command' => 'set_ns',
+      'domain' => 'a.com',
+      'ns0' => 'ns1.host.com',
+      'ns1' => 'ns2.host.com',
+    ], $query);
     $plugin->setTransferLock('a.com', TRUE);
     $this->assertSame('lock_domain', $this->query(2)['command']);
     $plugin->setAutoRenew('a.com', FALSE);
@@ -237,6 +244,82 @@ class DynadotTest extends ProviderTestBase {
       $this->assertStringContainsString('unlock it in the Dynadot account', $e->getMessage());
     }
     $this->assertCount(5, $this->history, 'An unlock is refused without a call.');
+  }
+
+  /**
+   * Tests reading and replacing DNS records, as the API returned them.
+   */
+  public function testDnsRecords(): void {
+    $success = ['ResponseCode' => 0, 'Status' => 'success'];
+    // As get_dns answered for a domain on Dynadot DNS.
+    $zone = [
+      'Type' => 'Dynadot DNS',
+      'MainDomains' => [
+        ['RecordType' => 'Forward', 'Value' => 'https://forsale.example.net/$domain$/', 'Value2' => '2'],
+        ['RecordType' => 'TXT', 'Value' => 'afternic-verification-x'],
+        ['RecordType' => 'MX', 'Value' => 'mail.example.net', 'Value2' => '10'],
+      ],
+      'SubDomains' => [
+        ['Subhost' => 'www', 'RecordType' => 'CNAME', 'Value' => 'target.example.net'],
+        ['Subhost' => '_brandstore', 'RecordType' => 'TXT', 'Value' => '044ad'],
+      ],
+      'TTL' => '300',
+    ];
+    $elsewhere = ['Type' => 'Name Servers', 'NameServers' => []];
+    $plugin = $this->registrar(Dynadot::class, 'dynadot', self::KEYS, [
+      self::json(['GetDnsResponse' => $success + ['GetDns' => ['NameServerSettings' => $zone]]]),
+      self::json(['GetDnsResponse' => $success + ['GetDns' => ['NameServerSettings' => $elsewhere]]]),
+      self::json(['SetDnsResponse' => $success]),
+    ]);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
+
+    $records = $plugin->getDnsRecords('a.com');
+    $this->assertEquals([
+      new DnsRecord('FORWARD', '@', 'https://forsale.example.net/$domain$/', ttl: 300, extra: ['value2' => '2']),
+      new DnsRecord('TXT', '@', 'afternic-verification-x', ttl: 300),
+      new DnsRecord('MX', '@', 'mail.example.net', 10, 300),
+      new DnsRecord('CNAME', 'www', 'target.example.net', ttl: 300),
+      new DnsRecord('TXT', '_brandstore', '044ad', ttl: 300),
+    ], $records);
+    $this->assertSame(['command' => 'get_dns', 'domain' => 'a.com'], array_diff_key($this->query(0), ['key' => TRUE]));
+    $this->assertNull($plugin->getDnsRecords('b.com'), 'Not on Dynadot DNS.');
+
+    // Written back with a new address: the whole zone, as read.
+    $records[] = new DnsRecord('A', 'shop', '192.0.2.1', ttl: 3600);
+    $plugin->setDnsRecords('a.com', $records);
+    $this->assertSame([
+      'command' => 'set_dns2',
+      'domain' => 'a.com',
+      'main_record_type0' => 'forward',
+      'main_record0' => 'https://forsale.example.net/$domain$/',
+      'main_recordx0' => '2',
+      'main_record_type1' => 'txt',
+      'main_record1' => 'afternic-verification-x',
+      'main_record_type2' => 'mx',
+      'main_record2' => 'mail.example.net',
+      'main_recordx2' => '10',
+      'subdomain0' => 'www',
+      'sub_record_type0' => 'cname',
+      'sub_record0' => 'target.example.net',
+      'subdomain1' => '_brandstore',
+      'sub_record_type1' => 'txt',
+      'sub_record1' => '044ad',
+      'subdomain2' => 'shop',
+      'sub_record_type2' => 'a',
+      'sub_record2' => '192.0.2.1',
+      'ttl' => '300',
+    ], array_diff_key($this->query(2), ['key' => TRUE]));
+
+    // A type Dynadot DNS does not have is refused without a call.
+    try {
+      $plugin->setDnsRecords('a.com', [new DnsRecord('CAA', '@', '0 issue "letsencrypt.org"')]);
+      $this->fail('Dynadot has no CAA records.');
+    }
+    catch (ProviderException $e) {
+      $this->assertStringContainsString('no CAA records', $e->getMessage());
+    }
+    $this->assertCount(3, $this->history);
+    $this->assertArrayNotHasKey('CAA', $plugin->dnsRecordTypes());
   }
 
   /**

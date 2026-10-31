@@ -12,6 +12,20 @@ entity.commerce_domains_provider.registrations:
       commerce_domains_provider:
         type: entity:commerce_domains_provider
 
+commerce_domains.product_dns:
+  path: '/product/{commerce_product}/dns'
+  defaults:
+    _form: '\Drupal\commerce_domains\Form\DomainDnsForm'
+    _title: 'DNS'
+  requirements:
+    _custom_access: '\Drupal\commerce_domains\Form\DomainDnsForm::access'
+    commerce_product: \d+
+  options:
+    _admin_route: TRUE
+    parameters:
+      commerce_product:
+        type: entity:commerce_product
+
 commerce_domains.product_registrar:
   path: '/product/{commerce_product}/registrar'
   defaults:

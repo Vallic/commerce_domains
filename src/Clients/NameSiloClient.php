@@ -84,6 +84,51 @@ final class NameSiloClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's DNS records.
+   *
+   * @return array<int, array<string, mixed>>
+   *   Records with record_id, type, host (the full host name), value, ttl
+   *   and distance (an MX record's priority).
+   */
+  public function dnsListRecords(string $name): array {
+    return self::listOf($this->operation('dnsListRecords', ['domain' => $name])['resource_record'] ?? []);
+  }
+
+  /**
+   * Adds a DNS record.
+   *
+   * @param string $name
+   *   The domain.
+   * @param array<string, string> $record
+   *   The rrtype, rrhost (relative, empty for the domain itself), rrvalue,
+   *   and rrdistance and rrttl where set.
+   */
+  public function dnsAddRecord(string $name, array $record): void {
+    $this->operation('dnsAddRecord', ['domain' => $name] + $record);
+  }
+
+  /**
+   * Changes a DNS record; its type stays.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string $id
+   *   The record's ID, which NameSilo replaces with a new one.
+   * @param array<string, string> $record
+   *   The rrhost, rrvalue, and rrdistance and rrttl where set.
+   */
+  public function dnsUpdateRecord(string $name, string $id, array $record): void {
+    $this->operation('dnsUpdateRecord', ['domain' => $name, 'rrid' => $id] + $record);
+  }
+
+  /**
+   * Deletes a DNS record.
+   */
+  public function dnsDeleteRecord(string $name, string $id): void {
+    $this->operation('dnsDeleteRecord', ['domain' => $name, 'rrid' => $id]);
+  }
+
+  /**
    * Locks a domain against transfers, or unlocks it.
    */
   public function setLock(string $name, bool $locked): void {

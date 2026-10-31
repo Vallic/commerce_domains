@@ -7,6 +7,7 @@ namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\NamecheapClient;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\DomainNameParser;
 use Drupal\commerce_domains\ProviderException;
@@ -24,7 +25,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   label: new TranslatableMarkup('Namecheap'),
   description: new TranslatableMarkup('Reads and manages registrations through the Namecheap API.'),
 )]
-final class Namecheap extends ProviderPluginBase implements DomainManagementInterface {
+final class Namecheap extends ProviderPluginBase implements DomainManagementInterface, DnsRecordsInterface {
 
   use RegistrarTrait;
 
@@ -114,6 +115,77 @@ final class Namecheap extends ProviderPluginBase implements DomainManagementInte
   public function setNameservers(string $name, array $nameservers): void {
     $domain = $this->parse($name);
     $this->client()->setNameservers($domain->label, $domain->extension, $nameservers);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getDnsRecords(string $name): ?array {
+    $domain = $this->parse($name);
+    $hosts = $this->client()->getHosts($domain->label, $domain->extension);
+    if ($hosts === NULL) {
+      return NULL;
+    }
+    $records = [];
+    foreach ($hosts as $host) {
+      $type = strtoupper($host['Type'] ?? '');
+      $records[] = new DnsRecord(
+        type: $type,
+        host: DnsRecord::relativeHost($host['Name'] ?? '@', $name),
+        value: $host['Address'] ?? '',
+        priority: $type === 'MX' && isset($host['MXPref']) ? (int) $host['MXPref'] : NULL,
+        ttl: isset($host['TTL']) && is_numeric($host['TTL']) ? (int) $host['TTL'] : NULL,
+        id: $host['HostId'] ?? NULL,
+      );
+    }
+    return $records;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * The setHosts command replaces every host record, so the whole zone goes
+   * with each change. Mail servers among them need EmailType MX, else
+   * Namecheap keeps its own mail settings and refuses them.
+   */
+  public function setDnsRecords(string $name, array $records): void {
+    $domain = $this->parse($name);
+    $parameters = [];
+    foreach (array_values($records) as $i => $record) {
+      if (!isset($this->dnsRecordTypes()[$record->type])) {
+        throw new ProviderException(sprintf('Namecheap DNS has no %s records, for %s.', $record->type, $record->fqdn($name)));
+      }
+      $n = $i + 1;
+      $parameters["HostName$n"] = $record->host;
+      $parameters["RecordType$n"] = $record->type;
+      $parameters["Address$n"] = $record->value;
+      if ($record->type === 'MX') {
+        $parameters["MXPref$n"] = (string) $record->priority;
+        $parameters['EmailType'] = 'MX';
+      }
+      // Namecheap takes 60 to 60000 seconds.
+      $parameters["TTL$n"] = (string) max(60, min(60000, $record->ttl ?? 1800));
+    }
+    $this->client()->setHosts($domain->label, $domain->extension, $parameters);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function dnsRecordTypes(): array {
+    return [
+      'A' => 'A',
+      'AAAA' => 'AAAA',
+      'CNAME' => 'CNAME',
+      'MX' => 'MX',
+      'TXT' => 'TXT',
+      'CAA' => 'CAA',
+      'NS' => 'NS',
+      'ALIAS' => new TranslatableMarkup('ALIAS, a CNAME for the domain itself'),
+      'URL' => new TranslatableMarkup('URL redirect, 302'),
+      'URL301' => new TranslatableMarkup('URL redirect, 301'),
+      'FRAME' => new TranslatableMarkup('URL redirect, masked'),
+    ];
   }
 
   /**

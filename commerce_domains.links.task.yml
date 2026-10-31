@@ -13,6 +13,12 @@ commerce_domains.product_registrar:
   base_route: entity.commerce_product.canonical
   weight: 20
 
+commerce_domains.product_dns:
+  title: 'DNS'
+  route_name: commerce_domains.product_dns
+  base_route: entity.commerce_product.canonical
+  weight: 21
+
 # Details, and the tabs other modules add; see ProductTabs.
 commerce_domains.product_tab:
   class: \Drupal\Core\Menu\LocalTaskDefault

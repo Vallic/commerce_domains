@@ -98,6 +98,62 @@ final class GnameClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's details.
+   *
+   * @return array<string, mixed>
+   *   The domain's ym, ymdns (its nameservers, comma separated), jx_ting
+   *   (1 while resolution is suspended) and so on.
+   */
+  public function getDomainInfo(string $name): array {
+    $data = $this->call('domain/info', ['ym' => $name])['data'] ?? [];
+    return is_array($data) ? $data : [];
+  }
+
+  /**
+   * Fetches a domain's DNS records.
+   *
+   * @return array<int, array<string, mixed>>
+   *   Records with id, zjt (the host, relative), lx (type), jxz (value), mx
+   *   (an MX record's priority), xlid (route) and zt (1 on, 2 off). No TTL.
+   */
+  public function listResolutions(string $name): array {
+    return $this->pages('resolution/list', ['ym' => $name]);
+  }
+
+  /**
+   * Adds a DNS record.
+   *
+   * @param string $name
+   *   The domain.
+   * @param array<string, string|int> $record
+   *   The lx, zj, jlz, mx, ttl and xl.
+   */
+  public function addResolution(string $name, array $record): void {
+    $this->call('resolution/add', ['ym' => $name] + $record);
+  }
+
+  /**
+   * Changes a DNS record.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string $id
+   *   The record's ID.
+   * @param array<string, string|int> $record
+   *   The lx, zj, jlz, mx, ttl and xl.
+   */
+  public function editResolution(string $name, string $id, array $record): void {
+    $this->call('resolution/edit', ['ym' => $name, 'jxid' => $id] + $record);
+  }
+
+  /**
+   * Deletes a DNS record.
+   */
+  public function deleteResolution(string $name, string $id): void {
+    $this->call('resolution/delete', ['ym' => $name, 'jxid' => $id]);
+  }
+
+  /**
    * Fetches every page of a list.
    *
    * @return array[]

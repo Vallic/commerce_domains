@@ -7,6 +7,7 @@ namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\PorkbunClient;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
@@ -22,8 +23,9 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('Porkbun'),
   description: new TranslatableMarkup('Reads and manages registrations through the Porkbun API.'),
 )]
-final class Porkbun extends ProviderPluginBase implements DomainManagementInterface {
+final class Porkbun extends ProviderPluginBase implements DomainManagementInterface, DnsRecordsInterface {
 
+  use DnsRecordByRecordTrait;
   use RegistrarTrait;
 
   protected const CREDENTIALS = [
@@ -65,6 +67,91 @@ final class Porkbun extends ProviderPluginBase implements DomainManagementInterf
       autoRenew: $flag('autoRenew'),
       status: isset($record['status']) ? strtolower((string) $record['status']) : NULL,
     );
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Porkbun keeps records for a domain whose nameservers are elsewhere, and
+   * takes changes to them, so the nameservers decide whether they apply.
+   */
+  public function getDnsRecords(string $name): ?array {
+    $porkbun = array_filter($this->getNameservers($name), static fn(string $host) => str_ends_with($host, '.porkbun.com'));
+    if (!$porkbun) {
+      return NULL;
+    }
+    $records = [];
+    foreach ($this->client()->retrieveDns($name) as $record) {
+      $type = strtoupper((string) ($record['type'] ?? ''));
+      $priority = isset($record['prio']) && is_numeric($record['prio']) ? (int) $record['prio'] : NULL;
+      $records[] = new DnsRecord(
+        type: $type,
+        host: DnsRecord::relativeHost((string) ($record['name'] ?? ''), $name),
+        value: (string) ($record['content'] ?? ''),
+        priority: in_array($type, ['MX', 'SRV'], TRUE) ? $priority : NULL,
+        ttl: isset($record['ttl']) && is_numeric($record['ttl']) ? (int) $record['ttl'] : NULL,
+        id: isset($record['id']) ? (string) $record['id'] : NULL,
+      );
+    }
+    return $records;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function dnsRecordTypes(): array {
+    return [
+      'A' => 'A',
+      'AAAA' => 'AAAA',
+      'CNAME' => 'CNAME',
+      'MX' => 'MX',
+      'TXT' => 'TXT',
+      'SRV' => 'SRV',
+      'CAA' => 'CAA',
+      'NS' => 'NS',
+      'ALIAS' => new TranslatableMarkup('ALIAS, a CNAME for the domain itself'),
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function createDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->createDns($name, $this->dnsFields($record), bin2hex(random_bytes(16)));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function deleteDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->deleteDns($name, (string) $record->id);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function updateDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->editDns($name, (string) $record->id, $this->dnsFields($record));
+  }
+
+  /**
+   * Returns a record as Porkbun takes it.
+   *
+   * @return array<string, string>
+   *   The name, relative and empty for the domain itself, type, content,
+   *   and ttl and prio where set; Porkbun's minimum TTL, 600, otherwise.
+   */
+  protected function dnsFields(DnsRecord $record): array {
+    $fields = [
+      'name' => $record->host === '@' ? '' : $record->host,
+      'type' => $record->type,
+      'content' => $record->value,
+      'ttl' => (string) max(600, $record->ttl ?? 600),
+    ];
+    if ($record->priority !== NULL) {
+      $fields['prio'] = (string) $record->priority;
+    }
+    return $fields;
   }
 
   /**

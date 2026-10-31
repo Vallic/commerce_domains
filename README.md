@@ -27,8 +27,9 @@ it is held at, and the marketplaces it is listed on.
 - **Provider plugins** with one or more capabilities: *marketplace* (keeps
   listings in line with the catalog), *CSV export* (writes the file a
   marketplace's upload page takes), *registrar* (reads the domains in the
-  account, with their expiry dates) and *domain management* (changes
-  nameservers, locks and renewal at the registrar).
+  account, with their expiry dates), *domain management* (changes
+  nameservers, locks and renewal at the registrar) and *DNS records* (edits
+  the records of domains on the registrar's DNS).
 
   | Provider            | Marketplace | CSV export | Registrar |
   |---------------------|-------------|------------|-----------|
@@ -529,6 +530,56 @@ with who made them; an auth code is shown on the page and never logged.
 Dynadot nameservers must already be added to the account before a domain can
 use them. The Spaceship key needs the domains write scope for nameservers and
 auto-renew, and domains transfer for the lock and the auth code.
+
+## DNS records
+
+Registrars whose API edits DNS records add a *DNS* tab to the domain's
+product, for people with *Manage domains at registrars*. It shows the
+records while the domain uses the registrar's own nameservers; with others,
+the records are wherever those are, and the tab says so.
+
+1. **Edit**: the records as a table. Hosts are relative to the domain: `@`
+   for the domain itself, `www`, `_dmarc`. An empty TTL takes the
+   registrar's default. Records that are new or changed are checked: an
+   address that is no IPv4 address, a CNAME on the domain itself, an MX
+   without a priority are refused.
+2. **Review**: what is added and removed, and which TTLs change. Nothing has
+   reached the registrar yet.
+3. **Apply**: the zone is read again first; if it changed at the registrar
+   since the page was opened, nothing is written. Otherwise the zone as it
+   was is kept (the last 10 for each domain, under *Earlier zones*, each of
+   which can be reviewed and put back), and the new one written.
+
+Where the registrar's API writes record by record, only what differs is
+written: deletions first, then new records, then TTL changes, after every
+new record has been checked, so one the registrar would refuse leaves the
+zone untouched. A registrar error halfway leaves part of the change made;
+the kept zone puts it back.
+
+| Registrar | Writes | DNS when nameservers are | Types offered | Also kept as they are |
+|-----------|--------|--------------------------|---------------|------------------------|
+| Dynadot   | the whole zone | Dynadot DNS | A, AAAA, CNAME, MX, TXT, URL forward (masked or not), email forward | SRV ¹ |
+| GNAME     | record by record | `*.gname-dns.com` | A, CNAME, MX, TXT, URL forward | records switched off |
+| GoDaddy   | record by record | `*.domaincontrol.com` | A, AAAA, CNAME, MX, TXT, CAA, NS | SRV; SOA and the domain's NS are left out |
+| Namecheap | the whole zone | Namecheap BasicDNS | A, AAAA, CNAME, MX, TXT, CAA, NS, ALIAS, URL redirects (301, 302, masked) | |
+| NameSilo  | record by record | `*.dnsowl.com` | A, AAAA, CNAME, MX, TXT | any other type |
+| Porkbun   | record by record | `*.porkbun.com` ² | A, AAAA, CNAME, MX, TXT, SRV, CAA, NS, ALIAS | |
+| Spaceship | record by record | Spaceship basic DNS | A, AAAA, CNAME, MX, TXT, CAA, NS, ALIAS | SRV, TLSA, HTTPS; records Spaceship adds for its products are left out |
+
+¹ Dynadot's API documents no format for SRV values, so new ones are not
+  offered; one already there is written back as it was read.
+² Porkbun keeps, and takes changes to, records of a domain whose
+  nameservers are elsewhere, so the nameservers decide.
+
+Limits the registrars set: Dynadot takes 20 records for the domain itself
+and 100 for subdomains, with one TTL for the zone (the lowest asked for);
+Namecheap takes TTLs of 60 to 60000 seconds, and its mail settings switch to
+custom MX when the zone has MX records; Porkbun's lowest TTL is 600 seconds;
+GoDaddy's is 600 and highest 86400; Spaceship takes 60 to 3600; GNAME's MX
+priorities go from 0 to 50, and its record list gives no TTLs. GoDaddy uses
+the API's version 3 with the personal access token already set; its token
+needs the DNS update scope. The Spaceship key needs the DNS records read and
+write scopes.
 
 ## Offers
 

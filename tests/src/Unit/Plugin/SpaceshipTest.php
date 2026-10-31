@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use GuzzleHttp\Psr7\Response;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Spaceship;
@@ -25,8 +27,18 @@ class SpaceshipTest extends ProviderTestBase {
    */
   public function testBuildListing(): void {
     $plugin = $this->plugin(Spaceship::class, 'spaceship');
-    $this->assertSame(['binPriceEnabled' => TRUE, 'binPrice' => 1365, 'minPriceEnabled' => TRUE, 'minPrice' => 682], $plugin->buildListing(self::item('a.com', 1300)));
-    $this->assertSame(['binPriceEnabled' => TRUE, 'binPrice' => 1560, 'minPriceEnabled' => TRUE, 'minPrice' => 1560], $plugin->buildListing(self::item('p.com', 1300, ['atomPremium' => TRUE])));
+    $this->assertSame([
+      'binPriceEnabled' => TRUE,
+      'binPrice' => 1365,
+      'minPriceEnabled' => TRUE,
+      'minPrice' => 682,
+    ], $plugin->buildListing(self::item('a.com', 1300)));
+    $this->assertSame([
+      'binPriceEnabled' => TRUE,
+      'binPrice' => 1560,
+      'minPriceEnabled' => TRUE,
+      'minPrice' => 1560,
+    ], $plugin->buildListing(self::item('p.com', 1300, ['atomPremium' => TRUE])));
     $this->assertNull($plugin->buildListing(self::item('free.com', 0)));
   }
 
@@ -83,7 +95,10 @@ class SpaceshipTest extends ProviderTestBase {
       self::json(NULL, 204),
     ]);
     $listing = ['binPriceEnabled' => TRUE, 'binPrice' => 1000, 'minPriceEnabled' => TRUE, 'minPrice' => 500];
-    $this->assertSame([], $plugin->saveListings(['xn--mnchen-3ya.de' => $listing, 'a.com' => $listing], ['a.com' => ['status' => 'onSale']]));
+    $this->assertSame([], $plugin->saveListings([
+      'xn--mnchen-3ya.de' => $listing,
+      'a.com' => $listing,
+    ], ['a.com' => ['status' => 'onSale']]));
     // New listings are created by their Unicode name.
     $this->assertSame([
       'name' => 'münchen.de',
@@ -168,6 +183,92 @@ class SpaceshipTest extends ProviderTestBase {
     $this->assertNull($plugin->lockReason(['status' => 'verifying']));
     $this->assertSame('$1,500', $plugin->describeValue('binPrice', 1500));
     $this->assertSame('$10.99', $plugin->describeValue('minPrice', 10.99));
+  }
+
+  /**
+   * Tests reading DNS records and writing only what changes.
+   */
+  public function testDnsRecords(): void {
+    $ours = self::json([
+      'name' => 'a.com',
+      'nameservers' => ['provider' => 'basic', 'hosts' => ['launch1.spaceship.net']],
+    ]);
+    $srv = [
+      'type' => 'SRV',
+      'name' => '@',
+      'service' => '_sip',
+      'protocol' => '_tcp',
+      'priority' => 10,
+      'weight' => 5,
+      'port' => 5060,
+      'target' => 'sip.a.com',
+    ];
+    $zone = self::json([
+      'items' => [
+      ['type' => 'A', 'name' => '@', 'address' => '192.0.2.1', 'ttl' => 3600, 'group' => ['type' => 'custom']],
+      [
+        'type' => 'MX',
+        'name' => '@',
+        'exchange' => 'mail.example.net',
+        'preference' => 10,
+        'ttl' => 3600,
+        'group' => ['type' => 'custom'],
+      ],
+      [
+        'type' => 'CAA',
+        'name' => '@',
+        'flag' => 0,
+        'tag' => 'issue',
+        'value' => 'letsencrypt.org',
+        'ttl' => 3600,
+        'group' => ['type' => 'custom'],
+      ],
+        $srv + ['ttl' => 3600, 'group' => ['type' => 'custom']],
+      ['type' => 'A', 'name' => 'shop', 'address' => '192.0.2.8', 'ttl' => 3600, 'group' => ['type' => 'product']],
+      ],
+      'total' => 5,
+    ]);
+    $plugin = $this->registrar(Spaceship::class, 'spaceship', self::KEYS, [
+      $ours,
+      $zone,
+      self::json(['name' => 'b.com', 'nameservers' => ['provider' => 'custom', 'hosts' => ['ns1.elsewhere.net']]]),
+      $ours,
+      $zone,
+      new Response(204),
+      new Response(204),
+      new Response(204),
+    ]);
+    $records = $plugin->getDnsRecords('a.com');
+    $this->assertCount(4, $records, "Spaceship's product records are left out.");
+    $this->assertEquals(new DnsRecord('A', '@', '192.0.2.1', ttl: 3600), $records[0]);
+    $this->assertEquals(new DnsRecord('MX', '@', 'mail.example.net', 10, 3600), $records[1]);
+    $this->assertEquals(new DnsRecord('CAA', '@', '0 issue "letsencrypt.org"', ttl: 3600), $records[2]);
+    $this->assertSame('SRV', $records[3]->type);
+    $this->assertSame([], $records[0]->problems());
+    $this->assertStringContainsString('dns/records/a.com', $this->call(1));
+    $this->assertNull($plugin->getDnsRecords('b.com'), 'Nameservers elsewhere.');
+
+    // The MX goes, a TXT comes, the A gets a new TTL; the SRV, a type not
+    // offered here, stays untouched.
+    $plugin->setDnsRecords('a.com', [
+      $records[0]->withTtl(600),
+      $records[2],
+      $records[3],
+      new DnsRecord('TXT', '_dmarc', 'v=DMARC1; p=none'),
+    ]);
+    $this->assertSame('DELETE https://spaceship.dev/api/v1/dns/records/a.com', $this->call(5));
+    $mx = ['type' => 'MX', 'name' => '@', 'exchange' => 'mail.example.net', 'preference' => 10];
+    $this->assertSame([$mx], $this->body(5));
+    $this->assertSame('PUT https://spaceship.dev/api/v1/dns/records/a.com', $this->call(6));
+    $this->assertSame([
+      'force' => FALSE,
+      'items' => [['type' => 'TXT', 'name' => '_dmarc', 'value' => 'v=DMARC1; p=none', 'ttl' => 3600]],
+    ], $this->body(6));
+    $this->assertSame([
+      'force' => FALSE,
+      'items' => [['type' => 'A', 'name' => '@', 'address' => '192.0.2.1', 'ttl' => 600]],
+    ], $this->body(7));
+    $this->assertCount(8, $this->history);
   }
 
 }

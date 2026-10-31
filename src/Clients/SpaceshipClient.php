@@ -92,6 +92,43 @@ final class SpaceshipClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's DNS records.
+   *
+   * @return array<int, array<string, mixed>>
+   *   Records with type, name (relative, "@" for the domain itself), ttl,
+   *   group.type, and the fields of their type: address, cname, exchange
+   *   and preference, value, and so on.
+   */
+  public function listDnsRecords(string $name): array {
+    return $this->pages('dns/records/' . rawurlencode($name));
+  }
+
+  /**
+   * Adds DNS records, or changes the TTL of ones there, matched on content.
+   *
+   * @param string $name
+   *   The domain.
+   * @param array<int, array<string, mixed>> $items
+   *   The records, as the API takes them.
+   */
+  public function saveDnsRecords(string $name, array $items): void {
+    $body = ['force' => FALSE, 'items' => array_values($items)];
+    $this->request('PUT', 'dns/records/' . rawurlencode($name), [RequestOptions::JSON => $body]);
+  }
+
+  /**
+   * Deletes DNS records, matched on content.
+   *
+   * @param string $name
+   *   The domain.
+   * @param array<int, array<string, mixed>> $items
+   *   The records, as the API takes them, without the TTL.
+   */
+  public function deleteDnsRecords(string $name, array $items): void {
+    $this->request('DELETE', 'dns/records/' . rawurlencode($name), [RequestOptions::JSON => array_values($items)]);
+  }
+
+  /**
    * Turns automatic renewal on or off.
    */
   public function setAutoRenew(string $name, bool $enabled): void {

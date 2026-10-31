@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\GnameClient;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Gname;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
@@ -147,6 +148,100 @@ class GnameTest extends ProviderTestBase {
     $this->assertSame(['12', 'Removed from sale'], [$this->form(3)['id'], $this->form(3)['sm']]);
     $this->assertSame('POST https://api.gname.com/api/buynow/delete', $this->call(4));
     $this->assertCount(5, $this->history);
+  }
+
+  /**
+   * Tests reading DNS records and writing only what changes.
+   */
+  public function testDnsRecords(): void {
+    $ours = self::json([
+      'code' => 1,
+      'msg' => 'OK',
+      'data' => ['ym' => 'a.com', 'ymdns' => 'ns1.gname-dns.com,ns2.gname-dns.com', 'jx_ting' => '0'],
+    ]);
+    $zone = self::json([
+      'code' => 1,
+      'msg' => 'OK',
+      'count' => 3,
+      'data' => [
+      [
+        'id' => '1',
+        'ym' => 'a.com',
+        'zjt' => '@',
+        'lx' => 'A',
+        'jxz' => '192.0.2.1',
+        'mx' => '0',
+        'xlid' => '0',
+        'zt' => '1',
+      ],
+      [
+        'id' => '2',
+        'ym' => 'a.com',
+        'zjt' => '@',
+        'lx' => 'MX',
+        'jxz' => 'mail.example.net',
+        'mx' => '10',
+        'xlid' => '0',
+        'zt' => '1',
+      ],
+      [
+        'id' => '3',
+        'ym' => 'a.com',
+        'zjt' => 'old',
+        'lx' => 'A',
+        'jxz' => '192.0.2.9',
+        'mx' => '0',
+        'xlid' => '0',
+        'zt' => '2',
+      ],
+      ],
+    ]);
+    $ok = self::json(['code' => 1, 'msg' => 'OK', 'data' => '']);
+    $plugin = $this->registrar(Gname::class, 'gname', self::KEYS, [
+      $ours,
+      $zone,
+      self::json(['code' => 1, 'msg' => 'OK', 'data' => ['ym' => 'b.com', 'ymdns' => 'ns1.elsewhere.net']]),
+      $ours,
+      $zone,
+      $ok,
+      self::json(['code' => 1, 'msg' => 'OK', 'data' => 1277]),
+      $ours,
+      $zone,
+    ]);
+    $records = $plugin->getDnsRecords('a.com');
+    $this->assertEquals([
+      new DnsRecord('A', '@', '192.0.2.1', id: '1'),
+      new DnsRecord('MX', '@', 'mail.example.net', 10, id: '2'),
+      new DnsRecord('A', 'old', '192.0.2.9', id: '3', extra: ['off' => '1']),
+    ], $records);
+    $this->assertSame('a.com', $this->form(1)['ym']);
+    $this->assertStringContainsString('resolution/list', $this->call(1));
+    $this->assertNull($plugin->getDnsRecords('b.com'), 'Nameservers elsewhere.');
+
+    // The MX goes and a TXT comes; the record switched off stays.
+    $plugin->setDnsRecords('a.com', [$records[0], $records[2], new DnsRecord('TXT', '_dmarc', 'v=DMARC1; p=none')]);
+    $this->assertStringContainsString('resolution/delete', $this->call(5));
+    $this->assertSame(['ym' => 'a.com', 'jxid' => '2'], array_intersect_key($this->form(5), ['ym' => 1, 'jxid' => 1]));
+    $this->assertStringContainsString('resolution/add', $this->call(6));
+    $this->assertSame([
+      'ym' => 'a.com',
+      'lx' => 'TXT',
+      'zj' => '_dmarc',
+      'jlz' => 'v=DMARC1; p=none',
+      'mx' => '0',
+      'ttl' => '600',
+      'xl' => '0',
+    ], array_intersect_key($this->form(6), array_flip(['ym', 'lx', 'zj', 'jlz', 'mx', 'ttl', 'xl'])));
+    $this->assertCount(7, $this->history);
+
+    try {
+      $plugin->setDnsRecords('a.com', [new DnsRecord('MX', '@', 'mx.example.net', 60)]);
+      $this->fail('GNAME takes MX priorities up to 50.');
+    }
+    catch (ProviderException $e) {
+      $this->assertStringContainsString('0 to 50', $e->getMessage());
+    }
+    $this->assertCount(9, $this->history, 'Refused before anything was deleted.');
   }
 
 }

@@ -9,6 +9,7 @@ use Drupal\Core\KeyValueStore\KeyValueStoreInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\DynadotClient;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\ProviderException;
@@ -36,9 +37,14 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   label: new TranslatableMarkup('Dynadot'),
   description: new TranslatableMarkup('Lists domains registered at Dynadot in its marketplace through the Dynadot API.'),
 )]
-final class Dynadot extends MarketplacePluginBase implements DomainManagementInterface, CsvExportInterface {
+final class Dynadot extends MarketplacePluginBase implements DomainManagementInterface, DnsRecordsInterface, CsvExportInterface {
 
   use RegistrarTrait;
+
+  // The record types set_dns2 takes for the domain itself, and for
+  // subdomains, which also take SRV.
+  protected const DNS_MAIN_TYPES = ['A', 'AAAA', 'CNAME', 'FORWARD', 'TXT', 'MX', 'STEALTH', 'EMAIL'];
+  protected const DNS_SUB_TYPES = ['A', 'AAAA', 'CNAME', 'FORWARD', 'TXT', 'SRV', 'MX', 'STEALTH', 'EMAIL'];
 
   protected const CREDENTIALS = [
     'api_key' => 'DYNADOT_API_KEY',
@@ -242,6 +248,108 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
   protected function registrationRecords(?array $names): iterable {
     $client = $this->client();
     return self::fewNames($names) ? array_filter(array_map($client->getDomainInfo(...), array_values($names))) : $client->listDomains();
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Dynadot DNS keeps the domain's own records (MainDomains) apart from its
+   * subdomains' (SubDomains), and one TTL for the zone. Value2 is an MX
+   * record's distance, or what else a type keeps, such as the redirect kind
+   * of a forward (1 for 301, 2 for 302), kept as it is.
+   */
+  public function getDnsRecords(string $name): ?array {
+    $settings = $this->client()->getDns($name);
+    if (($settings['Type'] ?? '') !== 'Dynadot DNS') {
+      return NULL;
+    }
+    $ttl = isset($settings['TTL']) && is_numeric($settings['TTL']) ? (int) $settings['TTL'] : NULL;
+    $records = [];
+    foreach (['MainDomains' => FALSE, 'SubDomains' => TRUE] as $list => $sub) {
+      foreach (is_array($settings[$list] ?? NULL) ? $settings[$list] : [] as $record) {
+        if (!is_array($record) || !isset($record['RecordType'], $record['Value'])) {
+          continue;
+        }
+        $type = strtoupper((string) $record['RecordType']);
+        $second = isset($record['Value2']) && $record['Value2'] !== '' ? (string) $record['Value2'] : NULL;
+        $records[] = new DnsRecord(
+          type: $type,
+          host: $sub ? DnsRecord::relativeHost((string) ($record['Subhost'] ?? ''), $name) : '@',
+          value: (string) $record['Value'],
+          priority: $type === 'MX' && $second !== NULL ? (int) $second : NULL,
+          ttl: $ttl,
+          extra: $type !== 'MX' && $second !== NULL ? ['value2' => $second] : [],
+        );
+      }
+    }
+    return $records;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * The set_dns2 command replaces the whole zone: up to 20 records for the
+   * domain itself and 100 for subdomains, with one TTL, the lowest asked for.
+   */
+  public function setDnsRecords(string $name, array $records): void {
+    $params = [];
+    $main = $sub = 0;
+    $ttls = [];
+    foreach ($records as $record) {
+      $types = $record->host === '@' ? self::DNS_MAIN_TYPES : self::DNS_SUB_TYPES;
+      if (!in_array($record->type, $types, TRUE)) {
+        throw new ProviderException(sprintf('Dynadot DNS has no %s records for %s; its types there are %s.', $record->type, $record->fqdn($name), implode(', ', $types)));
+      }
+      $second = $record->type === 'MX' ? (string) $record->priority : (string) ($record->extra['value2'] ?? '');
+      if ($record->host === '@') {
+        if ($main >= 20) {
+          throw new ProviderException('Dynadot DNS takes up to 20 records for the domain itself.');
+        }
+        $params["main_record_type$main"] = strtolower($record->type);
+        $params["main_record$main"] = $record->value;
+        if ($second !== '') {
+          $params["main_recordx$main"] = $second;
+        }
+        $main++;
+      }
+      else {
+        if ($sub >= 100) {
+          throw new ProviderException('Dynadot DNS takes up to 100 subdomain records.');
+        }
+        $params["subdomain$sub"] = $record->host;
+        $params["sub_record_type$sub"] = strtolower($record->type);
+        $params["sub_record$sub"] = $record->value;
+        if ($second !== '') {
+          $params["sub_recordx$sub"] = $second;
+        }
+        $sub++;
+      }
+      if ($record->ttl !== NULL) {
+        $ttls[] = $record->ttl;
+      }
+    }
+    if ($ttls) {
+      $params['ttl'] = (string) min($ttls);
+    }
+    $this->client()->setDns($name, $params);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function dnsRecordTypes(): array {
+    return [
+      'A' => 'A',
+      'AAAA' => 'AAAA',
+      'CNAME' => 'CNAME',
+      'MX' => 'MX',
+      'TXT' => 'TXT',
+      // SRV records already there are kept; new ones are not offered, as
+      // the API documents no format for their value.
+      'FORWARD' => new TranslatableMarkup('URL forward'),
+      'STEALTH' => new TranslatableMarkup('URL forward, masked'),
+      'EMAIL' => new TranslatableMarkup('Email forward'),
+    ];
   }
 
   /**

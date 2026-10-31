@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Clients\NameSiloClient;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\NameSilo;
@@ -43,7 +44,10 @@ class NameSiloTest extends ProviderTestBase {
     );
     $this->assertSame(12, $plugin->buildListing(self::item('b.com', 60000))['payment_plan_months']);
     $this->assertNull($plugin->buildListing(self::item('free.com', 0)));
-    $this->assertTrue($plugin->manages(self::item('c.com', 1000, ['registrar' => 'ns', 'registrarPlugin' => 'namesilo'])));
+    $this->assertTrue($plugin->manages(self::item('c.com', 1000, [
+      'registrar' => 'ns',
+      'registrarPlugin' => 'namesilo',
+    ])));
     $at_dynadot = self::item('d.com', 1000, ['registrar' => 'dynadot', 'registrarPlugin' => 'dynadot']);
     $this->assertFalse($plugin->manages($at_dynadot));
   }
@@ -75,13 +79,22 @@ class NameSiloTest extends ProviderTestBase {
       ])),
     ]);
     $listings = $plugin->fetchListings(['a.com', 'b.com', 'c.com']);
-    $this->assertSame(['buy_now' => 1299, 'reserve' => 649, 'status' => 'active', 'sale_type' => 'Offer'], $listings['a.com']);
+    $this->assertSame([
+      'buy_now' => 1299,
+      'reserve' => 649,
+      'status' => 'active',
+      'sale_type' => 'Offer',
+    ], $listings['a.com']);
     $this->assertSame(150.5, $listings['b.com']['buy_now']);
     $this->assertArrayNotHasKey('other.com', $listings);
     $this->assertNull($plugin->lockReason($listings['a.com']));
     $this->assertSame('awaiting payment', $plugin->lockReason($listings['b.com']));
     $this->assertSame('auction', $plugin->lockReason($listings['c.com']));
-    $this->assertSame([], $plugin->changedFields(['buy_now' => 1299, 'reserve' => 649, 'payment_plan_months' => 6], $listings['a.com']));
+    $this->assertSame([], $plugin->changedFields([
+      'buy_now' => 1299,
+      'reserve' => 649,
+      'payment_plan_months' => 6,
+    ], $listings['a.com']));
     $this->assertSame('$1,299', $plugin->describeValue('buy_now', 1299));
 
     $this->assertSame('GET https://www.namesilo.com/api/marketplaceActiveSalesOverview', $this->call(0));
@@ -136,7 +149,12 @@ class NameSiloTest extends ProviderTestBase {
       ])),
       // A single domain comes as an object, in the older wrapped form.
       self::json(self::reply(['domains' => ['domain' => 'b.com']])),
-      self::json(self::reply(['expires' => '2027-02-03', 'locked' => 'Yes', 'auto_renew' => 'No', 'status' => 'Active'])),
+      self::json(self::reply([
+        'expires' => '2027-02-03',
+        'locked' => 'Yes',
+        'auto_renew' => 'No',
+        'status' => 'Active',
+      ])),
       self::json(self::reply(['code' => '200', 'detail' => 'Domain is not active, or does not belong to this user'])),
       self::json(self::reply(['code' => '110', 'detail' => 'Invalid API Key'])),
     ]);
@@ -146,7 +164,11 @@ class NameSiloTest extends ProviderTestBase {
       ['a.com' => new Registration('a.com', 1801612800, TRUE, FALSE, 'active')],
       $plugin->fetchRegistrations(['a.com', 'gone.com'])
     );
-    $this->assertSame(['domain' => 'gone.com'], array_diff_key($this->query(3), array_flip(['version', 'type', 'key'])));
+    $this->assertSame(['domain' => 'gone.com'], array_diff_key($this->query(3), array_flip([
+      'version',
+      'type',
+      'key',
+    ])));
 
     try {
       $plugin->fetchRegistrations();
@@ -186,6 +208,87 @@ class NameSiloTest extends ProviderTestBase {
     $this->assertSame('GET https://www.namesilo.com/api/addAutoRenewal', $this->call(3));
     $this->assertSame('', $plugin->getAuthCode('a.com'), 'NameSilo emails the code.');
     $this->assertSame('GET https://www.namesilo.com/api/retrieveAuthCode', $this->call(4));
+  }
+
+  /**
+   * Tests reading DNS records and writing only what changes.
+   */
+  public function testDnsRecords(): void {
+    $dnsowl = [
+      ['nameserver' => 'NS1.dnsowl.com', 'position' => 1],
+      ['nameserver' => 'ns2.dnsowl.com', 'position' => 2],
+    ];
+    $ours = self::json(self::reply(['nameservers' => $dnsowl]));
+    $elsewhere = ['nameserver' => 'ns1.elsewhere.net', 'position' => 1];
+    $lone = ['record_id' => 'r9', 'type' => 'TXT', 'host' => 'x.a.com', 'value' => 'v', 'ttl' => '3600'];
+    $zone = self::json(self::reply([
+      'resource_record' => [
+      [
+        'record_id' => 'r1',
+        'type' => 'A',
+        'host' => 'a.com',
+        'value' => '192.0.2.1',
+        'ttl' => '7207',
+        'distance' => '0',
+      ],
+      [
+        'record_id' => 'r2',
+        'type' => 'MX',
+        'host' => 'a.com',
+        'value' => 'mail.example.net',
+        'ttl' => '7207',
+        'distance' => '10',
+      ],
+      ],
+    ]));
+    $plugin = $this->registrar(NameSilo::class, 'namesilo', self::KEYS, [
+      $ours,
+      $zone,
+      self::json(self::reply(['nameservers' => [$elsewhere]])),
+      // One record comes as a lone object.
+      $ours,
+      self::json(self::reply(['resource_record' => $lone])),
+      // The write.
+      $ours,
+      $zone,
+      self::json(self::reply([])),
+      self::json(self::reply(['record_id' => 'r3'])),
+      self::json(self::reply(['record_id' => 'r4'])),
+    ]);
+    $records = $plugin->getDnsRecords('a.com');
+    $this->assertEquals([
+      new DnsRecord('A', '@', '192.0.2.1', ttl: 7207, id: 'r1'),
+      new DnsRecord('MX', '@', 'mail.example.net', 10, 7207, 'r2'),
+    ], $records);
+    $this->assertSame(['domain' => 'a.com'], array_intersect_key($this->query(1), ['domain' => 1]));
+    $this->assertNull($plugin->getDnsRecords('a.com'), 'Nameservers elsewhere.');
+    $this->assertEquals([new DnsRecord('TXT', 'x', 'v', ttl: 3600, id: 'r9')], $plugin->getDnsRecords('a.com'));
+
+    // The MX goes, a TXT comes, the A gets a new TTL.
+    $plugin->setDnsRecords('a.com', [$records[0]->withTtl(3600), new DnsRecord('TXT', '_dmarc', 'v=DMARC1; p=none')]);
+    $this->assertSame([
+      'domain' => 'a.com',
+      'rrid' => 'r2',
+    ], array_intersect_key($this->query(7), ['domain' => 1, 'rrid' => 1]));
+    $this->assertStringContainsString('dnsDeleteRecord', $this->call(7));
+    $this->assertSame([
+      'rrtype' => 'TXT',
+      'rrhost' => '_dmarc',
+      'rrvalue' => 'v=DMARC1; p=none',
+    ], array_intersect_key($this->query(8), [
+      'rrtype' => 1,
+      'rrhost' => 1,
+      'rrvalue' => 1,
+      'rrttl' => 1,
+      'rrdistance' => 1,
+    ]));
+    $this->assertStringContainsString('dnsUpdateRecord', $this->call(9));
+    $this->assertSame([
+      'rrid' => 'r1',
+      'rrhost' => '',
+      'rrvalue' => '192.0.2.1',
+      'rrttl' => '3600',
+    ], array_intersect_key($this->query(9), ['rrid' => 1, 'rrhost' => 1, 'rrvalue' => 1, 'rrttl' => 1]));
   }
 
 }

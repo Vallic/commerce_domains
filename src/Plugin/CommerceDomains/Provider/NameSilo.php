@@ -8,6 +8,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\Clients\NameSiloClient;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
@@ -25,8 +26,9 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('NameSilo'),
   description: new TranslatableMarkup('Lists domains registered at NameSilo in its marketplace, and reads their registrations.'),
 )]
-final class NameSilo extends MarketplacePluginBase implements DomainManagementInterface {
+final class NameSilo extends MarketplacePluginBase implements DomainManagementInterface, DnsRecordsInterface {
 
+  use DnsRecordByRecordTrait;
   use RegistrarTrait;
 
   protected const CREDENTIALS = [
@@ -205,6 +207,81 @@ final class NameSilo extends MarketplacePluginBase implements DomainManagementIn
       status: isset($record['status']) ? strtolower((string) $record['status']) : NULL,
       registered: self::timestamp($record['created'] ?? NULL),
     );
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * NameSilo's DNS answers on its dnsowl.com nameservers; with others, the
+   * records it keeps do not apply.
+   */
+  public function getDnsRecords(string $name): ?array {
+    $ours = array_filter($this->getNameservers($name), static fn(string $host) => str_ends_with($host, '.dnsowl.com') || str_ends_with($host, '.namesilo.com'));
+    if (!$ours) {
+      return NULL;
+    }
+    $records = [];
+    foreach ($this->client()->dnsListRecords($name) as $record) {
+      $type = strtoupper((string) ($record['type'] ?? ''));
+      $records[] = new DnsRecord(
+        type: $type,
+        host: DnsRecord::relativeHost((string) ($record['host'] ?? ''), $name),
+        value: (string) ($record['value'] ?? ''),
+        priority: $type === 'MX' && isset($record['distance']) && is_numeric($record['distance']) ? (int) $record['distance'] : NULL,
+        ttl: isset($record['ttl']) && is_numeric($record['ttl']) ? (int) $record['ttl'] : NULL,
+        id: isset($record['record_id']) ? (string) $record['record_id'] : NULL,
+      );
+    }
+    return $records;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * The types NameSilo's API documents; records of others already in a
+   * zone stay as they are.
+   */
+  public function dnsRecordTypes(): array {
+    return ['A' => 'A', 'AAAA' => 'AAAA', 'CNAME' => 'CNAME', 'MX' => 'MX', 'TXT' => 'TXT'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function createDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->dnsAddRecord($name, ['rrtype' => $record->type] + $this->dnsFields($record));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function deleteDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->dnsDeleteRecord($name, (string) $record->id);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function updateDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->dnsUpdateRecord($name, (string) $record->id, $this->dnsFields($record));
+  }
+
+  /**
+   * Returns a record as NameSilo takes it.
+   *
+   * @return array<string, string>
+   *   The rrhost (relative, empty for the domain itself), rrvalue, and
+   *   rrdistance and rrttl where set.
+   */
+  protected function dnsFields(DnsRecord $record): array {
+    $fields = ['rrhost' => $record->host === '@' ? '' : $record->host, 'rrvalue' => $record->value];
+    if ($record->priority !== NULL) {
+      $fields['rrdistance'] = (string) $record->priority;
+    }
+    if ($record->ttl !== NULL) {
+      $fields['rrttl'] = (string) $record->ttl;
+    }
+    return $fields;
   }
 
   /**

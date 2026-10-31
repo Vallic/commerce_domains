@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_test\Plugin\CommerceDomains\Provider;
 
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
+use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase;
 use Drupal\commerce_domains\ProviderException;
@@ -17,8 +19,9 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * A registrar that manages domains, its account kept in State.
  *
  * State keys, both under commerce_domains_test.:
- * - managed: per domain, expires, nameservers, locked and auto_renew, and
- *   emails_code for a registrar that emails the auth code instead.
+ * - managed: per domain, expires, nameservers, locked and auto_renew,
+ *   emails_code for a registrar that emails the auth code instead, and dns:
+ *   its DNS records as arrays, absent when it does not use this DNS.
  * - managed_calls: each management call, as the method, the domain and the
  *   arguments. Never what a call returned, so an auth code is never kept.
  *
@@ -28,7 +31,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   id: 'test_managed_registrar',
   label: new TranslatableMarkup('Test managed registrar'),
 )]
-final class TestManagedRegistrar extends ProviderPluginBase implements DomainManagementInterface {
+final class TestManagedRegistrar extends ProviderPluginBase implements DomainManagementInterface, DnsRecordsInterface {
 
   protected const KEY = 'commerce_domains_test.managed';
 
@@ -107,6 +110,30 @@ final class TestManagedRegistrar extends ProviderPluginBase implements DomainMan
     // Domains marked so stand in for registrars that email the code.
     $account = $this->state->get(self::KEY, []);
     return empty($account[$name]['emails_code']) ? 'code-' . $name : '';
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getDnsRecords(string $name): ?array {
+    $this->record('getDnsRecords', $name);
+    $records = $this->state->get(self::KEY, [])[$name]['dns'] ?? NULL;
+    return $records === NULL ? NULL : array_map(DnsRecord::fromArray(...), $records);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setDnsRecords(string $name, array $records): void {
+    $this->record('setDnsRecords', $name, count($records));
+    $this->change($name, 'dns', array_map(static fn(DnsRecord $record) => $record->toArray(), $records));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function dnsRecordTypes(): array {
+    return array_combine(array_keys(DnsRecord::TYPES), array_keys(DnsRecord::TYPES));
   }
 
   /**

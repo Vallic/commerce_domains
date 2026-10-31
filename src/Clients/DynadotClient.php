@@ -121,6 +121,35 @@ final class DynadotClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's DNS settings.
+   *
+   * @return array<string, mixed>
+   *   NameServerSettings as the API returns it: Type ("Dynadot DNS",
+   *   "Name Servers", "Dynadot Parking" and so on), and for Dynadot DNS
+   *   MainDomains and SubDomains, each with RecordType, Value and sometimes
+   *   Value2 (the MX distance, or the redirect kind of a forward), the
+   *   SubDomains with their Subhost, and the zone's TTL.
+   */
+  public function getDns(string $name): array {
+    $settings = $this->command('get_dns', ['domain' => $name])['GetDns']['NameServerSettings'] ?? [];
+    return is_array($settings) ? $settings : [];
+  }
+
+  /**
+   * Replaces a domain's Dynadot DNS records.
+   *
+   * @param string $name
+   *   The domain.
+   * @param array<string, string> $params
+   *   The records: main_record_type0, main_record0, main_recordx0 … for the
+   *   domain itself (up to 20), subdomain0, sub_record_type0, sub_record0,
+   *   sub_recordx0 … for subdomains (up to 100), and ttl.
+   */
+  public function setDns(string $name, array $params): void {
+    $this->command('set_dns2', ['domain' => $name] + $params);
+  }
+
+  /**
    * Replaces a domain's nameservers; Dynadot takes up to 13.
    *
    * @param string $name

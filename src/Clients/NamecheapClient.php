@@ -95,6 +95,47 @@ final class NamecheapClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's DNS host records.
+   *
+   * @return array<int, array<string, string>>|null
+   *   Each host's HostId, Name (relative, "@" for the domain itself), Type,
+   *   Address, MXPref and TTL; NULL when the domain does not use
+   *   Namecheap's DNS.
+   */
+  public function getHosts(string $sld, string $tld): ?array {
+    $result = $this->command('namecheap.domains.dns.getHosts', ['SLD' => $sld, 'TLD' => $tld])->DomainDNSGetHostsResult;
+    if (strtolower((string) $result['IsUsingOurDNS']) !== 'true') {
+      return NULL;
+    }
+    $hosts = [];
+    // The docs spell the element "host" in their example and "Host" in the
+    // table of fields; either is read.
+    foreach ($result->host ?? [] as $host) {
+      $hosts[] = array_map('strval', iterator_to_array($host->attributes()));
+    }
+    foreach ($result->Host ?? [] as $host) {
+      $hosts[] = array_map('strval', iterator_to_array($host->attributes()));
+    }
+    return $hosts;
+  }
+
+  /**
+   * Replaces a domain's DNS host records.
+   *
+   * @param string $sld
+   *   The label.
+   * @param string $tld
+   *   The extension.
+   * @param array<string, string> $parameters
+   *   HostName1, RecordType1, Address1, MXPref1, TTL1 and so on, and
+   *   EmailType, MX when there are mail servers among them.
+   */
+  public function setHosts(string $sld, string $tld, array $parameters): void {
+    $result = $this->command('namecheap.domains.dns.setHosts', ['SLD' => $sld, 'TLD' => $tld] + $parameters);
+    $this->assertDone($result->DomainDNSSetHostsResult, 'IsSuccess', 'namecheap.domains.dns.setHosts');
+  }
+
+  /**
    * Fetches whether a domain is locked against transfers.
    */
   public function getRegistrarLock(string $name): bool {

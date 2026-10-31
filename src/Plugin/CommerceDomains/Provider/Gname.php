@@ -8,6 +8,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\Clients\GnameClient;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\Registration;
 
@@ -26,8 +27,9 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('GNAME'),
   description: new TranslatableMarkup('Lists domains registered at GNAME as Buy It Now, and reads their registrations. Needs a GNAME reseller account.'),
 )]
-final class Gname extends MarketplacePluginBase implements RegistrarInterface {
+final class Gname extends MarketplacePluginBase implements DnsRecordsInterface {
 
+  use DnsRecordByRecordTrait;
   use RegistrarTrait;
 
   protected const CREDENTIALS = [
@@ -166,6 +168,96 @@ final class Gname extends MarketplacePluginBase implements RegistrarInterface {
    */
   protected function credentialsHelp(): string {
     return (string) $this->t('API access needs a GNAME reseller account; the app ID and key are under User Center → Reseller → API Settings.');
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * GNAME's DNS answers on its gname-dns.com nameservers. Its list gives
+   * no TTL, so records read have none; a record switched off there comes
+   * marked so, and stays as it is.
+   */
+  public function getDnsRecords(string $name): ?array {
+    $nameservers = strtolower((string) ($this->client()->getDomainInfo($name)['ymdns'] ?? ''));
+    if (!str_contains($nameservers, 'gname-dns.com')) {
+      return NULL;
+    }
+    $records = [];
+    foreach ($this->client()->listResolutions($name) as $item) {
+      $type = strtoupper((string) ($item['lx'] ?? ''));
+      $records[] = new DnsRecord(
+        type: $type,
+        host: DnsRecord::relativeHost((string) ($item['zjt'] ?? '@'), $name),
+        value: (string) ($item['jxz'] ?? ''),
+        priority: $type === 'MX' && isset($item['mx']) ? (int) $item['mx'] : NULL,
+        id: isset($item['id']) ? (string) $item['id'] : NULL,
+        extra: (string) ($item['zt'] ?? '1') === '2' ? ['off' => '1'] : [],
+      );
+    }
+    return $records;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * The types GNAME's API documents.
+   */
+  public function dnsRecordTypes(): array {
+    return [
+      'A' => 'A',
+      'CNAME' => 'CNAME',
+      'MX' => 'MX',
+      'TXT' => 'TXT',
+      'URL' => new TranslatableMarkup('URL forward'),
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function createDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->addResolution($name, $this->dnsFields($record));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function deleteDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->deleteResolution($name, (string) $record->id);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function updateDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->editResolution($name, (string) $record->id, $this->dnsFields($record));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function dnsRecordProblem(DnsRecord $record): ?string {
+    if ($record->priority !== NULL && ($record->priority < 0 || $record->priority > 50)) {
+      return sprintf('GNAME takes MX priorities from 0 to 50, not %d.', $record->priority);
+    }
+    return NULL;
+  }
+
+  /**
+   * Returns a record as GNAME takes it, on the default route.
+   *
+   * @return array<string, string|int>
+   *   The lx, zj, jlz, mx (0 to 50), ttl (600 by default) and xl.
+   */
+  protected function dnsFields(DnsRecord $record): array {
+    return [
+      'lx' => $record->type,
+      'zj' => $record->host,
+      'jlz' => $record->value,
+      'mx' => $record->priority ?? 0,
+      'ttl' => max(1, min(86400, $record->ttl ?? 600)),
+      'xl' => '0',
+    ];
   }
 
   /**

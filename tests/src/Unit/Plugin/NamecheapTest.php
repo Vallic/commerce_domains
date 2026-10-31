@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\NamecheapClient;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Namecheap;
 use Drupal\commerce_domains\ProviderException;
@@ -140,6 +141,64 @@ class NamecheapTest extends ProviderTestBase {
       }
     }
     $this->assertCount(5, $this->history, 'Unsupported operations make no call.');
+  }
+
+  /**
+   * Tests reading and replacing DNS host records.
+   */
+  public function testDnsRecords(): void {
+    $result = fn(string $command, string $element) => self::xml("<Errors /><CommandResponse Type=\"$command\">$element</CommandResponse>");
+    $plugin = $this->registrar(Namecheap::class, 'namecheap', self::KEYS, [
+      $result('namecheap.domains.dns.getHosts', '<DomainDNSGetHostsResult Domain="a.co.uk" IsUsingOurDNS="true">'
+        . '<host HostId="12" Name="@" Type="A" Address="192.0.2.1" MXPref="10" TTL="1800" />'
+        . '<host HostId="14" Name="www" Type="CNAME" Address="a.co.uk." MXPref="10" TTL="1800" />'
+        . '<host HostId="15" Name="@" Type="MX" Address="mail.example.net" MXPref="5" TTL="3600" />'
+        . '</DomainDNSGetHostsResult>'),
+      $result('namecheap.domains.dns.getHosts', '<DomainDNSGetHostsResult Domain="b.com" IsUsingOurDNS="false" />'),
+      $result('namecheap.domains.dns.setHosts', '<DomainDNSSetHostsResult Domain="a.co.uk" IsSuccess="true" />'),
+    ]);
+    $records = $plugin->getDnsRecords('a.co.uk');
+    $this->assertEquals([
+      new DnsRecord('A', '@', '192.0.2.1', ttl: 1800, id: '12'),
+      new DnsRecord('CNAME', 'www', 'a.co.uk.', ttl: 1800, id: '14'),
+      new DnsRecord('MX', '@', 'mail.example.net', 5, 3600, '15'),
+    ], $records);
+    $this->assertSame('namecheap.domains.dns.getHosts', $this->query(0)['Command']);
+    $this->assertNull($plugin->getDnsRecords('b.com'), 'Not on Namecheap DNS.');
+
+    $records[] = new DnsRecord('TXT', '_dmarc', 'v=DMARC1; p=none');
+    $plugin->setDnsRecords('a.co.uk', $records);
+    $this->assertSame([
+      'SLD' => 'a',
+      'TLD' => 'co.uk',
+      'HostName1' => '@',
+      'RecordType1' => 'A',
+      'Address1' => '192.0.2.1',
+      'TTL1' => '1800',
+      'HostName2' => 'www',
+      'RecordType2' => 'CNAME',
+      'Address2' => 'a.co.uk.',
+      'TTL2' => '1800',
+      'HostName3' => '@',
+      'RecordType3' => 'MX',
+      'Address3' => 'mail.example.net',
+      'MXPref3' => '5',
+      'EmailType' => 'MX',
+      'TTL3' => '3600',
+      'HostName4' => '_dmarc',
+      'RecordType4' => 'TXT',
+      'Address4' => 'v=DMARC1; p=none',
+      'TTL4' => '1800',
+    ], array_diff_key($this->query(2), array_flip(['Command', 'ApiUser', 'ApiKey', 'UserName', 'ClientIp'])));
+
+    try {
+      $plugin->setDnsRecords('a.co.uk', [new DnsRecord('SRV', '_sip._tcp', '5 5060 sip.example.com', 10)]);
+      $this->fail('Namecheap has no SRV records.');
+    }
+    catch (ProviderException $e) {
+      $this->assertStringContainsString('no SRV records', $e->getMessage());
+    }
+    $this->assertCount(3, $this->history);
   }
 
   /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 
 use Drupal\Core\StringTranslation\TranslatableMarkup;
+use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
@@ -24,9 +25,23 @@ use Drupal\commerce_domains\Clients\SpaceshipClient;
   label: new TranslatableMarkup('Spaceship'),
   description: new TranslatableMarkup('Pushes listings to SellerHub through the Spaceship API.'),
 )]
-final class Spaceship extends MarketplacePluginBase implements DomainManagementInterface, CsvExportInterface {
+final class Spaceship extends MarketplacePluginBase implements DomainManagementInterface, DnsRecordsInterface, CsvExportInterface {
 
+  use DnsRecordByRecordTrait;
   use RegistrarTrait;
+
+  // Where each record type keeps its value, for the types edited here. An
+  // MX also has its preference, and a CAA its flag and tag.
+  protected const DNS_VALUE_FIELDS = [
+    'A' => 'address',
+    'AAAA' => 'address',
+    'CNAME' => 'cname',
+    'ALIAS' => 'aliasName',
+    'MX' => 'exchange',
+    'TXT' => 'value',
+    'NS' => 'nameserver',
+    'CAA' => 'value',
+  ];
 
   protected const CREDENTIALS = [
     'api_key' => 'SPACESHIP_API_KEY',
@@ -125,6 +140,108 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
       status: isset($record['lifecycleStatus']) ? (string) $record['lifecycleStatus'] : NULL,
       registered: self::timestamp($record['registrationDate'] ?? NULL),
     );
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Only the records the owner made (group "custom"): those Spaceship adds
+   * for its products, or for personal nameservers, are its own. Types not
+   * edited here, such as SRV, are kept as read, to be deleted as they are.
+   */
+  public function getDnsRecords(string $name): ?array {
+    if (($this->client()->getRegistration($name)['nameservers']['provider'] ?? NULL) !== 'basic') {
+      return NULL;
+    }
+    $records = [];
+    foreach ($this->client()->listDnsRecords($name) as $item) {
+      if (!is_array($item) || ($item['group']['type'] ?? 'custom') !== 'custom') {
+        continue;
+      }
+      $type = strtoupper((string) ($item['type'] ?? ''));
+      $field = self::DNS_VALUE_FIELDS[$type] ?? NULL;
+      $value = $field ? (string) ($item[$field] ?? '') : '';
+      if ($type === 'CAA') {
+        $value = sprintf('%d %s "%s"', $item['flag'] ?? 0, $item['tag'] ?? 'issue', $value);
+      }
+      $raw = array_diff_key($item, ['ttl' => TRUE, 'group' => TRUE]);
+      $records[] = new DnsRecord(
+        type: $type,
+        host: DnsRecord::relativeHost((string) ($item['name'] ?? '@'), $name),
+        value: $field ? $value : json_encode($raw),
+        priority: $type === 'MX' && isset($item['preference']) ? (int) $item['preference'] : NULL,
+        ttl: isset($item['ttl']) ? (int) $item['ttl'] : NULL,
+        extra: $field ? [] : ['spaceship' => json_encode($raw)],
+      );
+    }
+    return $records;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function dnsRecordTypes(): array {
+    return [
+      'A' => 'A',
+      'AAAA' => 'AAAA',
+      'CNAME' => 'CNAME',
+      'MX' => 'MX',
+      'TXT' => 'TXT',
+      'CAA' => 'CAA',
+      'NS' => 'NS',
+      'ALIAS' => new TranslatableMarkup('ALIAS, a CNAME for the domain itself'),
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function createDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->saveDnsRecords($name, [$this->dnsItem($record) + ['ttl' => $this->dnsTtl($record)]]);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function deleteDnsRecord(string $name, DnsRecord $record): void {
+    $this->client()->deleteDnsRecords($name, [$this->dnsItem($record)]);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function updateDnsRecord(string $name, DnsRecord $record): void {
+    // Matched on content, so saving it again changes its TTL.
+    $this->createDnsRecord($name, $record);
+  }
+
+  /**
+   * Returns a record as Spaceship takes it, without the TTL.
+   *
+   * @return array<string, mixed>
+   *   The type, name and the fields of the type.
+   */
+  protected function dnsItem(DnsRecord $record): array {
+    if (isset($record->extra['spaceship'])) {
+      return (array) json_decode((string) $record->extra['spaceship'], TRUE);
+    }
+    $item = ['type' => $record->type, 'name' => $record->host];
+    if ($record->type === 'CAA') {
+      [$flag, $tag, $value] = array_pad(explode(' ', $record->value, 3), 3, '');
+      return $item + ['flag' => (int) $flag, 'tag' => $tag, 'value' => trim($value, '"')];
+    }
+    $item[self::DNS_VALUE_FIELDS[$record->type] ?? 'value'] = $record->value;
+    if ($record->type === 'MX') {
+      $item['preference'] = (int) $record->priority;
+    }
+    return $item;
+  }
+
+  /**
+   * Returns the TTL Spaceship takes: 60 to 3600 seconds.
+   */
+  protected function dnsTtl(DnsRecord $record): int {
+    return max(60, min(3600, $record->ttl ?? 3600));
   }
 
   /**

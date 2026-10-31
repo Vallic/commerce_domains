@@ -82,6 +82,57 @@ final class PorkbunClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's DNS records.
+   *
+   * @return array<int, array<string, mixed>>
+   *   Records with id, name (the full host name), type, content, ttl and
+   *   prio, as strings; Porkbun's own NS and SOA records are left out.
+   */
+  public function retrieveDns(string $name): array {
+    $records = $this->call('GET', 'dns/retrieve/' . rawurlencode($name))['records'] ?? [];
+    return array_values(array_filter(is_array($records) ? $records : [], 'is_array'));
+  }
+
+  /**
+   * Creates a DNS record.
+   *
+   * @param string $name
+   *   The domain.
+   * @param array<string, string> $record
+   *   The name (relative, empty for the domain itself), type, content, ttl
+   *   and prio.
+   * @param string $key
+   *   An idempotency key, so a retried request creates the record once.
+   */
+  public function createDns(string $name, array $record, string $key): void {
+    $this->call('POST', 'dns/create/' . rawurlencode($name), [
+      RequestOptions::JSON => $record,
+      RequestOptions::HEADERS => ['Idempotency-Key' => $key],
+    ]);
+  }
+
+  /**
+   * Changes a DNS record.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string $id
+   *   The record's ID.
+   * @param array<string, string> $record
+   *   Its name, type, content, ttl and prio.
+   */
+  public function editDns(string $name, string $id, array $record): void {
+    $this->call('POST', 'dns/edit/' . rawurlencode($name) . '/' . rawurlencode($id), [RequestOptions::JSON => $record]);
+  }
+
+  /**
+   * Deletes a DNS record.
+   */
+  public function deleteDns(string $name, string $id): void {
+    $this->call('POST', 'dns/delete/' . rawurlencode($name) . '/' . rawurlencode($id));
+  }
+
+  /**
    * Turns automatic renewal on or off.
    *
    * @throws \Drupal\commerce_domains\ProviderException
