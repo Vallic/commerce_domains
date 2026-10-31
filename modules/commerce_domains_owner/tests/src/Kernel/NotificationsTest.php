@@ -259,7 +259,11 @@ class NotificationsTest extends OwnerKernelTestBase {
     foreach (['Kept.com', 'Stolen.com'] as $title) {
       $this->createDomain($title, 1000, ['domain_registrar' => 'reg']);
     }
-    $this->createDomain('Sold.com', 1000, ['domain_registrar' => 'reg', 'domain_sold' => $this->now - self::DAY]);
+    $this->createDomain('Sold.com', 1000, [
+      'domain_registrar' => 'reg',
+      'domain_sold' => $this->now - self::DAY,
+      'domain_sale_price' => new Price('900', 'USD'),
+    ]);
     $this->createDomain('Lapsed.com', 1000, [
       'domain_registrar' => 'reg',
       'domain_renewal' => DomainCosts::EXPIRE,

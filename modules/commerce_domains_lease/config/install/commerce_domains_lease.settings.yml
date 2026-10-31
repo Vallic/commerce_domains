@@ -4,3 +4,6 @@ max_retries: 3
 notify_mail: ''
 gateway_plugins:
   - stripe_payment_element
+manual_gateway_plugins:
+  - manual
+  - wise_quick_pay

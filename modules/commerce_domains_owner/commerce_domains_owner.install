@@ -120,3 +120,38 @@ function commerce_domains_owner_update_11002(): void {
     $config->set('appraisals_per_day', 50)->save();
   }
 }
+
+/**
+ * Clears sales recorded without what the domain sold for.
+ *
+ * A sale needs its price: the ones without, e.g. stamped by a date widget
+ * that saved a blank date as the time of saving, are no sales. The domains
+ * stay off sale; the update lists them, to put back on sale where wrong.
+ */
+function commerce_domains_owner_update_11003(): string {
+  $definitions = \Drupal::service('entity_field.manager')->getFieldStorageDefinitions('commerce_product');
+  if (!isset($definitions['domain_sold'], $definitions['domain_sale_price'])) {
+    return 'No sale fields.';
+  }
+  $storage = \Drupal::entityTypeManager()->getStorage('commerce_product');
+  $ids = $storage->getQuery()
+    ->accessCheck(FALSE)
+    ->exists('domain_sold')
+    ->notExists('domain_sale_price.number')
+    ->execute();
+  $names = [];
+  /** @var \Drupal\commerce_product\Entity\ProductInterface $product */
+  foreach ($storage->loadMultiple($ids) as $product) {
+    foreach (['domain_sold', 'domain_sold_via', 'domain_lease_months'] as $field) {
+      if ($product->hasField($field)) {
+        $product->set($field, NULL);
+      }
+    }
+    // Not an edit: the product keeps its changed time.
+    $product->setSyncing(TRUE)->save();
+    $names[] = $product->hasField('domain') ? (string) $product->get('domain')->value : $product->label();
+  }
+  return $names
+    ? sprintf('Cleared %d sales without a price; still off sale: %s.', count($names), implode(', ', $names))
+    : 'No sales without a price.';
+}

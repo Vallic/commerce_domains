@@ -7,6 +7,7 @@ namespace Drupal\commerce_domains_lease;
 use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_order\Entity\OrderItemInterface;
+use Drupal\commerce_payment\Entity\PaymentGatewayInterface;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_price\RounderInterface;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
@@ -117,14 +118,26 @@ class LeaseCalculator {
   /**
    * Returns the IDs of the enabled payment gateways leases can be paid with.
    *
+   * Those that charge a saved card each month, and those the buyer pays
+   * each payment through.
+   *
    * @return string[]
    *   Payment gateway IDs.
    */
   public function gateways(): array {
-    $plugins = (array) $this->configFactory->get('commerce_domains_lease.settings')->get('gateway_plugins');
+    $settings = $this->configFactory->get('commerce_domains_lease.settings');
+    $plugins = array_merge((array) $settings->get('gateway_plugins'), (array) $settings->get('manual_gateway_plugins'));
     /** @var \Drupal\commerce_payment\Entity\PaymentGatewayInterface[] $gateways */
     $gateways = $this->entityTypeManager->getStorage('commerce_payment_gateway')->loadByProperties(['status' => TRUE]);
     return array_keys(array_filter($gateways, fn($gateway) => in_array($gateway->getPluginId(), $plugins, TRUE)));
+  }
+
+  /**
+   * Returns whether the buyer pays each payment through a gateway by hand.
+   */
+  public function isManual(PaymentGatewayInterface $gateway): bool {
+    $plugins = (array) $this->configFactory->get('commerce_domains_lease.settings')->get('manual_gateway_plugins');
+    return in_array($gateway->getPluginId(), $plugins, TRUE);
   }
 
 }

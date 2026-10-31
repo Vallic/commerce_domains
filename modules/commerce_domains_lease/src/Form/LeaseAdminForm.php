@@ -75,7 +75,10 @@ final class LeaseAdminForm extends FormBase {
       [$this->t('Paid'), $this->money($lease->getPaid())],
       [$this->t('Left to pay'), $this->money($lease->getRemaining())],
       [$this->t('Next payment'), $next],
-      [$this->t('Card'), $lease->getPaymentMethod()?->label() ?? $this->t('None saved')],
+      [$this->t('Paid through'), $lease->getPaymentGateway()?->label() ?? ''],
+      $lease->isManual()
+        ? [$this->t('Payment requested'), $date($lease->getRequested())]
+        : [$this->t('Card'), $lease->getPaymentMethod()?->label() ?? $this->t('None saved')],
       [$this->t('Failed attempts'), $lease->getFailures()],
       [$this->t('Last failure'), (string) $lease->get('last_error')->value],
       [$this->t('Started'), $date((int) $lease->get('created')->value)],
@@ -91,7 +94,16 @@ final class LeaseAdminForm extends FormBase {
       '#type' => 'submit',
       '#value' => $this->t('Charge @amount now', ['@amount' => $this->money($lease->getNextAmount())]),
       '#submit' => ['::charge'],
-      '#access' => $chargeable && $lease->getRemaining()->isPositive(),
+      '#access' => $chargeable && !$lease->isManual() && $lease->getRemaining()->isPositive(),
+    ];
+    // Paid by hand: the owner records what arrived. A payment received on
+    // the order's Payments tab, or reported by the gateway, counts too.
+    $form['actions']['received'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('Record @amount received', ['@amount' => $this->money($lease->getNextAmount())]),
+      '#submit' => ['::received'],
+      '#access' => $chargeable && $lease->isManual() && $lease->getPaymentGateway() !== NULL && $lease->getRemaining()->isPositive(),
+      '#button_type' => 'primary',
     ];
     $form['actions']['cancel'] = [
       '#type' => 'submit',
@@ -118,6 +130,17 @@ final class LeaseAdminForm extends FormBase {
     }
     else {
       $this->messenger()->addError($this->t('The payment failed: @error', ['@error' => (string) $lease?->get('last_error')->value]));
+    }
+  }
+
+  /**
+   * Records the next payment as received.
+   */
+  public function received(array &$form, FormStateInterface $form_state): void {
+    if ($lease = $this->lease($form_state)) {
+      $amount = $lease->getNextAmount();
+      $this->leaseManager->received($lease, $amount);
+      $this->messenger()->addStatus($this->t('@amount is recorded as received.', ['@amount' => $this->money($amount)]));
     }
   }
 

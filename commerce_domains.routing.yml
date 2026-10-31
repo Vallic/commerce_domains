@@ -49,3 +49,7 @@ commerce_domains.configuration:
     _title: 'Domains'
   requirements:
     _permission: 'access commerce administration pages'
+
+# One per domain tab beside Edit; see ProductTabs.
+route_callbacks:
+  - '\Drupal\commerce_domains\Routing\ProductTabRoutes::routes'

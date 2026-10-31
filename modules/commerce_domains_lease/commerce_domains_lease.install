@@ -1,0 +1,30 @@
+<?php
+
+/**
+ * @file
+ * Updates for Commerce Domains Lease to Own.
+ */
+
+declare(strict_types=1);
+
+use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
+
+/**
+ * Lets leases be paid by hand: bank transfer, Wise and other gateways.
+ */
+function commerce_domains_lease_update_11001(): void {
+  $manager = \Drupal::entityDefinitionUpdateManager();
+  $manager->installFieldStorageDefinition('payment_gateway', 'commerce_domains_lease', 'commerce_domains_lease', BaseFieldDefinition::create('entity_reference')
+    ->setLabel(new TranslatableMarkup('Paid through'))
+    ->setDescription(new TranslatableMarkup('The payment gateway the buyer chose at checkout.'))
+    ->setSetting('target_type', 'commerce_payment_gateway'));
+  $manager->installFieldStorageDefinition('requested', 'commerce_domains_lease', 'commerce_domains_lease', BaseFieldDefinition::create('timestamp')
+    ->setLabel(new TranslatableMarkup('Payment requested'))
+    ->setDescription(new TranslatableMarkup('When the buyer was asked for the payment due, on a lease without a saved card; empty until then.')));
+
+  $settings = \Drupal::configFactory()->getEditable('commerce_domains_lease.settings');
+  if ($settings->get('manual_gateway_plugins') === NULL) {
+    $settings->set('manual_gateway_plugins', ['manual', 'wise_quick_pay'])->save();
+  }
+}

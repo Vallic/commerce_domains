@@ -63,6 +63,10 @@ final class LeaseChargeJob extends JobTypeBase implements ContainerFactoryPlugin
     if (!$lease instanceof LeaseInterface || !$lease->isOpen() || ($lease->getNextDue() ?? PHP_INT_MAX) > time()) {
       return JobResult::success('Skipped: nothing is due.');
     }
+    if ($lease->isManual()) {
+      $this->leaseManager->request($lease);
+      return JobResult::success('The buyer was asked for the payment.');
+    }
     return $this->leaseManager->charge($lease)
       ? JobResult::success('Paid.')
       : JobResult::success('The payment failed; the lease records the retry.');

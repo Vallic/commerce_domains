@@ -69,6 +69,7 @@ class RenewalsTest extends OwnerKernelTestBase {
     $this->createDomain('Sold.com', 1000, [
       'domain_expires' => $this->now + 5 * self::DAY,
       'domain_sold' => $this->now - self::DAY,
+      'domain_sale_price' => new Price('900', 'USD'),
     ]);
     $this->createDomain('Undated.com');
     // The registrar's account has one of its two domains.

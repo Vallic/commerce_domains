@@ -68,26 +68,20 @@ class MarketplaceNotificationsTest extends OwnerKernelTestBase {
     $this->assertStringContainsString('Afternic reports Market.com as SOLD.', $body);
     $this->assertStringContainsString('for a lease to own the number of monthly payments', $body);
     $this->assertStringContainsString($product->toUrl('edit-form', ['absolute' => TRUE])->toString(), $body);
-    $product = $this->reload($product);
-    $this->assertSame($this->now, (int) $product->get('domain_sold')->value);
-    $this->assertSame('afternic', $product->get('domain_sold_via')->target_id);
-    $this->assertTrue($product->get('domain_sale_price')->isEmpty(), 'The owner enters what it brought.');
+    // No price, no sale: the owner enters it.
+    $this->assertTrue($this->reload($product)->get('domain_sold')->isEmpty());
 
-    // A later report keeps the first sale; a domain gone from the catalog
-    // still mails.
-    $this->dispatch(new SoldElsewhereEvent($this->createProvider('sedo', 'test_marketplace'), 'market.com', $product, 'SOLD'), 'commerce_domains_marketplace.sold_elsewhere');
-    $this->assertSame('afternic', $this->reload($product)->get('domain_sold_via')->target_id);
+    // A domain gone from the catalog still mails.
     $this->dispatch(new SoldElsewhereEvent($provider, 'gone.com', NULL, 'pending sale'), 'commerce_domains_marketplace.sold_elsewhere');
     $mails = $this->ownerMails(Notifier::SOLD_ELSEWHERE);
-    $this->assertCount(3, $mails);
-    $this->assertStringContainsString("Afternic reports gone.com as pending sale.\n\nIt is no longer in the catalog.", self::body($mails[2]));
+    $this->assertCount(2, $mails);
+    $this->assertStringContainsString("Afternic reports gone.com as pending sale.\n\nIt is no longer in the catalog.", self::body($mails[1]));
 
-    // Turned off, the sale is still recorded.
+    // Turned off, nothing is mailed.
     $this->config('commerce_domains_owner.settings')->set('notify.sold_elsewhere', FALSE)->save();
     $quiet = $this->createDomain('Quiet.com');
     $this->dispatch(new SoldElsewhereEvent($provider, 'quiet.com', $quiet, 'SOLD'), 'commerce_domains_marketplace.sold_elsewhere');
-    $this->assertCount(3, $this->ownerMails(Notifier::SOLD_ELSEWHERE));
-    $this->assertFalse($this->reload($quiet)->get('domain_sold')->isEmpty());
+    $this->assertCount(2, $this->ownerMails(Notifier::SOLD_ELSEWHERE));
   }
 
   /**

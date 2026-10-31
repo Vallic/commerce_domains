@@ -92,8 +92,7 @@ class MarketplaceSyncOwnerTest extends OwnerKernelTestBase {
     $this->assertSame('Sold on Selling: Sold.com', (string) $mails[0]['subject']);
     $this->assertStringContainsString('Selling reports Sold.com as pending.', self::body($mails[0]));
     $product = $this->reload($product);
-    $this->assertSame($this->now, (int) $product->get('domain_sold')->value);
-    $this->assertSame('selling', $product->get('domain_sold_via')->target_id);
+    $this->assertTrue($product->get('domain_sold')->isEmpty(), 'No price, no sale: the owner enters it.');
     $this->assertFalse((bool) $this->variation($product)->get('in_stock')->value, 'Off sale here.');
 
     // Later checks see the same sale: no second mail.

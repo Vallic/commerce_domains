@@ -16,7 +16,13 @@ commerce_domains_lease.settings:
       label: 'Address told about missed payments, defaults and completed leases'
     gateway_plugins:
       type: sequence
-      label: 'Payment gateway plugins that leases can be paid with'
+      label: 'Payment gateway plugins that charge the monthly payments to a saved card'
+      sequence:
+        type: string
+        label: 'Payment gateway plugin ID'
+    manual_gateway_plugins:
+      type: sequence
+      label: 'Payment gateway plugins the buyer pays each monthly payment through'
       sequence:
         type: string
         label: 'Payment gateway plugin ID'

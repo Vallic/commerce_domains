@@ -40,9 +40,10 @@ class MarketplaceSubscriber implements EventSubscriberInterface {
   /**
    * Records the sale on the domain, and mails the owner.
    *
-   * A marketplace with a sales report fills in the sale, once the report
-   * says what it brought: until then nothing is recorded, and cron's daily
-   * read records it later. The domain is off sale either way.
+   * A sale needs what it brought, so only a marketplace with a sales report
+   * records one, once the report says: until then nothing is recorded, and
+   * cron's daily read records it later. Elsewhere the owner enters it. The
+   * domain is off sale either way.
    */
   public function onSoldElsewhere(SoldElsewhereEvent $event): void {
     $plugin = $event->provider->getPlugin();
@@ -53,12 +54,7 @@ class MarketplaceSubscriber implements EventSubscriberInterface {
       catch (ProviderException) {
         $sale = NULL;
       }
-      if ($sale?->received !== NULL) {
-        $this->recorder->recordElsewhere($event->product, $event->provider, $this->time->getRequestTime(), $sale);
-      }
-    }
-    elseif ($event->product) {
-      $this->recorder->recordElsewhere($event->product, $event->provider, $this->time->getRequestTime());
+      $this->recorder->recordElsewhere($event->product, $event->provider, $this->time->getRequestTime(), $sale);
     }
     $this->notifier->soldElsewhere($event->provider, $event->domain, $event->product, $event->status);
   }

@@ -103,6 +103,27 @@ class SaleRecorder {
   }
 
   /**
+   * Undoes a sale entered by hand or found on a marketplace.
+   *
+   * Clears the sale and puts the domain back on sale, which relists it on
+   * the marketplaces. A sale on this site is undone by canceling its order.
+   */
+  public function undo(ProductInterface $product): void {
+    foreach (['domain_sold', 'domain_sale_price', 'domain_sold_via', 'domain_lease_months', 'domain_sale_order'] as $field) {
+      if ($product->hasField($field)) {
+        $product->set($field, NULL);
+      }
+    }
+    foreach ($product->getVariations() as $variation) {
+      $field = $variation->hasField('in_stock') ? 'in_stock' : 'status';
+      if (!$variation->get($field)->value) {
+        $variation->set($field, TRUE)->save();
+      }
+    }
+    $product->save();
+  }
+
+  /**
    * Records a sale a marketplace reported.
    *
    * A domain already recorded as sold keeps that sale: it may be the same
@@ -112,13 +133,14 @@ class SaleRecorder {
    *   Whether the sale was recorded.
    */
   public function recordElsewhere(ProductInterface $product, ProviderInterface $provider, int $time, ?MarketplaceSale $sale = NULL): bool {
-    if (!$product->hasField('domain_sold') || !$product->get('domain_sold')->isEmpty()) {
+    // Without what it brought there is no sale; the owner enters it.
+    if (!$product->hasField('domain_sold') || !$product->get('domain_sold')->isEmpty() || $sale?->received === NULL) {
       return FALSE;
     }
     $product->set('domain_sold', $time)
       ->set('domain_sold_via', $provider->id())
       ->set('domain_sale_order', NULL);
-    foreach ($sale ? $this->saleChanges($product, $provider, $sale) : [] as $field => $value) {
+    foreach ($this->saleChanges($product, $provider, $sale) as $field => $value) {
       $product->set($field, $value);
     }
     $this->save($product);

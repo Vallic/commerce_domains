@@ -101,16 +101,22 @@ class MarketplaceSalesTest extends OwnerKernelTestBase {
    */
   public function testFill(): void {
     $this->createProvider('market', 'test_atom');
-    $found = $this->createDomain('Found.com', 1000, ['domain_sold' => $this->now, 'domain_sold_via' => 'market']);
+    // Off sale, with no sale recorded: the sync found it sold.
+    $found = $this->createDomain('Found.com', 1000, [], ['in_stock' => FALSE]);
     $entered = $this->createDomain('Entered.com', 1000, [
       'domain_sold' => $this->now,
       'domain_sold_via' => 'market',
       'domain_sale_price' => new Price('500', 'USD'),
     ]);
-    $site = $this->createDomain('Site.com', 1000, ['domain_sold' => $this->now, 'domain_sale_order' => 7]);
+    $site = $this->createDomain('Site.com', 1000, [
+      'domain_sold' => $this->now,
+      'domain_sale_order' => 7,
+      'domain_sale_price' => new Price('900', 'USD'),
+    ]);
     $elsewhere = $this->createDomain('Elsewhere.com', 1000, [
       'domain_sold' => $this->now,
       'domain_sold_via' => 'market_other',
+      'domain_sale_price' => new Price('900', 'USD'),
     ]);
     $off = $this->createDomain('Off.com', 1000, [], ['in_stock' => FALSE]);
     $selling = $this->createDomain('Selling.com');
@@ -129,7 +135,7 @@ class MarketplaceSalesTest extends OwnerKernelTestBase {
     $this->prepareCommand($command);
     $this->assertSame(0, $command->sales('market', ['domains' => NULL, 'dry-run' => TRUE]));
     $output = $this->output->fetch();
-    $this->assertMatchesRegularExpression('/found\.com .*domain_sold: 2026-04-10, domain_sale_price: USD 700/', $output);
+    $this->assertMatchesRegularExpression('/found\.com .*domain_sold: 2026-04-10, domain_sold_via: market, domain_sale_price: USD 700/', $output);
     $this->assertMatchesRegularExpression('/gone\.com .*not in the catalog/', $output);
     $this->assertMatchesRegularExpression('/selling\.com .*nothing to fill in/', $output);
     $this->assertTrue($this->reload($found)->get('domain_sale_price')->isEmpty(), 'A dry run changes nothing.');
@@ -142,6 +148,7 @@ class MarketplaceSalesTest extends OwnerKernelTestBase {
 
     $found = $this->reload($found);
     $this->assertSame(self::SOLD, (int) $found->get('domain_sold')->value);
+    $this->assertSame('market', $found->get('domain_sold_via')->target_id);
     $this->assertPrice('700', $found);
     $entered = $this->reload($entered);
     $this->assertPrice('500', $entered, "The owner's entry stands.");

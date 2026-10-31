@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_lease\Entity;
 
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\commerce_payment\Entity\PaymentGatewayInterface;
 use Drupal\commerce_payment\Entity\PaymentMethodInterface;
 use Drupal\commerce_price\Price;
 use Drupal\Core\Entity\ContentEntityInterface;
@@ -17,6 +18,11 @@ use Drupal\user\EntityOwnerInterface;
  * The lease's order holds the domain at its full price. The down payment
  * and each monthly payment are payments on that order, so the order counts
  * as paid, and the domain's handover starts, with the last one.
+ *
+ * A lease with a saved card is charged each month. One without, paid by
+ * bank transfer, Wise or another gateway the buyer pays through, is a
+ * manual lease: the buyer is asked for each payment, and it counts once it
+ * is on the order, recorded by the owner or reported by the gateway.
  */
 interface LeaseInterface extends ContentEntityInterface, EntityChangedInterface, EntityOwnerInterface {
 
@@ -34,6 +40,24 @@ interface LeaseInterface extends ContentEntityInterface, EntityChangedInterface,
 
   // Stopped by the owner; nothing more is charged.
   public const CANCELED = 'canceled';
+
+  /**
+   * Returns the payment gateway the lease is paid through.
+   */
+  public function getPaymentGateway(): ?PaymentGatewayInterface;
+
+  /**
+   * Returns whether the buyer pays each payment, rather than a saved card.
+   */
+  public function isManual(): bool;
+
+  /**
+   * Returns when the payment due was asked for, on a manual lease.
+   *
+   * @return int|null
+   *   A timestamp, or NULL when it has not been yet.
+   */
+  public function getRequested(): ?int;
 
   /**
    * Returns the order the domain was leased with.

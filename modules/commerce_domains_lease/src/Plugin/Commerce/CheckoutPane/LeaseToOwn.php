@@ -85,13 +85,13 @@ class LeaseToOwn extends CheckoutPaneBase {
     ];
     $pane_form['terms'] = [
       '#type' => 'item',
-      '#markup' => $this->t('With a lease, the domain is yours once the last payment is in. The monthly payments are charged to the card you pay the down payment with.'),
+      '#markup' => $this->t('With a lease, the domain is yours once the last payment is in. Paid by card, the monthly payments are charged to it; paid by bank transfer or the like, you are sent a request for each.'),
     ];
     if ($this->order->getCustomer()->isAnonymous()) {
       $back = ['query' => ['destination' => Url::fromRoute('<current>')->toString()]];
       $pane_form['account'] = [
         '#type' => 'item',
-        '#markup' => $this->t('A lease needs an account, which keeps your card for the monthly payments: <a href=":login">log in</a> or <a href=":register">create one</a>.', [
+        '#markup' => $this->t('A lease needs an account, which keeps track of the monthly payments: <a href=":login">log in</a> or <a href=":register">create one</a>.', [
           ':login' => Url::fromRoute('user.login', [], $back)->toString(),
           ':register' => Url::fromRoute('user.register', [], $back)->toString(),
         ]),

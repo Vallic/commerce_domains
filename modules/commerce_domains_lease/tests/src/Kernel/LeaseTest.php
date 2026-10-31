@@ -8,6 +8,7 @@ use Drupal\advancedqueue\Entity\Queue;
 use Drupal\commerce_domains_lease\Entity\Lease;
 use Drupal\commerce_domains_lease\Entity\LeaseInterface;
 use Drupal\commerce_domains_lease\EventSubscriber\CheckoutSubscriber;
+use Drupal\commerce_domains_lease\Form\LeaseAdminForm;
 use Drupal\commerce_domains_lease\LeaseCalculator;
 use Drupal\commerce_domains_lease\LeaseManager;
 use Drupal\commerce_domains_lease\Plugin\AdvancedQueue\JobType\LeaseChargeJob;
@@ -217,6 +218,10 @@ class LeaseTest extends DomainsKernelTestBase {
     $leased = $this->order($this->createDomain('Leased.com', 30000), 12);
     $event = new FilterPaymentGatewaysEvent($gateways, $leased);
     $subscriber->onFilterGateways($event);
+    $this->assertEqualsCanonicalizing(['bank', 'card'], array_keys($event->getPaymentGateways()), 'The card, and bank transfer paid each month.');
+    $this->config('commerce_domains_lease.settings')->set('manual_gateway_plugins', [])->save();
+    $event = new FilterPaymentGatewaysEvent($gateways, $leased);
+    $subscriber->onFilterGateways($event);
     $this->assertSame(['card'], array_keys($event->getPaymentGateways()));
 
     // Stripe charges the down payment, and keeps the card.
@@ -300,6 +305,8 @@ class LeaseTest extends DomainsKernelTestBase {
     // Hidden where no lease is possible, or no gateway takes one.
     $this->assertFalse($this->pane($this->order($this->createDomain('Small.com', 500)))->isVisible());
     PaymentGateway::load('card')->setStatus(FALSE)->save();
+    $this->assertTrue($this->pane($order)->isVisible(), 'Bank transfer takes a lease too.');
+    PaymentGateway::load('bank')->setStatus(FALSE)->save();
     $this->assertFalse($this->pane($order)->isVisible());
   }
 
@@ -375,6 +382,161 @@ class LeaseTest extends DomainsKernelTestBase {
     $this->container->get('commerce_payment.order_updater')->destruct();
     $this->assertTrue(Order::load($order->id())->isPaid());
     $this->assertCount(2, $this->getMails(['key' => 'completed']));
+  }
+
+  /**
+   * Tests a lease paid by bank transfer, each payment asked for by mail.
+   */
+  public function testManualPayments(): void {
+    $this->config('commerce_domains_lease.settings')->set('max_retries', 1)->save();
+    PaymentGateway::load('bank')->setPluginConfiguration([
+      'instructions' => ['value' => '<p>IBAN XX00 1234</p>', 'format' => 'plain_text'],
+    ])->save();
+    $order = $this->order($this->createDomain('Bank.com', 6000), 6);
+
+    // The checkout's pending bank transfer is for the down payment.
+    $pending = Payment::create([
+      'state' => 'pending',
+      'amount' => new Price('6000', 'USD'),
+      'payment_gateway' => 'bank',
+      'order_id' => $order->id(),
+    ]);
+    $pending->save();
+    $this->assertEquals(new Price('600', 'USD'), $pending->getAmount());
+    $order = Order::load($order->id());
+    $order->set('payment_gateway', 'bank');
+    $order->getState()->applyTransitionById('place');
+    $order->save();
+    $placed = (int) $order->getPlacedTime();
+
+    $lease = $this->lease($order);
+    $this->assertTrue($lease->isManual());
+    $this->assertSame('bank', $lease->getPaymentGateway()->id());
+    $this->assertTrue($lease->getPaid()->isZero(), 'Nothing paid until the transfer arrives.');
+    $this->assertStringContainsString('is set up', (string) $this->getMails(['key' => 'started'])[0]['body'], 'Without a card to charge.');
+
+    // Until it arrives, the down payment is what is due.
+    $this->assertEquals(new Price('600', 'USD'), $lease->getNextAmount());
+
+    // The owner records it: the pending transfer is the one received.
+    $this->container->get(LeaseManager::class)->received($lease, $lease->getNextAmount());
+    $this->assertSame('completed', Payment::load($pending->id())->getState()->getId());
+    $lease = $this->lease($order);
+    $this->assertEquals(new Price('600', 'USD'), $lease->getPaid());
+    $this->assertSame(0, $lease->getPaymentsMade());
+    $this->assertSame(LeaseManager::addMonths($placed, 1), $lease->getNextDue());
+
+    // When due, the buyer is asked for it, with how to pay.
+    $manager = $this->container->get(LeaseManager::class);
+    $lease->set('next_due', $placed - 1)->save();
+    $this->assertSame(1, $manager->queueDue());
+    $job = Queue::load(LeaseManager::QUEUE)->getBackend()->claimJob();
+    $this->assertSame('The buyer was asked for the payment.', $this->container->get('plugin.manager.advancedqueue_job_type')->createInstance(LeaseChargeJob::ID)->process($job)->getMessage());
+    $lease = $this->lease($order);
+    $now = $this->container->get('datetime.time')->getRequestTime();
+    $this->assertSame($now, $lease->getRequested());
+    $this->assertSame($now + 3 * 86400, $lease->getNextDue());
+    $mails = $this->getMails(['key' => 'request']);
+    $this->assertCount(1, $mails, 'The buyer only.');
+    $this->assertSame('Your payment for bank.com is due', (string) $mails[0]['subject']);
+    $this->assertStringContainsString('$900.00', (string) $mails[0]['body']);
+    $this->assertStringContainsString('IBAN XX00 1234', (string) $mails[0]['body']);
+
+    // Not paid by the next try: a reminder, and the owner hears.
+    $manager->charge($lease);
+    $lease = $this->lease($order);
+    $this->assertSame(LeaseInterface::OVERDUE, $lease->getState());
+    $this->assertSame(1, $lease->getFailures());
+    $owner = $this->getMails(['key' => 'failed', 'to' => 'owner@example.com']);
+    $this->assertSame('Lease payment not received: bank.com', (string) $owner[0]['subject']);
+    $buyer = $this->getMails(['key' => 'failed', 'to' => 'buyer@example.com']);
+    $this->assertSame('Reminder: your payment for bank.com', (string) $buyer[0]['subject']);
+
+    // The lease page offers recording the payment, not charging a card.
+    $form = $this->container->get('form_builder')->getForm(LeaseAdminForm::class, $lease);
+    $this->assertTrue($form['actions']['received']['#access']);
+    $this->assertFalse($form['actions']['charge']['#access']);
+    $this->assertTrue($form['actions']['cancel']['#access']);
+
+    // The owner records it; the lease is back on schedule.
+    // Received on the order's Payments tab instead, it counts the same.
+    Payment::create([
+      'state' => 'completed',
+      'amount' => $lease->getNextAmount(),
+      'payment_gateway' => 'bank',
+      'order_id' => $order->id(),
+    ])->save();
+    $lease = $this->lease($order);
+    $this->assertSame(LeaseInterface::ACTIVE, $lease->getState());
+    $this->assertEquals(new Price('1500', 'USD'), $lease->getPaid());
+    $this->assertSame(1, $lease->getPaymentsMade());
+    $this->assertSame(0, $lease->getFailures());
+    $this->assertNull($lease->getRequested());
+    $this->assertSame(LeaseManager::addMonths($placed, 2), $lease->getNextDue(), 'On the same day of the month as placed.');
+
+    // A card charge is never tried on it.
+    $this->assertFalse($manager->charge($lease));
+    $this->assertCount(2, Payment::loadMultiple(), 'The down payment and one monthly payment.');
+
+    // The rest, recorded however it came, pays it off.
+    for ($i = 0; $i < 5; $i++) {
+      $lease = $this->lease($order);
+      $manager->received($lease, $lease->getNextAmount());
+    }
+    $lease = $this->lease($order);
+    $this->assertSame(LeaseInterface::COMPLETED, $lease->getState());
+    $this->assertTrue($lease->getRemaining()->isZero());
+    $this->container->get('commerce_payment.order_updater')->destruct();
+    $this->assertTrue(Order::load($order->id())->isPaid());
+  }
+
+  /**
+   * Tests the amount a Wise pay link asks for.
+   */
+  public function testWiseLink(): void {
+    $subscriber = $this->container->get(CheckoutSubscriber::class);
+    $order = $this->order($this->createDomain('Wise.com', 6000), 6);
+    $event = $this->wiseLink($order);
+    $subscriber->onWiseLink($event);
+    $this->assertEquals(new Price('600', 'USD'), $event->balance, 'The down payment at checkout.');
+
+    $full = $this->order($this->createDomain('Whole.com', 6000));
+    $event = $this->wiseLink($full);
+    $subscriber->onWiseLink($event);
+    $this->assertEquals(new Price('6000', 'USD'), $event->balance, 'The whole price without a lease.');
+
+    // Once leased, the payment due.
+    $order->set('payment_gateway', 'bank');
+    $order->getState()->applyTransitionById('place');
+    $order->save();
+    $event = $this->wiseLink(Order::load($order->id()));
+    $subscriber->onWiseLink($event);
+    $this->assertEquals(new Price('600', 'USD'), $event->balance, 'The down payment, still unpaid.');
+  }
+
+  /**
+   * Returns a stand-in for Commerce Wise's QuickPayLinkEvent.
+   */
+  protected function wiseLink(OrderInterface $order): object {
+    return new class($order, $order->getTotalPrice()) {
+
+      public function __construct(protected OrderInterface $order, public Price $balance) {}
+
+      /**
+       * Returns the order.
+       */
+      public function getOrder(): OrderInterface {
+        return $this->order;
+      }
+
+      /**
+       * Sets the amount to pay.
+       */
+      public function setBalance(Price $balance): void {
+        $this->balance = $balance;
+      }
+
+    };
   }
 
 }

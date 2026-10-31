@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains_owner\Kernel;
 use Drupal\commerce_domains_owner\Appraiser;
 use Drupal\commerce_domains_owner\Drush\Commands\AppraisalCommands;
 use Drupal\commerce_domains_owner\Hook\ProductHooks;
+use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\Product;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Tests\commerce_domains\Kernel\DrushCommandTrait;
@@ -59,7 +60,10 @@ class AppraisalTest extends OwnerKernelTestBase {
     $state = $this->container->get('state');
     $abc = $this->createDomain('Abc.com');
     $longer = $this->createDomain('Longer.com');
-    $this->createDomain('Sold.com', 1000, ['domain_sold' => $this->now - 86400]);
+    $this->createDomain('Sold.com', 1000, [
+      'domain_sold' => $this->now - 86400,
+      'domain_sale_price' => new Price('1000', 'USD'),
+    ]);
     $this->assertSame(0, $this->appraiser->cron(), 'Nothing appraises yet.');
 
     $this->createProvider('appraiser', 'test_appraiser');
@@ -107,8 +111,7 @@ class AppraisalTest extends OwnerKernelTestBase {
     $this->assertSame(49, $this->appraiser->remainingToday(), 'Drush counts toward the allowance.');
 
     $this->setUpCurrentUser([], [], TRUE);
-    $form = $this->container->get('entity.form_builder')->getForm($this->reload($product), 'edit');
-    $this->assertSame('domain_valuation', $form['domain_appraisal']['#group']);
+    $form = $this->container->get('entity.form_builder')->getForm($this->reload($product), 'domain_valuation');
     $this->assertTrue($form['domain_appraisal']['#disabled']);
     $this->assertTrue($form['domain_tld_count']['#disabled']);
   }

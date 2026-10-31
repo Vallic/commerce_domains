@@ -6,6 +6,7 @@ namespace Drupal\commerce_domains_lease\Entity;
 
 use Drupal\commerce_domains_lease\LeaseListBuilder;
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\commerce_payment\Entity\PaymentGatewayInterface;
 use Drupal\commerce_payment\Entity\PaymentMethodInterface;
 use Drupal\commerce_price\Price;
 use Drupal\Core\Entity\Attribute\ContentEntityType;
@@ -78,6 +79,30 @@ class Lease extends ContentEntityBase implements LeaseInterface {
   /**
    * {@inheritdoc}
    */
+  public function getPaymentGateway(): ?PaymentGatewayInterface {
+    $gateway = $this->get('payment_gateway')->entity ?? $this->getPaymentMethod()?->getPaymentGateway();
+    return $gateway instanceof PaymentGatewayInterface ? $gateway : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isManual(): bool {
+    // Without a card to charge, the buyer pays each payment.
+    return !$this->getPaymentMethod()?->isReusable();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getRequested(): ?int {
+    $value = $this->get('requested')->value;
+    return $value === NULL || $value === '' ? NULL : (int) $value;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getMonths(): int {
     return (int) $this->get('months')->value;
   }
@@ -129,6 +154,12 @@ class Lease extends ContentEntityBase implements LeaseInterface {
    * {@inheritdoc}
    */
   public function getNextAmount(): Price {
+    // A down payment by bank transfer may not have arrived yet: it comes
+    // first.
+    $down = $this->getDownPayment()->subtract($this->getPaid());
+    if ($down->isPositive()) {
+      return $down;
+    }
     $remaining = $this->getRemaining();
     // The last payment makes up what rounding left over.
     if ($this->getPaymentsMade() + 1 >= $this->getMonths() || $remaining->lessThan($this->getInstallment())) {
@@ -212,6 +243,11 @@ class Lease extends ContentEntityBase implements LeaseInterface {
       ->setDescription(new TranslatableMarkup('The saved card the monthly payments are charged to.'))
       ->setSetting('target_type', 'commerce_payment_method');
 
+    $fields['payment_gateway'] = BaseFieldDefinition::create('entity_reference')
+      ->setLabel(new TranslatableMarkup('Paid through'))
+      ->setDescription(new TranslatableMarkup('The payment gateway the buyer chose at checkout.'))
+      ->setSetting('target_type', 'commerce_payment_gateway');
+
     $fields['months'] = BaseFieldDefinition::create('integer')
       ->setLabel(new TranslatableMarkup('Monthly payments'))
       ->setSetting('unsigned', TRUE)
@@ -241,6 +277,10 @@ class Lease extends ContentEntityBase implements LeaseInterface {
     $fields['next_due'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(new TranslatableMarkup('Next payment'))
       ->setDescription(new TranslatableMarkup('When the next payment is due, or retried; empty once none is.'));
+
+    $fields['requested'] = BaseFieldDefinition::create('timestamp')
+      ->setLabel(new TranslatableMarkup('Payment requested'))
+      ->setDescription(new TranslatableMarkup('When the buyer was asked for the payment due, on a lease without a saved card; empty until then.'));
 
     $fields['failures'] = BaseFieldDefinition::create('integer')
       ->setLabel(new TranslatableMarkup('Failed attempts'))

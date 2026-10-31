@@ -25,6 +25,8 @@ services:
 
   Drupal\commerce_domains\Catalog: ~
 
+  Drupal\commerce_domains\ProductTabs: ~
+
   Drupal\commerce_domains\RegistrarSync:
     arguments:
       $logger: '@logger.channel.commerce_domains'

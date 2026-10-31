@@ -15,11 +15,14 @@ use Drupal\commerce_domains_owner\Hook\FieldAccessHooks;
 use Drupal\commerce_domains_owner\Hook\ProductHooks;
 use Drupal\commerce_domains_owner\Plugin\Commerce\EntityTrait\DomainCosts;
 use Drupal\commerce_domains_owner\Profit;
+use Drupal\commerce_domains_owner\SaleRecorder;
 use Drupal\commerce_domains_owner\SalesReport;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductType;
 use Drupal\Core\Datetime\DrupalDateTime;
+use Drupal\Core\Entity\Entity\EntityFormDisplay;
 use Drupal\Core\Form\FormState;
+use Drupal\Core\Url;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\Tests\commerce_domains\Kernel\DrushCommandTrait;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -83,17 +86,31 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertNotNull($form->getComponent('domain_renewal'));
     $this->assertNull($form->getComponent('domain_sale_order'), 'The sale order is set by sales, not by hand.');
 
-    // The product form groups the fields.
+    // Each group of fields has a tab of its own beside Edit, which leaves
+    // them out.
     $this->installConfig(['system']);
     $this->setUpCurrentUser([], [], TRUE);
     $product = $this->createDomain('Grouped.com');
-    $built = $this->container->get('entity.form_builder')->getForm($product, 'edit');
-    $this->assertSame('domain_details', $built['domain_expires']['#group']);
-    $this->assertSame('domain_details', $built['domain_registrar']['#group']);
-    $this->assertSame('domain_costs', $built['domain_purchase_price']['#group']);
-    $this->assertSame('domain_sale', $built['domain_sold']['#group']);
-    $this->assertSame('domain_owner', $built['domain_sale']['#group'], 'Costs and sale are tabs.');
-    $this->assertSame('edit-domain-details', $built['domain_owner']['#default_tab'], 'The sale tab comes first once the domain sells.');
+    $form_builder = $this->container->get('entity.form_builder');
+    $built = $form_builder->getForm($product, 'edit');
+    foreach (['domain_expires', 'domain_registrar', 'domain_purchase_price', 'domain_sold', 'domain_appraisal'] as $field) {
+      $this->assertArrayNotHasKey($field, $built, $field);
+    }
+    $tabs = [
+      'domain_details' => ['domain_expires', 'domain_registrar'],
+      'domain_costs' => ['domain_purchase_price', 'domain_renewal'],
+      'domain_sale' => ['domain_sold', 'domain_sale_price'],
+      'domain_valuation' => ['domain_appraisal'],
+    ];
+    foreach ($tabs as $operation => $fields) {
+      $built = $form_builder->getForm($product, $operation);
+      foreach ($fields as $field) {
+        $this->assertArrayHasKey($field, $built, "$operation: $field");
+      }
+      $this->assertArrayNotHasKey('title', $built, "$operation edits its fields only.");
+    }
+    $this->assertFalse($built['actions']['submit']['#access'], 'Valuation is only shown.');
+    $this->assertSame('/product/' . $product->id() . '/sale', Url::fromRoute('commerce_domains.product_tab.domain_sale', ['commerce_product' => $product->id()])->toString());
 
     // Only the owner sees what domains cost, and only the manager edits it.
     $buyer = $this->createUser(['view commerce_product']);
@@ -104,9 +121,15 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertFalse($price->access('edit', $viewer));
     $this->assertTrue($price->access('edit', $this->createUser(['manage domain portfolio'])));
     $this->assertTrue($product->get('domain_expires')->access('view', $buyer), 'Other fields are left alone.');
-    $this->setUpCurrentUser([], ['administer commerce_product', 'administer commerce_store', 'view domain portfolio']);
-    $built = $this->container->get('entity.form_builder')->getForm($product, 'edit');
-    $this->assertFalse($built['domain_costs']['#access'], 'No empty group for staff who may not change costs.');
+    // The tabs follow: staff who may only see costs get Valuation, not Costs.
+    $staff = $this->createUser(['administer commerce_product', 'administer commerce_store', 'view domain portfolio']);
+    $tab = fn(string $operation) => Url::fromRoute('commerce_domains.product_tab.' . $operation, ['commerce_product' => $product->id()]);
+    $this->assertFalse($tab('domain_costs')->access($staff));
+    $this->assertTrue($tab('domain_valuation')->access($staff));
+    $this->assertTrue($tab('domain_details')->access($staff));
+    $this->assertFalse($tab('domain_details')->access($buyer));
+    $manager = $this->createUser(['administer commerce_product', 'administer commerce_store', 'manage domain portfolio']);
+    $this->assertTrue($tab('domain_costs')->access($manager));
 
     // Uninstalling takes the trait off the type and keeps the data; a new
     // install brings it back.
@@ -205,25 +228,24 @@ class CostsTest extends OwnerKernelTestBase {
 
     $report = $this->container->get(SalesReport::class);
     $ids = $report->soldIds(10);
-    $this->assertCount(4, $ids, 'Domains not sold are left out.');
+    $this->assertCount(3, $ids, 'Domains not sold are left out, and a sold date without a price is no sale.');
     $table = $report->table($ids);
     $rows = array_values($table['#rows']);
-    $this->assertSame('NoPrice.com', (string) $rows[0][0]['data']['#title'], 'Latest sale first.');
-    $this->assertSame('Afternic', (string) $rows[1][2]['data']['#plain_text']);
-    $this->assertSame('This site, order 7', (string) $rows[2][2]['data']['#title']);
-    $this->assertSame('$900.00', $rows[2][6]);
-    $this->assertSame('No sale price.', (string) $rows[0][6]['data']['#markup']);
-    $this->assertSame('$500.00', $rows[1][3], 'Paid at once.');
+    $this->assertSame('Market.com', (string) $rows[0][0]['data']['#title'], 'Latest sale first.');
+    $this->assertSame('Afternic', (string) $rows[0][2]['data']['#plain_text']);
+    $this->assertSame('This site, order 7', (string) $rows[1][2]['data']['#title']);
+    $this->assertSame('$900.00', $rows[1][6]);
+    $this->assertSame('$500.00', $rows[0][3], 'Paid at once.');
     // A lease to own counts its payments in full, and says when it ends.
-    $this->assertSame('$3,600.00, lease to own over 36 months to 2027-10', $rows[3][3]);
-    $this->assertSame('$3,590.00', $rows[3][6]);
+    $this->assertSame('$3,600.00, lease to own over 36 months to 2027-10', $rows[2][3]);
+    $this->assertSame('$3,590.00', $rows[2][6]);
 
     $totals = $report->totals();
     $this->assertSame([2026, 2025, 2024], array_keys($totals));
-    $this->assertSame(2, $totals[2026]['sales']);
+    $this->assertSame(1, $totals[2026]['sales']);
     $this->assertSame(0, $totals[2026]['leases']);
     $this->assertSame(1, $totals[2024]['leases']);
-    $this->assertSame(1, $totals[2026]['unknown']);
+    $this->assertSame(0, $totals[2026]['unknown']);
     $this->assertEquals(['USD' => new Price('450', 'USD')], $totals[2026]['profit']);
     $this->assertEquals(['USD' => new Price('1000', 'USD')], $totals[2025]['revenue']);
   }
@@ -236,6 +258,11 @@ class CostsTest extends OwnerKernelTestBase {
     foreach (['domain_sold', 'domain_purchase_date', 'domain_expires'] as $field) {
       $this->assertSame('commerce_domains_optional_timestamp', $display->getComponent($field)['type'], $field);
     }
+    // Set to core's widget, the form still uses the one keeping them empty.
+    $display->setComponent('domain_expires', ['type' => 'datetime_timestamp'] + $display->getComponent('domain_expires'))->save();
+    $product = $this->createDomain('Widget.com');
+    $form_display = EntityFormDisplay::collectRenderDisplay($product, 'default');
+    $this->assertSame('commerce_domains_optional_timestamp', $form_display->getComponent('domain_expires')['type']);
     $widget = $this->container->get('plugin.manager.field.widget')->getInstance([
       'field_definition' => FieldConfig::loadByName('commerce_product', 'default', 'domain_sold'),
       'form_mode' => 'default',
@@ -256,13 +283,42 @@ class CostsTest extends OwnerKernelTestBase {
     $product->set('domain_purchase_price', new Price('10', 'USD'))->save();
     $this->assertTrue((bool) $this->reload($product)->getVariations()[0]->get('in_stock')->value, 'Other edits leave it on sale.');
 
+    // A date alone is no sale.
     $product->set('domain_sold', self::date('2026-10-01'))->save();
+    $this->assertTrue($this->reload($product)->get('domain_sold')->isEmpty());
+    $this->assertTrue((bool) $this->reload($product)->getVariations()[0]->get('in_stock')->value);
+    $product = $this->reload($product);
+    $product->set('domain_sold', self::date('2026-10-01'))->set('domain_sale_price', new Price('800', 'USD'))->save();
     $this->assertFalse((bool) $this->reload($product)->getVariations()[0]->get('in_stock')->value);
 
     // Sales recorded by the site save as syncing, and see to it themselves.
     $quiet = $this->createDomain('Quiet.com');
-    $quiet->set('domain_sold', self::date('2026-10-01'))->setSyncing(TRUE)->save();
+    $quiet->set('domain_sold', self::date('2026-10-01'))->set('domain_sale_price', new Price('800', 'USD'))->setSyncing(TRUE)->save();
     $this->assertTrue((bool) $this->reload($quiet)->getVariations()[0]->get('in_stock')->value);
+
+    // The Sale tab undoes a sale entered by hand, putting the domain back on
+    // sale; a sale on the site is undone by canceling its order.
+    $this->installConfig(['system']);
+    $this->setUpCurrentUser([], [], TRUE);
+    $form = $this->container->get('entity.form_builder')->getForm($this->reload($product), 'domain_sale');
+    $this->assertArrayHasKey('undo', $form['actions']);
+    $this->container->get(SaleRecorder::class)->undo($this->reload($product));
+    $product = $this->reload($product);
+    $this->assertTrue($product->get('domain_sold')->isEmpty());
+    $this->assertTrue($product->get('domain_sale_price')->isEmpty());
+    $this->assertTrue((bool) $product->getVariations()[0]->get('in_stock')->value, 'Back on sale.');
+    $product->set('domain_sold', self::date('2026-10-01'))->set('domain_sale_price', new Price('800', 'USD'))->set('domain_sale_order', 9)->save();
+    $form = $this->container->get('entity.form_builder')->getForm($this->reload($product), 'domain_sale');
+    $this->assertArrayNotHasKey('undo', $form['actions']);
+    $this->assertStringContainsString('cancel the order', (string) $form['undo_note']['#markup']);
+
+    // Sales stored without a price before the rule are cleared, and listed.
+    $this->container->get('database')->delete('commerce_product__domain_sale_price')->condition('entity_id', $quiet->id())->execute();
+    $this->entityTypeManager->getStorage('commerce_product')->resetCache();
+    $this->container->get('module_handler')->loadInclude('commerce_domains_owner', 'install');
+    $this->assertSame('Cleared 1 sales without a price; still off sale: quiet.com.', commerce_domains_owner_update_11003());
+    $this->assertTrue($this->reload($quiet)->get('domain_sold')->isEmpty());
+    $this->assertFalse($this->reload($product)->get('domain_sold')->isEmpty(), 'A sale with its price stays.');
   }
 
   /**
@@ -296,7 +352,7 @@ class CostsTest extends OwnerKernelTestBase {
     // Once set from the registrar, the product form locks it.
     $this->installConfig(['system']);
     $this->setUpCurrentUser([], [], TRUE);
-    $locked = fn($product): bool => !empty($this->container->get('entity.form_builder')->getForm($this->reload($product), 'edit')['domain_auto_renew']['#disabled']);
+    $locked = fn($product): bool => !empty($this->container->get('entity.form_builder')->getForm($this->reload($product), 'domain_costs')['domain_auto_renew']['#disabled']);
     $this->assertTrue($locked($renews));
     $this->assertTrue($locked($lapses));
     $this->assertFalse($locked($silent), 'Editable while the registrar says nothing.');
@@ -310,7 +366,10 @@ class CostsTest extends OwnerKernelTestBase {
     $this->container->get('state')->set('commerce_domains_test.managed', []);
     $values = ['domain_registrar' => 'reg', 'domain_expires' => 1_820_000_000];
     $kept = $this->createDomain('Kept.com', 1000, $values);
-    $sold = $this->createDomain('Sold.com', 1000, $values + ['domain_sold' => 1_700_000_000]);
+    $sold = $this->createDomain('Sold.com', 1000, $values + [
+      'domain_sold' => 1_700_000_000,
+      'domain_sale_price' => new Price('900', 'USD'),
+    ]);
 
     $this->assertSame(['kept.com'], $this->container->get(RegistrarSync::class)->plan($provider)->missing, 'The buyer took the sold one.');
     $this->assertTrue(DomainRegistrarForm::access($kept)->isAllowed());

@@ -577,31 +577,45 @@ ticked, on the offer settings page.
 Commerce Domains Lease to Own (submodule) offers a lease at checkout on
 domains whose sale terms allow one (*Lease-to-own* on the variation, or the
 rule worked out from the price): the buyer picks the term, pays a down
-payment, and the rest is charged monthly to the card they paid with. Terms
-of 6, 12, 24, 36, 48 and 60 months are offered up to the domain's longest.
+payment, and pays the rest monthly: charged to the card they paid with, or
+paid by bank transfer, Wise or another gateway each month. Terms of 6, 12,
+24, 36, 48 and 60 months are offered up to the domain's longest.
 
 - **Down payment**: *Lease down payment* on the variation, in percent of
   the price; empty takes the default on the lease settings page
   (*Commerce → Domains → Settings → Domain leases*, 10%). The monthly
   payments split the rest, the last one making up the rounding.
-- **Paying**: a lease needs an account, which keeps the card, and a gateway
-  that can charge a saved card: Stripe's Payment Element (`gateway_plugins`
-  in `commerce_domains_lease.settings`). The checkout charges only the down
-  payment and saves the card for payments made without the buyer, whatever
-  the gateway's own *payment method usage* is; leased orders offer no other
-  gateway. The order holds the full price and is placed with the rest to
-  pay, so the domain goes off sale at once, and its handover starts with
-  the last payment, when the order is paid in full.
-- **Monthly payments**: cron queues the payments due; each is a payment on
-  the lease's order, a month after the last was due. The buyer is mailed
-  each one.
+- **Paying**: a lease needs an account, and a gateway chosen under
+  *Paying* on the lease settings page; leased orders offer no other.
+  - *Charged to the saved card* (`gateway_plugins`; Stripe's Payment
+    Element by default): the checkout charges only the down payment and
+    saves the card for payments made without the buyer, whatever the
+    gateway's own *payment method usage* is.
+  - *Paid by the buyer each month* (`manual_gateway_plugins`; manual
+    gateways such as bank transfer, and Wise, by default): the checkout
+    asks for the down payment only, as the bank transfer's pending
+    payment, or as the Wise pay link's amount.
+
+  The order holds the full price and is placed with the rest to pay, so the
+  domain goes off sale at once, and its handover starts with the last
+  payment, when the order is paid in full.
+- **Monthly payments**: cron queues the payments due. With a card, each is
+  charged as a payment on the lease's order, a month after the last was
+  due, and the buyer is mailed each one. Paid by hand, the buyer is mailed
+  the amount and how to pay it: the gateway's payment instructions, or a
+  Wise pay link for the amount. A payment counts once it is on the order,
+  however it got there: *Record received* on the lease page, *Receive* on
+  the order's Payments tab, or the gateway's own notification, as Wise's.
+  Each is due on the same day of the month from when the order was placed.
 - **Missed payments**: a failed payment is tried again every few days
   (*Try a missed payment again after*, 3), a few times (*Tries before the
   lease is in default*, 3). The buyer hears about each failure, and the
   owner too. Past the tries the lease is in default: nothing more is
   charged, and the owner charges it by hand on the lease page, or cancels
   it, once they have spoken with the buyer. Cards that need the buyer to
-  approve the payment fail the same way.
+  approve the payment fail the same way. A payment asked for by hand that
+  has not arrived after the same days counts as missed: the buyer is
+  reminded, and the lease goes into default the same way.
 - **Leases** under *Commerce → Domains* lists them, with what was paid and
   the next payment. The owner's sale record keeps the term as the number
   of payments.
@@ -663,16 +677,23 @@ turned on for the product types that sell domains when the module is
 installed (turn it on for types added later): the purchase price and date,
 the yearly renewal cost, auto-renew, whether to keep the domain or let it
 expire, and the sale: what it sold for, when, through which marketplace,
-and for a lease to own the number of monthly payments. The product form
-shows them in vertical tabs: *Domain details* (expiry, registration date,
-registrar, internal, Atom premium), *Costs and renewal*, *Sale*, open once
-the domain sold, and *Valuation*.
+and for a lease to own the number of monthly payments. Each domain has
+tabs beside *Edit* for them, each with its own Save: *Details* (expiry,
+registration date, registrar, internal, Atom premium), *Costs* (purchase,
+renewal cost, auto-renew, keep or let expire), *Sale* and *Valuation*
+(shown only). The Edit form leaves those fields out; adding a domain still
+shows them. *Sale* has *Undo sale* for a sale entered by hand or found on
+a marketplace: it clears the sale and puts the domain back on sale. A sale
+on the site is undone by canceling its order. Other modules add tabs with
+`hook_commerce_domains_product_tabs()` (see `ProductTabs`).
 Only people with *View the domain dashboard* or *Manage the domain
 portfolio* see these fields, in forms, Views and JSON:API alike. A sale on
 the site fills in the sale from its order, and cancelling the order clears
-it; a sale a marketplace reports fills in the date and the marketplace, and
-you enter what it brought after commission (for a lease to own, what the
-payments add up to, and their number). Orders on the site are paid at once.
+it. A sale needs what it sold for: a sold date without it is no sale, and
+is cleared when the domain is saved, however it was set; the form asks for
+the price with the date. A marketplace that only shows a domain sold takes
+it off sale, and you enter the sale with what it brought after commission
+(for a lease to own, what the payments add up to, and their number).
 A marketplace with a sales report (Atom) fills those in too: the sale date
 replaces when the sale was found, and what it brought after commission and
 the number of payments are filled in where empty, so your entries stand.
