@@ -131,6 +131,7 @@ class Catalog {
       verified: (bool) $product->get('domain_verified')->value,
       description: $product->hasField('body') ? $product->get('body')->value : NULL,
       terms: SaleTerms::fromVariation($variation),
+      expires: $product->hasField('domain_expires') && !$product->get('domain_expires')->isEmpty() ? (int) $product->get('domain_expires')->value : NULL,
     );
   }
 

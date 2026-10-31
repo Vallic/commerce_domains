@@ -51,6 +51,15 @@ class DynadotTest extends ProviderTestBase {
     $this->assertSame(63000, $high['price']);
     $this->assertSame(15750, $high['minimum_offer']);
     $this->assertSame(12, $high['maximum_installments'], 'Dynadot allows 12 months at most.');
+
+    // The plan and a month's buffer must end before the domain expires.
+    $expiring = fn(string $in) => self::item('c.com', 60000, ['expires' => strtotime($in)]);
+    $this->assertSame(12, $plugin->buildListing($expiring('+2 years'))['maximum_installments']);
+    $this->assertSame(5, $plugin->buildListing($expiring('+6 months +10 days'))['maximum_installments']);
+    $short = $plugin->buildListing($expiring('+2 months +10 days'));
+    $this->assertFalse($short['installment'], 'Under the two months a plan needs.');
+    $this->assertArrayNotHasKey('maximum_installments', $short);
+    $this->assertFalse($plugin->buildListing($expiring('-1 day'))['installment']);
     $this->assertArrayNotHasKey('description', $high);
     $this->assertNull($plugin->buildListing(self::item('free.com', 0)));
   }
@@ -95,6 +104,48 @@ class DynadotTest extends ProviderTestBase {
     $this->assertSame(['listing_type'], $plugin->changedFields(['listing_type' => 'make_offer'], $listings['a.com']));
     $this->assertSame('pending sale', $plugin->lockReason(['pending_sale' => TRUE]));
     $this->assertNull($plugin->lockReason($listings['a.com']));
+  }
+
+  /**
+   * Tests reusing listing reads in whole checks for a day.
+   */
+  public function testListingReadsAreKept(): void {
+    $account = self::json([
+      'ListDomainInfoResponse' => [
+        'ResponseCode' => 0,
+        'Status' => 'success',
+        'MainDomains' => [['Name' => 'a.com', 'isForSale' => 'yes'], ['Name' => 'b.com', 'isForSale' => 'yes']],
+      ],
+    ]);
+    $item = fn(string $price) => self::json([
+      'GetListingsItemResponse' => [
+        'ResponseCode' => 0,
+        'Status' => 'success',
+        'Listing' => ['Price' => $price, 'Type' => 'BIN', 'PendingSaleLocked' => 'No'],
+      ],
+    ]);
+    $set = self::json(['SetForSaleResponse' => ['ResponseCode' => 0, 'Status' => 'success']]);
+    $plugin = $this->plugin(Dynadot::class, 'dynadot', self::KEYS, [
+      $account, $item('100.00'), $item('200.00'),
+      // The next whole check reads the account only.
+      $account,
+      // A push, then the pushed listing is read again.
+      $set, $account, $item('150.00'),
+      // A few domains are read afresh.
+      $account, $item('210.00'),
+    ]);
+    $this->assertSame(100, $plugin->fetchListings()['a.com']['price']);
+    $this->assertCount(3, $this->history);
+    $listings = $plugin->fetchListings();
+    $this->assertSame([100, 200], [$listings['a.com']['price'], $listings['b.com']['price']]);
+    $this->assertCount(4, $this->history, 'Kept reads need no request.');
+
+    $plugin->saveListings(['a.com' => ['price' => 150, 'minimum_offer' => 75, 'installment' => FALSE]], []);
+    $after_push = $plugin->fetchListings();
+    $this->assertSame([150, 200], [$after_push['a.com']['price'], $after_push['b.com']['price']]);
+    $this->assertCount(7, $this->history);
+    $this->assertSame(210, $plugin->fetchListings(['b.com'])['b.com']['price']);
+    $this->assertCount(9, $this->history);
   }
 
   /**

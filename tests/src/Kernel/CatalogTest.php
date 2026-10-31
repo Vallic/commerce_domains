@@ -93,6 +93,7 @@ class CatalogTest extends DomainsKernelTestBase {
       'domain_registrar' => 'dynadot',
       'atom_premium' => TRUE,
       'domain_verified' => TRUE,
+      'domain_expires' => 1800000000,
     ]);
     $this->createDomain('b.com', 1000, ['domain_registrar' => 'gname']);
     $this->createDomain('c.com');
@@ -105,6 +106,8 @@ class CatalogTest extends DomainsKernelTestBase {
     $this->assertFalse($items['b.com']->atomPremium);
     $this->assertTrue($items['a.com']->verified);
     $this->assertNull($items['a.com']->description, 'The test product type has no body field.');
+    $this->assertSame(1800000000, $items['a.com']->expires);
+    $this->assertNull($items['b.com']->expires);
   }
 
   /**

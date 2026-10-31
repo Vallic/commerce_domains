@@ -12,12 +12,18 @@ use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\Component\Uuid\Php;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
+use Drupal\Core\KeyValueStore\KeyValueMemoryFactory;
 use Drupal\Tests\commerce_domains\Unit\Clients\ClientTestBase;
 
 /**
  * Base for provider plugin tests: plugins built with a mocked HTTP client.
  */
 abstract class ProviderTestBase extends ClientTestBase {
+
+  /**
+   * The key-value store plugins get, kept across plugins in a test.
+   */
+  protected ?KeyValueMemoryFactory $keyValue = NULL;
 
   /**
    * Creates a marketplace plugin through its create() method.
@@ -72,6 +78,9 @@ abstract class ProviderTestBase extends ClientTestBase {
     $container->set('http_client', $this->http($responses));
     $container->set('uuid', new Php());
     $container->set('string_translation', $this->getStringTranslationStub());
+    // Kept for the test, as plugins share it in a request.
+    $this->keyValue ??= new KeyValueMemoryFactory();
+    $container->set('keyvalue', $this->keyValue);
     // Splits at the first dot; the Public Suffix List has its own test.
     $parser = $this->createMock(DomainNameParser::class);
     $parser->method('parse')->willReturnCallback(fn(string $name) => new DomainName($name, $name, ...explode('.', $name, 2)));

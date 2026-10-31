@@ -267,6 +267,12 @@ sale, takes the domain off sale again.
 fruits and GNAME listings show no sale, so sales there aren't seen: fruits
 keeps them as orders, and GNAME moves a sold listing to a list of its own.
 
+Dynadot reports a listing's price and pending sale one request at a time,
+60 a minute, so a whole check keeps each listing it reads for a day. A
+pending sale at Dynadot, or a price changed there by hand, can then take up
+to a day to show; syncs of up to 20 domains, and listings just pushed or
+removed, are always read afresh.
+
 Sites hear about sales and failures through events:
 
 - `MarketplaceEvents::SOLD_ELSEWHERE`, once per sale: a `SoldElsewhereEvent`

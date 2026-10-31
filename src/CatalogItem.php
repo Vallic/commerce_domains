@@ -29,6 +29,8 @@ final class CatalogItem {
     public readonly ?string $description,
     // How the domain is sold; see SaleTerms.
     public readonly SaleTerms $terms = new SaleTerms(),
+    // When the registration runs out, as a Unix time; NULL when unknown.
+    public readonly ?int $expires = NULL,
   ) {}
 
   /**

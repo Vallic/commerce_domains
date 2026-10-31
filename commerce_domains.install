@@ -7,7 +7,16 @@
 
 declare(strict_types=1);
 
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Dynadot;
 use Drupal\field\Entity\FieldConfig;
+
+/**
+ * Implements hook_uninstall().
+ */
+function commerce_domains_uninstall(): void {
+  // Dynadot's kept listing reads.
+  \Drupal::keyValue(Dynadot::LISTING_CACHE)->deleteAll();
+}
 
 /**
  * Adds "List on marketplaces" and "Not listed on" to the sale terms.

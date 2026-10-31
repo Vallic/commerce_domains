@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Clients;
 
 use Drupal\commerce_domains\ProviderException;
+use Drupal\Core\Database\Database;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\RequestOptions;
@@ -31,11 +32,18 @@ abstract class ApiClient {
 
   protected const USER_AGENT = 'CommerceDomains/1.0 (+https://www.drupal.org/project/commerce_domains)';
 
-  // Shortest gap between the starts of two requests, in seconds, for APIs.
+  // How often a long run of requests touches the database, in seconds.
+  protected const KEEP_ALIVE_INTERVAL = 60;
+
   /**
-   * That take one request at a time.
+   * The shortest gap between the starts of two requests, in seconds.
    */
   protected float $minInterval = 0.0;
+
+  /**
+   * When any client last touched the database.
+   */
+  protected static float $lastKeepAlive = 0.0;
 
   /**
    * When the latest request started.
@@ -235,6 +243,32 @@ abstract class ApiClient {
       }
     }
     $this->lastRequest = microtime(TRUE);
+    $this->keepDatabaseAlive();
+  }
+
+  /**
+   * Keeps the database connection open through a long run of requests.
+   *
+   * A check that reads hundreds of listings one request at a time can leave
+   * the connection idle past MySQL's wait_timeout, and the next query then
+   * fails with "MySQL server has gone away". A cheap query each minute
+   * keeps it open.
+   */
+  protected function keepDatabaseAlive(): void {
+    $now = microtime(TRUE);
+    if ($now - self::$lastKeepAlive < self::KEEP_ALIVE_INTERVAL) {
+      return;
+    }
+    self::$lastKeepAlive = $now;
+    if (!Database::isActiveConnection()) {
+      return;
+    }
+    try {
+      Database::getConnection()->query('SELECT 1');
+    }
+    catch (\Exception) {
+      // Already gone: the next query reports it.
+    }
   }
 
   /**

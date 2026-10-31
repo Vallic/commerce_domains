@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\KeyValueStore\KeyValueStoreInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\Clients\DynadotClient;
@@ -12,6 +13,7 @@ use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Lists Dynadot-registered domains in its marketplace; manages registrations.
@@ -22,6 +24,12 @@ use Drupal\commerce_domains\Registration;
  *
  * Dynadot only reports a listing's price back, so the other settings are
  * sent along whenever the price changes but can't be checked on their own.
+ *
+ * The price needs a request per listing, which at 60 a minute makes a whole
+ * check of hundreds of listings take many minutes. So a listing read is
+ * kept for a day: whole checks reuse it, while syncs of a few domains and
+ * listings just pushed or removed are read afresh. A price changed by hand
+ * at Dynadot, or a sale under way there, can take a day to show.
  */
 #[CommerceDomainsProvider(
   id: 'dynadot',
@@ -42,6 +50,18 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
   // Dynadot allows installment plans of 2 to 12 months.
   protected const MAX_INSTALLMENTS = 12;
 
+  // Months Dynadot wants left before expiry after a plan's last payment.
+  protected const INSTALLMENT_BUFFER = 1;
+
+  // How long a listing read is reused, in seconds.
+  protected const LISTING_TTL = 86400;
+
+  // Up to this many domains are always read afresh.
+  protected const FRESH_READS = 20;
+
+  // The key-value collection keeping listing reads.
+  public const LISTING_CACHE = 'commerce_domains.dynadot_listings';
+
   // The fields get_listing_item reports, so the only ones a sync can compare.
   protected const REPORTED_FIELDS = ['price', 'listing_type'];
 
@@ -60,6 +80,24 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
    * @var \Drupal\commerce_domains\Clients\DynadotClient|null
    */
   protected ?DynadotClient $client = NULL;
+
+  /**
+   * Listing reads, keyed by domain: ['read' => time, 'listing' => array].
+   *
+   * @var \Drupal\Core\KeyValueStore\KeyValueStoreInterface|null
+   */
+  protected ?KeyValueStoreInterface $listingCache = NULL;
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition): static {
+    $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
+    if ($container->has('keyvalue')) {
+      $instance->listingCache = $container->get('keyvalue')->get(self::LISTING_CACHE);
+    }
+    return $instance;
+  }
 
   /**
    * {@inheritdoc}
@@ -106,7 +144,8 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
     $offers = $item->terms->offers;
     // Atom premium names get the same minimum offer as the rest here.
     $min_offer = $offers ? $this->minimumOfferFor($item, $price, (int) ($price < 10000 ? $usd_price * 0.5 : $usd_price * 0.25)) : $price;
-    $installments = $buy_now ? $this->leaseMonthsFor($item, $this->leaseMonths($usd_price, self::MAX_INSTALLMENTS), self::MAX_INSTALLMENTS) : 0;
+    $cap = min(self::MAX_INSTALLMENTS, self::installmentsBeforeExpiry($item->expires));
+    $installments = $buy_now ? $this->leaseMonthsFor($item, $this->leaseMonths($usd_price, $cap), $cap) : 0;
 
     $listing = [
       'listing_type' => match (TRUE) {
@@ -129,6 +168,26 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
   }
 
   /**
+   * Returns the longest plan that ends before the domain expires.
+   *
+   * Dynadot refuses a plan whose months plus a month's buffer run past the
+   * expiry, so only whole months left count. Without a known expiry the
+   * plan isn't capped; Dynadot then still checks it.
+   */
+  protected static function installmentsBeforeExpiry(?int $expires): int {
+    if ($expires === NULL) {
+      return self::MAX_INSTALLMENTS;
+    }
+    $now = new \DateTimeImmutable();
+    $end = (new \DateTimeImmutable())->setTimestamp($expires);
+    if ($end <= $now) {
+      return 0;
+    }
+    $left = $now->diff($end);
+    return max(0, $left->y * 12 + $left->m - self::INSTALLMENT_BUFFER);
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function fetchListings(?array $names = NULL): array {
@@ -146,8 +205,16 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
       $for_sale = array_values(array_intersect($for_sale, $names));
     }
 
+    $fresh = $names !== NULL && count($names) <= self::FRESH_READS;
+    $cached = $this->listingCache && !$fresh ? $this->listingCache->getMultiple($for_sale) : [];
+    $since = time() - self::LISTING_TTL;
     $listings = [];
     foreach ($for_sale as $name) {
+      $hit = $cached[$name] ?? NULL;
+      if (is_array($hit) && ($hit['read'] ?? 0) > $since && is_array($hit['listing'] ?? NULL)) {
+        $listings[$name] = $hit['listing'];
+        continue;
+      }
       $listing = $client->getListingItem($name);
       $price = $listing['Price'] ?? NULL;
       $listings[$name] = [
@@ -157,6 +224,14 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
         'listing_type' => self::listingType($listing['Type'] ?? NULL),
         'pending_sale' => strtolower((string) ($listing['PendingSaleLocked'] ?? '')) === 'yes',
       ];
+      // Kept as it is read, so a check cut short still saves the reads.
+      if ($listing !== NULL) {
+        $this->listingCache?->set($name, ['read' => time(), 'listing' => $listings[$name]]);
+      }
+    }
+    // A whole check drops the reads of domains no longer for sale.
+    if ($names === NULL && $this->listingCache) {
+      $this->listingCache->deleteMultiple(array_diff(array_keys($this->listingCache->getAll()), $for_sale));
     }
     return $listings;
   }
@@ -272,6 +347,8 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
    */
   public function saveListings(array $listings, array $current): array {
     $client = $this->client();
+    // Read afresh next time, to see what Dynadot made of it.
+    $this->listingCache?->deleteMultiple(array_keys($listings));
     return $client->eachDomain(array_keys($listings), function (string $name) use ($client, $listings): void {
       $listing = $listings[$name];
       $client->setForSale($name, [
@@ -307,6 +384,7 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
    */
   public function deleteListings(array $names): array {
     $client = $this->client();
+    $this->listingCache?->deleteMultiple(array_values($names));
     return $client->eachDomain(array_values($names), $client->cancelSale(...));
   }
 
