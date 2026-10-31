@@ -1,0 +1,12 @@
+name: Commerce Domains Lease to Own
+type: module
+description: 'Lets buyers lease a domain to own: a down payment at checkout, then monthly payments charged to the saved card until the domain is theirs.'
+package: Commerce (contrib)
+core_version_requirement: ^11.4
+php: 8.4
+configure: commerce_domains_lease.settings
+dependencies:
+  - advancedqueue:advancedqueue
+  - commerce:commerce_payment
+  - commerce_domains:commerce_domains
+  - commerce_domains:commerce_domains_checkout

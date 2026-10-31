@@ -95,6 +95,7 @@ class ListingHooks {
     $move = [
       'entity.commerce_domains_offer.collection' => [new TranslatableMarkup('Offers'), -30],
       'entity.commerce_domains_handover.collection' => [new TranslatableMarkup('Handovers'), -25],
+      'entity.commerce_domains_lease.collection' => [new TranslatableMarkup('Leases'), -24],
     ];
     foreach ($move as $id => [$title, $weight]) {
       if (isset($links[$id])) {

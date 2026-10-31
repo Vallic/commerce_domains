@@ -53,9 +53,11 @@ class SaleRecorder {
         $product->set('domain_sold', $time)
           ->set('domain_sold_via', NULL)
           ->set('domain_sale_order', $order->id());
-        // Orders are paid at once.
+        // Orders are paid at once, unless the buyer leases the domain
+        // (Commerce Domains Lease to Own keeps the term on the order).
         if ($product->hasField('domain_lease_months')) {
-          $product->set('domain_lease_months', NULL);
+          $months = $order->getData('commerce_domains_lease')['months'] ?? NULL;
+          $product->set('domain_lease_months', is_int($months) && $months > 1 ? $months : NULL);
         }
       }
       $product->set('domain_sale_price', $price);

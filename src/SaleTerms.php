@@ -31,6 +31,9 @@ final class SaleTerms {
     public readonly bool $marketplaces = TRUE,
     // The IDs of providers that must not list the domain.
     public readonly array $notListedOn = [],
+    // The percentage of the price paid at checkout for a lease on the site,
+    // or NULL for the lease settings' default.
+    public readonly ?int $leaseDownPayment = NULL,
   ) {}
 
   /**
@@ -93,15 +96,19 @@ final class SaleTerms {
       $item = $variation->get($field)->first();
       return $item->toPrice();
     };
-    $months = $variation->hasField('sale_lease_months') ? $variation->get('sale_lease_months')->value : NULL;
+    $integer = function (string $field) use ($variation): ?int {
+      $value = $variation->hasField($field) ? $variation->get($field)->value : NULL;
+      return $value === NULL || $value === '' ? NULL : (int) $value;
+    };
     return new self(
       buyNow: $flag('sale_buy_now'),
       offers: $flag('sale_offers'),
       minimumOffer: $price('sale_minimum_offer'),
       floorPrice: $price('sale_floor_price'),
-      leaseMonths: $months === NULL || $months === '' ? NULL : (int) $months,
+      leaseMonths: $integer('sale_lease_months'),
       marketplaces: $flag('sale_marketplaces'),
       notListedOn: $variation->hasField('sale_not_listed_on') ? array_values(array_filter(array_column($variation->get('sale_not_listed_on')->getValue(), 'target_id'))) : [],
+      leaseDownPayment: $integer('sale_lease_down_payment'),
     );
   }
 

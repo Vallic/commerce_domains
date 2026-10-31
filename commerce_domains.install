@@ -103,3 +103,22 @@ function commerce_domains_update_11004(): void {
     $field_manager->createField($field);
   }
 }
+
+/**
+ * Adds "Lease down payment" to the sale terms.
+ */
+function commerce_domains_update_11005(): void {
+  $trait = \Drupal::service('plugin.manager.commerce_entity_trait')->createInstance('commerce_domains_sale_terms');
+  $definition = $trait->buildFieldDefinitions()['sale_lease_down_payment'];
+  /** @var \Drupal\commerce_product\Entity\ProductVariationTypeInterface $type */
+  foreach (\Drupal::entityTypeManager()->getStorage('commerce_product_variation_type')->loadMultiple() as $type) {
+    if (!in_array('commerce_domains_sale_terms', $type->getTraits(), TRUE) || FieldConfig::loadByName('commerce_product_variation', $type->id(), 'sale_lease_down_payment')) {
+      continue;
+    }
+    $field = clone $definition;
+    $field->setTargetEntityTypeId('commerce_product_variation');
+    $field->setTargetBundle($type->id());
+    $field->setName('sale_lease_down_payment');
+    \Drupal::service('commerce.configurable_field_manager')->createField($field);
+  }
+}

@@ -1,0 +1,28 @@
+entity.commerce_domains_lease.collection:
+  path: '/admin/commerce/domains/leases'
+  defaults:
+    _entity_list: 'commerce_domains_lease'
+    _title: 'Domain leases'
+  requirements:
+    _permission: 'administer domain leases'
+
+entity.commerce_domains_lease.canonical:
+  path: '/admin/commerce/domains/leases/{commerce_domains_lease}'
+  defaults:
+    _form: '\Drupal\commerce_domains_lease\Form\LeaseAdminForm'
+    _title: 'Domain lease'
+  requirements:
+    _permission: 'administer domain leases'
+  options:
+    _admin_route: TRUE
+    parameters:
+      commerce_domains_lease:
+        type: 'entity:commerce_domains_lease'
+
+commerce_domains_lease.settings:
+  path: '/admin/commerce/domains/settings/leases'
+  defaults:
+    _form: '\Drupal\commerce_domains_lease\Form\SettingsForm'
+    _title: 'Domain leases'
+  requirements:
+    _permission: 'administer domain leases'

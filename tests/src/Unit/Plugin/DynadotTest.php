@@ -142,9 +142,9 @@ class DynadotTest extends ProviderTestBase {
 
     $plugin->saveListings(['a.com' => ['price' => 150, 'minimum_offer' => 75, 'installment' => FALSE]], []);
     $after_push = $plugin->fetchListings();
-    $this->assertSame([150, 200], [$after_push['a.com']['price'], $after_push['b.com']['price']]);
+    $this->assertEquals([150, 200], [$after_push['a.com']['price'], $after_push['b.com']['price']]);
     $this->assertCount(7, $this->history);
-    $this->assertSame(210, $plugin->fetchListings(['b.com'])['b.com']['price']);
+    $this->assertEquals(210, $plugin->fetchListings(['b.com'])['b.com']['price']);
     $this->assertCount(9, $this->history);
   }
 

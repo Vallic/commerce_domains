@@ -1,0 +1,19 @@
+langcode: en
+status: true
+dependencies:
+  enforced:
+    module:
+      - commerce_domains_lease
+id: commerce_domains_lease
+label: 'Lease payments'
+backend: database
+backend_configuration:
+  lease_time: 300
+processor: cron
+processing_time: 60
+locked: false
+stop_when_empty: true
+threshold:
+  type: 0
+  limit: 0
+  state: all

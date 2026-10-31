@@ -1,0 +1,22 @@
+commerce_domains_lease.settings:
+  type: config_object
+  label: 'Domain lease settings'
+  mapping:
+    default_down_payment:
+      type: integer
+      label: 'Down payment, in percent of the price, for domains that set none'
+    retry_days:
+      type: integer
+      label: 'Days between attempts to charge a missed payment'
+    max_retries:
+      type: integer
+      label: 'Attempts after a missed payment before the lease is in default'
+    notify_mail:
+      type: email
+      label: 'Address told about missed payments, defaults and completed leases'
+    gateway_plugins:
+      type: sequence
+      label: 'Payment gateway plugins that leases can be paid with'
+      sequence:
+        type: string
+        label: 'Payment gateway plugin ID'

@@ -1,0 +1,4 @@
+administer domain leases:
+  title: 'Administer domain leases'
+  description: 'See leases to own, charge a payment now, cancel a lease, and change the lease settings.'
+  restrict access: true

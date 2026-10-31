@@ -113,6 +113,8 @@ it is held at, and the marketplaces it is listed on.
   owner when something needs them, and a dashboard.
 - **Commerce Domains Offers** (submodule): offers from buyers, answered on the
   site or, with Commerce Domains Offers via Escrow.com, negotiated there.
+- **Commerce Domains Lease to Own** (submodule): leases on the site: a down
+  payment at checkout, then monthly payments charged to the saved card.
 
 Stock comes from wherever the site keeps it: a variation counts as for sale
 when its product is published, it is active, and its `in_stock` field (as
@@ -569,6 +571,40 @@ domain is off sale, with any other variation of it. The *Escrow.com offer*
 condition keeps the other payment gateways off those orders, and the Escrow
 Offer gateway on them. Choose the gateway, and whether the choice starts
 ticked, on the offer settings page.
+
+## Leasing to own
+
+Commerce Domains Lease to Own (submodule) offers a lease at checkout on
+domains whose sale terms allow one (*Lease-to-own* on the variation, or the
+rule worked out from the price): the buyer picks the term, pays a down
+payment, and the rest is charged monthly to the card they paid with. Terms
+of 6, 12, 24, 36, 48 and 60 months are offered up to the domain's longest.
+
+- **Down payment**: *Lease down payment* on the variation, in percent of
+  the price; empty takes the default on the lease settings page
+  (*Commerce → Domains → Settings → Domain leases*, 10%). The monthly
+  payments split the rest, the last one making up the rounding.
+- **Paying**: a lease needs an account, which keeps the card, and a gateway
+  that can charge a saved card: Stripe's Payment Element (`gateway_plugins`
+  in `commerce_domains_lease.settings`). The checkout charges only the down
+  payment and saves the card for payments made without the buyer, whatever
+  the gateway's own *payment method usage* is; leased orders offer no other
+  gateway. The order holds the full price and is placed with the rest to
+  pay, so the domain goes off sale at once, and its handover starts with
+  the last payment, when the order is paid in full.
+- **Monthly payments**: cron queues the payments due; each is a payment on
+  the lease's order, a month after the last was due. The buyer is mailed
+  each one.
+- **Missed payments**: a failed payment is tried again every few days
+  (*Try a missed payment again after*, 3), a few times (*Tries before the
+  lease is in default*, 3). The buyer hears about each failure, and the
+  owner too. Past the tries the lease is in default: nothing more is
+  charged, and the owner charges it by hand on the lease page, or cancels
+  it, once they have spoken with the buyer. Cards that need the buyer to
+  approve the payment fail the same way.
+- **Leases** under *Commerce → Domains* lists them, with what was paid and
+  the next payment. The owner's sale record keeps the term as the number
+  of payments.
 
 ## Handing domains over
 

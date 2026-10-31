@@ -1,0 +1,17 @@
+services:
+  _defaults:
+    autowire: true
+
+  logger.channel.commerce_domains_lease:
+    parent: logger.channel_base
+    arguments: ['commerce_domains_lease']
+
+  Drupal\commerce_domains_lease\LeaseCalculator: ~
+
+  Drupal\commerce_domains_lease\LeaseManager:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_lease'
+
+  Drupal\commerce_domains_lease\EventSubscriber\CheckoutSubscriber:
+    tags:
+      - { name: event_subscriber }

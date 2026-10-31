@@ -1,0 +1,6 @@
+default_down_payment: 10
+retry_days: 3
+max_retries: 3
+notify_mail: ''
+gateway_plugins:
+  - stripe_payment_element

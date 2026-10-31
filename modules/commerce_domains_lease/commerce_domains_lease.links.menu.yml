@@ -1,0 +1,14 @@
+# Moves under Commerce → Domains when the domain overview is there; see
+# ListingHooks::menuLinksDiscoveredAlter() in Commerce Domains Marketplace.
+entity.commerce_domains_lease.collection:
+  title: 'Domain leases'
+  description: 'Leases to own: payments made, the next one due, and missed ones.'
+  route_name: entity.commerce_domains_lease.collection
+  parent: commerce.admin_commerce
+  weight: 6
+
+commerce_domains_lease.settings:
+  title: 'Domain leases'
+  description: 'The default down payment, and how missed payments are retried.'
+  route_name: commerce_domains_lease.settings
+  parent: commerce_domains.configuration

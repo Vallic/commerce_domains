@@ -76,6 +76,18 @@ class SaleTerms extends EntityTraitBase {
         'weight' => 24,
       ]);
 
+    $fields['sale_lease_down_payment'] = BundleFieldDefinition::create('integer')
+      ->setLabel(new TranslatableMarkup('Lease down payment'))
+      ->setDescription(new TranslatableMarkup('The share of the price paid at checkout for a lease-to-own on this site; the rest is paid monthly. Leave empty for the default in the lease settings.'))
+      ->setSetting('unsigned', TRUE)
+      ->setSetting('min', 0)
+      ->setSetting('max', 90)
+      ->setSetting('suffix', '%')
+      ->setDisplayOptions('form', [
+        'type' => 'number',
+        'weight' => 24,
+      ]);
+
     $fields['sale_marketplaces'] = BundleFieldDefinition::create('boolean')
       ->setLabel(new TranslatableMarkup('List on marketplaces'))
       ->setDescription(new TranslatableMarkup('Without it, the domain is sold on this site only: marketplace listings are removed and CSV files leave it out.'))
