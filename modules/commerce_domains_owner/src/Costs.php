@@ -109,8 +109,26 @@ class Costs {
    *   anniversaries. Without it they renew on the purchase date's.
    */
   public static function renewals(int $purchased, int $sold, ?int $expires = NULL): int {
-    if ($sold <= $purchased) {
-      return 0;
+    return count(self::renewalDates($purchased, $sold, $expires));
+  }
+
+  /**
+   * Returns when the renewals paid while a domain was held fell due.
+   *
+   * @param int $purchased
+   *   When it was bought, as a Unix time.
+   * @param int $until
+   *   When it sold, or now for a domain still held.
+   * @param int|null $expires
+   *   When its registration runs out, if known: registrations renew on its
+   *   anniversaries. Without it they renew on the purchase date's.
+   *
+   * @return int[]
+   *   Unix times, oldest first.
+   */
+  public static function renewalDates(int $purchased, int $until, ?int $expires = NULL): array {
+    if ($until <= $purchased) {
+      return [];
     }
     $anchor = new \DateTimeImmutable('@' . ($expires ?? $purchased));
     // Each anniversary counted from the anchor itself, so a 29 February
@@ -120,11 +138,11 @@ class Costs {
     while ($anniversary($years) <= $purchased) {
       $years++;
     }
-    $count = 0;
-    while ($anniversary($years + $count) <= $sold) {
-      $count++;
+    $dates = [];
+    while (($date = $anniversary($years + count($dates))) <= $until) {
+      $dates[] = $date;
     }
-    return $count;
+    return $dates;
   }
 
   /**

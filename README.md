@@ -360,6 +360,14 @@ drush cdrs dynadot
 Turn on *Refresh registration details daily* on the provider to have cron do
 the update once a day.
 
+With Commerce Domains Import, *Also add the domains the account holds that
+the catalog lacks* (below it) has cron add them too, once a day: unpublished
+and not listed on marketplaces, recorded at that registrar with the
+account's expiry and registration dates and auto-renew where it gives them,
+and priced by the first matching pricing rule, else 0. Publish and price
+them when you are ready to sell. The *Registrations* tab and the import's
+*From a registrar account* do the same by hand.
+
 Syncs also record when the domain was registered, from registrars that say:
 GoDaddy, Namecheap, NameSilo, Dynadot, Spaceship and Atom. After a transfer
 some show the transfer date instead.
@@ -389,7 +397,13 @@ Import*, for people with *Import domains*, in one of three ways:
   `not_listed_on` (marketplaces by ID or name, separated by commas),
   `minimum_offer`, `floor_price`, `lease_months` (0 for none),
   `description`, `registrar` (a provider's ID or name), `expires` (a date),
-  and `atom_premium` and `internal` (yes or no).
+  and `atom_premium` and `internal` (yes or no). With Commerce Domains
+  Owner, optionally what each domain cost and its sale: `purchase_price`,
+  `purchase_date`, `renewal_cost`, `sold` (a date), `sold_for` (what the
+  buyer paid), `commission` (percent), `sold_via` (a provider's ID or name)
+  and `sold_lease_months`. A sale needs `sold` and `sold_for`; a domain
+  imported as sold goes off sale, and without a `price` takes what it sold
+  for. (`sale_price` is the asking price.)
 - **From a registrar account**: *Read the account* lists the domains a
   registrar provider's account holds that the catalog lacks, read through
   its API; take out the line of any to leave out. They are recorded at that

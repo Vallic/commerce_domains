@@ -27,13 +27,14 @@ class NavigationHooks {
     'commerce_domains_owner.dashboard',
     'commerce_domains_owner.expiring',
     'commerce_domains_owner.profit',
+    'commerce_domains_owner.expenses',
   ];
 
   /**
    * Implements hook_menu_links_discovered_alter().
    *
    * Moves the dashboard to Commerce > Domains > Dashboard, first there, and
-   * adds the expiring domains and the profit beside it.
+   * adds the expiring domains, the profit and the expenses beside it.
    */
   #[Hook('menu_links_discovered_alter')]
   public function menuLinksDiscoveredAlter(array &$links): void {
@@ -44,6 +45,7 @@ class NavigationHooks {
       $pages = [
         'commerce_domains_owner.expiring' => [new TranslatableMarkup('Expiring soon'), -20],
         'commerce_domains_owner.profit' => [new TranslatableMarkup('Sales and profit'), -15],
+        'commerce_domains_owner.expenses' => [new TranslatableMarkup('Expenses'), -14],
       ];
       foreach ($pages as $id => [$title, $weight]) {
         $links[$id] = [

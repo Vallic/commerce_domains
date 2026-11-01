@@ -14,3 +14,8 @@ commerce_domains_owner.profit:
   route_name: commerce_domains_owner.profit
   base_route: commerce_domains_owner.dashboard
   weight: 6
+commerce_domains_owner.expenses:
+  title: 'Expenses'
+  route_name: commerce_domains_owner.expenses
+  base_route: commerce_domains_owner.dashboard
+  weight: 7

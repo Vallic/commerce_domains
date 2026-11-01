@@ -33,6 +33,15 @@ final class ImportParser {
     'not_listed_on' => ['not_listed_on', 'not_on'],
     'floor_price' => ['floor_price', 'floor'],
     'lease_months' => ['lease_months', 'lease', 'lease_to_own'],
+    // What it cost and what it brought, for Commerce Domains Owner.
+    'purchase_price' => ['purchase_price', 'cost', 'acquisition_cost', 'bought_for', 'paid'],
+    'purchase_date' => ['purchase_date', 'bought', 'bought_on', 'acquired', 'acquisition_date'],
+    'renewal_cost' => ['renewal_cost', 'renewal_price'],
+    'sold' => ['sold', 'sold_on_date', 'sold_date', 'sale_date'],
+    'sold_for' => ['sold_for', 'sold_price', 'sale_amount'],
+    'commission' => ['commission', 'commission_percent'],
+    'sold_via' => ['sold_via', 'sold_at', 'sold_on_marketplace'],
+    'sold_lease_months' => ['sold_lease_months', 'sold_lease'],
   ];
 
   /**

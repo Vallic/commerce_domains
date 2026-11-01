@@ -254,6 +254,7 @@ class DomainImporter {
     else {
       [$product, $variation] = $this->create($row, $parsed, $options);
     }
+    $was_sold = $product->hasField('domain_sold') && !$product->get('domain_sold')->isEmpty();
     $this->apply($row, $product, $variation, $options, $is_new);
 
     $lookup_note = NULL;
@@ -295,6 +296,10 @@ class DomainImporter {
     }
     if (!$options->dryRun) {
       $this->save($product, $variation, $product_changed, $variation_changed);
+      // A domain imported as sold goes off sale, which delists it.
+      if (!$was_sold && $product->hasField('domain_sold') && !$product->get('domain_sold')->isEmpty()) {
+        $this->availability->markProductSold($product);
+      }
     }
     if ($is_new) {
       $report->created[] = $name;
@@ -419,10 +424,87 @@ class DomainImporter {
     if ($expires !== NULL) {
       $product->set('domain_expires', $expires);
     }
+    $this->applyCosts($row, $product, $fallback);
+    // A domain imported as sold needs a price too: what it sold for.
+    if (!$variation->getPrice() && $product->hasField('domain_sale_price') && !$product->get('domain_sale_price')->isEmpty()) {
+      /** @var \Drupal\commerce_price\Plugin\Field\FieldType\PriceItem $sold_for */
+      $sold_for = $product->get('domain_sale_price')->first();
+      $variation->setPrice($sold_for->toPrice());
+    }
     // The registrar account holds the domain: that shows it is the seller's.
     if ($options->source === ImportOptions::SOURCE_REGISTRAR) {
       $product->set('domain_verified', TRUE);
     }
+  }
+
+  /**
+   * Sets what a domain cost, and its sale, from the row's optional columns.
+   *
+   * For Commerce Domains Owner's fields; without them the columns are left
+   * alone. A sale needs what the domain sold for, or one already recorded.
+   *
+   * @throws \InvalidArgumentException
+   *   When a value can't be read, or a sale has no price.
+   */
+  protected function applyCosts(ImportRow $row, ProductInterface $product, string $currency): void {
+    $money = function (string $column, string $field) use ($row, $product, $currency): void {
+      $amount = self::read($row, $column, ImportParser::amount(...));
+      if ($amount !== NULL && $product->hasField($field)) {
+        $product->set($field, $this->price($amount, $currency));
+      }
+    };
+    $money('purchase_price', 'domain_purchase_price');
+    $money('renewal_cost', 'domain_renewal_cost');
+    $purchased = self::read($row, 'purchase_date', ImportParser::date(...));
+    if ($purchased !== NULL && $product->hasField('domain_purchase_date')) {
+      $product->set('domain_purchase_date', $purchased);
+    }
+
+    $sold = self::read($row, 'sold', ImportParser::date(...));
+    $sale_columns = ['sold_for', 'commission', 'sold_via', 'sold_lease_months'];
+    $has_sale = $sold !== NULL || array_filter($sale_columns, fn(string $column) => $row->value($column) !== NULL);
+    if (!$has_sale || !$product->hasField('domain_sold')) {
+      return;
+    }
+    if ($product->hasField('domain_sale_order') && !$product->get('domain_sale_order')->isEmpty()) {
+      throw new \InvalidArgumentException((string) new TranslatableMarkup('Sold on this site: its sale comes from its order.'));
+    }
+    $money('sold_for', 'domain_sale_price');
+    if ($sold !== NULL) {
+      $product->set('domain_sold', $sold);
+    }
+    if ($product->get('domain_sold')->isEmpty() || $product->get('domain_sale_price')->isEmpty()) {
+      throw new \InvalidArgumentException((string) new TranslatableMarkup('A sale needs the date it sold (sold) and what it sold for (sold_for).'));
+    }
+    if (($commission = $row->value('commission')) !== NULL && $product->hasField('domain_sale_commission')) {
+      $percent = str_replace(',', '.', rtrim($commission, '% '));
+      if (!is_numeric($percent) || (float) $percent < 0 || (float) $percent > 100) {
+        throw new \InvalidArgumentException((string) new TranslatableMarkup('Commission @value is not a percentage from 0 to 100.', ['@value' => $commission]));
+      }
+      $product->set('domain_sale_commission', (string) round((float) $percent, 2));
+    }
+    if (($via = $row->value('sold_via')) !== NULL) {
+      $product->set('domain_sold_via', $this->providerId($via));
+    }
+    $months = self::read($row, 'sold_lease_months', ImportParser::months(...));
+    if ($months !== NULL && $product->hasField('domain_lease_months')) {
+      $product->set('domain_lease_months', $months > 1 ? $months : NULL);
+    }
+  }
+
+  /**
+   * Returns the ID of the provider a cell names, by ID or name.
+   *
+   * @throws \InvalidArgumentException
+   */
+  protected function providerId(string $value): string {
+    /** @var \Drupal\commerce_domains\Entity\ProviderInterface $provider */
+    foreach ($this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple() as $id => $provider) {
+      if (mb_strtolower((string) $id) === mb_strtolower(trim($value)) || mb_strtolower((string) $provider->label()) === mb_strtolower(trim($value))) {
+        return (string) $id;
+      }
+    }
+    throw new \InvalidArgumentException((string) new TranslatableMarkup('No provider @name: give a provider ID or name.', ['@name' => $value]));
   }
 
   /**

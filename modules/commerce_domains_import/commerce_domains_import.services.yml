@@ -20,3 +20,7 @@ services:
 
   # The import form's batch callbacks.
   Drupal\commerce_domains_import\ImportBatch: ~
+
+  Drupal\commerce_domains_import\AccountImport:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_import'

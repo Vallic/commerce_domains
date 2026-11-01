@@ -1,0 +1,7 @@
+commerce_domains.provider.*.third_party.commerce_domains_import:
+  type: mapping
+  label: 'Domain import settings'
+  mapping:
+    add_new:
+      type: boolean
+      label: 'Add the domains the account holds that the catalog lacks'
