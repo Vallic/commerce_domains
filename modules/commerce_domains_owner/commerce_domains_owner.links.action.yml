@@ -1,0 +1,5 @@
+commerce_domains_owner.sales_import:
+  title: 'Import sales'
+  route_name: commerce_domains_owner.sales_import
+  appears_on:
+    - commerce_domains_owner.profit

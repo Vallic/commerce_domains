@@ -8,6 +8,7 @@ use Drupal\commerce_exchanger\Exception\ExchangeRatesDataMismatchException;
 use Drupal\commerce_exchanger\ExchangerCalculatorInterface;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductInterface;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 
 /**
@@ -18,16 +19,49 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  * Renewals paid is the yearly renewal cost times the renewals while the
  * domain was held: one on each anniversary of its expiry date (or, without
  * one, of its purchase date) after the purchase, up to the sale. Without a
- * purchase date no renewals count, and without a renewal cost they cost
- * nothing. Costs in another currency than the sale are converted at
- * Commerce Exchanger's current rates when it is installed.
+ * purchase date no renewals count. A domain without a renewal cost of its
+ * own takes the default for its extension (Domain portfolio settings);
+ * without either, renewals cost nothing. Costs in another currency than the
+ * sale are converted at Commerce Exchanger's current rates when it is
+ * installed.
  */
 class Costs {
 
   public function __construct(
     // Commerce Exchanger is optional.
     protected ?ExchangerCalculatorInterface $exchanger = NULL,
+    protected ?ConfigFactoryInterface $configFactory = NULL,
   ) {}
+
+  /**
+   * Returns what a domain costs to renew for a year.
+   *
+   * Its own renewal cost, else the default for its extension.
+   */
+  public function renewalCost(ProductInterface $product): ?Price {
+    $own = self::price($product, 'domain_renewal_cost');
+    if ($own || !$product->hasField('domain')) {
+      return $own;
+    }
+    return $this->defaultRenewalCost((string) $product->get('domain')->value);
+  }
+
+  /**
+   * Returns the default yearly renewal cost of a domain's extension.
+   *
+   * The longest extension set that the domain ends with: co.uk before uk.
+   */
+  public function defaultRenewalCost(string $name): ?Price {
+    $name = strtolower($name);
+    $best = NULL;
+    foreach ((array) $this->configFactory?->get('commerce_domains_owner.settings')->get('renewal_costs') as $cost) {
+      $tld = (string) ($cost['tld'] ?? '');
+      if ($tld !== '' && str_ends_with($name, '.' . $tld) && strlen($tld) > strlen((string) ($best['tld'] ?? ''))) {
+        $best = $cost;
+      }
+    }
+    return $best ? new Price((string) $best['number'], (string) $best['currency_code']) : NULL;
+  }
 
   /**
    * Returns what a domain earned.
@@ -35,7 +69,7 @@ class Costs {
   public function profit(ProductInterface $product): Profit {
     $sale = self::price($product, 'domain_sale_price');
     $purchase = self::price($product, 'domain_purchase_price');
-    $renewal = self::price($product, 'domain_renewal_cost');
+    $renewal = $this->renewalCost($product);
     $purchased = self::time($product, 'domain_purchase_date');
     $sold = self::time($product, 'domain_sold');
     $renewals = $purchased !== NULL && $sold !== NULL ? self::renewals($purchased, $sold, self::time($product, 'domain_expires')) : 0;

@@ -40,3 +40,13 @@ commerce_domains_owner.settings:
     _permission: 'manage domain portfolio'
   options:
     _admin_route: TRUE
+
+commerce_domains_owner.sales_import:
+  path: '/admin/commerce/domains/profit/import'
+  defaults:
+    _form: '\Drupal\commerce_domains_owner\Form\SalesImportForm'
+    _title: 'Import sales'
+  requirements:
+    _permission: 'manage domain portfolio'
+  options:
+    _admin_route: TRUE

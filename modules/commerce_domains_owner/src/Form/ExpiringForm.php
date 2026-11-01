@@ -42,6 +42,7 @@ final class ExpiringForm extends FormBase {
     protected CurrencyFormatterInterface $currencyFormatter,
     protected TimeInterface $time,
     protected Availability $availability,
+    protected Costs $costs,
   ) {}
 
   /**
@@ -55,6 +56,7 @@ final class ExpiringForm extends FormBase {
       $container->get('commerce_price.currency_formatter'),
       $container->get('datetime.time'),
       $container->get(Availability::class),
+      $container->get(Costs::class),
     );
   }
 
@@ -103,7 +105,7 @@ final class ExpiringForm extends FormBase {
     foreach ($this->entityTypeManager->getStorage('commerce_product')->loadMultiple($ids) as $id => $product) {
       $expires = (int) $product->get('domain_expires')->value;
       $auto_renew = Renewals::autoRenews($product);
-      $cost = Costs::price($product, 'domain_renewal_cost');
+      $cost = $this->costs->renewalCost($product);
       $leaving = $product->hasField('domain_renewal') && $product->get('domain_renewal')->value === DomainCosts::EXPIRE;
       if ($cost && !$leaving) {
         $currency = $cost->getCurrencyCode();

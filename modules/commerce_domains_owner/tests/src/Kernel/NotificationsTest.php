@@ -113,15 +113,27 @@ class NotificationsTest extends OwnerKernelTestBase {
       Notifier::OFFER_EXPIRED => NULL,
       'expiring_days' => 30,
       'off_sale_days' => 7,
+      'renewal_costs' => "net 9,5 usd\n\n.CO.UK 7 USD\ncom 10.99 USD",
     ]);
     $this->container->get('form_builder')->submitForm(SettingsForm::class, $form_state);
     $this->assertSame([], $form_state->getErrors());
+    $this->assertSame([
+      ['tld' => 'co.uk', 'number' => '7', 'currency_code' => 'USD'],
+      ['tld' => 'com', 'number' => '10.99', 'currency_code' => 'USD'],
+      ['tld' => 'net', 'number' => '9.5', 'currency_code' => 'USD'],
+    ], $this->config('commerce_domains_owner.settings')->get('renewal_costs'));
     $config = $this->config('commerce_domains_owner.settings');
     $this->assertSame('owner@example.com', $config->get('notify_mail'));
     $this->assertFalse($config->get('notify.sync_failed'));
     $this->assertTrue($config->get('notify.sold'));
     $this->assertSame([30, 7], [$config->get('expiring_days'), $config->get('off_sale_days')]);
     $this->assertFalse($this->notifier->isOn(Notifier::OFFER_EXPIRED));
+
+    foreach (['com ten USD', 'com 10 XYZ'] as $line) {
+      $form_state = (new FormState())->setValues(['expiring_days' => 30, 'off_sale_days' => 7, 'renewal_costs' => $line]);
+      $this->container->get('form_builder')->submitForm(SettingsForm::class, $form_state);
+      $this->assertArrayHasKey('renewal_costs', $form_state->getErrors(), $line);
+    }
   }
 
   /**

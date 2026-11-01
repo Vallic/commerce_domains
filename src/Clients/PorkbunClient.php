@@ -147,6 +147,32 @@ final class PorkbunClient extends ApiClient {
   }
 
   /**
+   * Fetches Porkbun's public price list: a year's renewal, in US dollars.
+   *
+   * Needs no API key, so a client made without one can read it.
+   *
+   * @param string[] $tlds
+   *   The extensions to price, e.g. com and co.uk; empty for all of them.
+   *
+   * @return array<string, string>
+   *   Renewal prices keyed by extension, for those Porkbun sells.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function renewalPrices(array $tlds = []): array {
+    $query = $tlds ? [RequestOptions::QUERY => ['tlds' => implode(',', $tlds)]] : [];
+    $response = $this->call('GET', 'pricing/get', $query);
+    $prices = [];
+    foreach ((array) ($response['pricing'] ?? []) as $tld => $price) {
+      $renewal = is_array($price) ? ($price['renewal'] ?? NULL) : NULL;
+      if (is_numeric($renewal) && (float) $renewal > 0) {
+        $prices[strtolower((string) $tld)] = (string) $renewal;
+      }
+    }
+    return $prices;
+  }
+
+  /**
    * Sends a request, failing on an error status in the body too.
    *
    * @throws \Drupal\commerce_domains\ProviderException
@@ -171,6 +197,10 @@ final class PorkbunClient extends ApiClient {
    * {@inheritdoc}
    */
   protected function authorize(array $options): array {
+    // The price list is public: a client without keys sends none.
+    if ($this->apiKey === '') {
+      return $options;
+    }
     // Headers rather than body fields, so GET requests work too.
     $options[RequestOptions::HEADERS]['X-API-Key'] = $this->apiKey;
     $options[RequestOptions::HEADERS]['X-Secret-API-Key'] = $this->secretKey;

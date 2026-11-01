@@ -4,16 +4,20 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_owner\Hook;
 
+use CommerceGuys\Intl\Formatter\CurrencyFormatterInterface;
 use Drupal\commerce_domains\Availability;
+use Drupal\commerce_domains_owner\Costs;
 use Drupal\commerce_domains_owner\Plugin\Commerce\EntityTrait\DomainCosts;
 use Drupal\commerce_domains_owner\Renewals;
 use Drupal\commerce_domains_owner\SaleRecorder;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Entity\ContentEntityFormInterface;
+use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
+use Drupal\Core\Url;
 
 /**
  * Groups the cost fields on the product form, and follows decisions.
@@ -48,6 +52,8 @@ class ProductHooks {
   public function __construct(
     protected Renewals $renewals,
     protected Availability $availability,
+    protected Costs $costs,
+    protected CurrencyFormatterInterface $currencyFormatter,
   ) {}
 
   /**
@@ -107,6 +113,41 @@ class ProductHooks {
     }
     \Drupal::service(SaleRecorder::class)->undo($product);
     \Drupal::messenger()->addStatus(new TranslatableMarkup('The sale of %domain is undone, and it is back on sale.', ['%domain' => $product->label()]));
+  }
+
+  /**
+   * Implements hook_field_widget_complete_form_alter().
+   *
+   * Says which default renewal cost a domain without its own takes, on the
+   * Costs tab and wherever else the field is edited.
+   */
+  #[Hook('field_widget_complete_form_alter')]
+  public function renewalCostWidgetAlter(array &$field_widget_complete_form, FormStateInterface $form_state, array $context): void {
+    $items = $context['items'] ?? NULL;
+    if (!$items instanceof FieldItemListInterface || $items->getFieldDefinition()->getName() !== 'domain_renewal_cost' || !isset($field_widget_complete_form['widget'][0])) {
+      return;
+    }
+    $product = $items->getEntity();
+    if (!$product instanceof ProductInterface || !$product->hasField('domain') || $product->get('domain')->isEmpty()) {
+      return;
+    }
+    $default = $this->costs->defaultRenewalCost((string) $product->get('domain')->value);
+    $settings = Url::fromRoute('commerce_domains_owner.settings')->toString();
+    if ($default) {
+      $amount = $this->currencyFormatter->format($default->getNumber(), $default->getCurrencyCode());
+      $note = $this->t('Leave empty to use the default for its extension, @amount a year (<a href=":settings">Domain portfolio settings</a>).', [
+        '@amount' => $amount,
+        ':settings' => $settings,
+      ]);
+    }
+    else {
+      $note = $this->t('No default renewal cost is set for its extension; set one in the <a href=":settings">Domain portfolio settings</a>.', [':settings' => $settings]);
+    }
+    $element = &$field_widget_complete_form['widget'][0];
+    $element['#description'] = isset($element['#description']) && (string) $element['#description'] !== ''
+      ? ['#markup' => $element['#description'] . ' ' . $note]
+      : $note;
+    $field_widget_complete_form['#cache']['tags'][] = 'config:commerce_domains_owner.settings';
   }
 
   /**

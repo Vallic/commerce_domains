@@ -82,6 +82,7 @@ class Notifier {
     protected CurrencyFormatterInterface $currencyFormatter,
     protected Renewals $renewals,
     protected RegistrarSync $registrarSync,
+    protected Costs $costs,
   ) {}
 
   /**
@@ -356,7 +357,7 @@ class Notifier {
         NULL => $this->t('auto-renew unknown', [], $options),
       },
     ];
-    $cost = Costs::price($product, 'domain_renewal_cost');
+    $cost = $this->costs->renewalCost($product);
     return $cost
       ? (string) $this->t('@domain: expires @date (@when) at @registrar, @auto, renews for @cost.', $args + ['@cost' => $this->money($cost)], $options)
       : (string) $this->t('@domain: expires @date (@when) at @registrar, @auto.', $args, $options);

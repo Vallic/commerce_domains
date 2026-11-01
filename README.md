@@ -826,11 +826,40 @@ registrar where its API reports it, the way expiry dates do.
   minus the renewals paid. Renewals paid is the yearly renewal cost times
   the renewals while the domain was held: one on each anniversary of its
   expiry date (or of its purchase date, without one) between the purchase
-  and the sale. Costs in another currency than the sale are converted at
+  and the sale. A domain without a renewal cost of its own takes its
+  extension's default from *Default yearly renewal costs* in the Domain
+  portfolio settings (one a line: `com 10.99 USD`, `co.uk 7 GBP`; the
+  longest matching extension wins), which the Expiring soon page and the
+  digest use too. *Fill in from Porkbun's prices* there adds, for each
+  extension of your domains without a cost yet, what a year's renewal costs
+  at Porkbun in US dollars, from its public price list (no API key needed);
+  change any you pay differently. Drush does the same:
+
+  ```sh
+  drush commerce-domains:renewal-costs --dry-run
+  drush cdrenew --replace
+  ``` Costs in another currency than the sale are converted at
   Commerce Exchanger's rates, when it is installed. A lease to own counts
   in full in the year it started, with the month its payments end; if the
   buyer stops paying, clear the sale fields and put the domain back on
-  sale.
+  sale. Each row links to the domain's *Edit sale* and *Edit costs* tabs,
+  e.g. to add the commission a marketplace kept.
+
+  *Import sales* there takes a CSV file (or pasted rows) with a header row:
+  `domain` (required), `sold` (a date: 2026-10-30, 30.10.2026 or
+  10/30/2026), `price` (what the buyer paid, optionally with its currency),
+  `currency`, `commission` (percent), `received` (what you got, which works
+  out the commission), `sold_via` (a provider's ID or name) and
+  `lease_months`. A preview shows what each row changes, and the rows left
+  out and why, before anything is saved. A domain not sold yet needs the
+  date and the price, and goes off sale; for a domain already sold, the
+  row's values replace what it has and empty cells leave the rest. Sales on
+  this site come from their orders and are left out.
+
+  ```sh
+  drush commerce-domains:sales-import sales.csv --dry-run
+  drush cdsimport sales.csv
+  ```
 - **Expiring soon**: the domains that expire within 60 days, and those that
   expired in the last 30, which registrars still renew. *Keep* or *Let
   expire* each one. A domain left to expire goes off sale (its product is

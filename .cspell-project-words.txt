@@ -22,8 +22,10 @@ cdap
 cdcsv
 cdms
 cdmst
+cdrenew
 cdrs
 cdsales
+cdsimport
 daaz
 dmarc
 dnsowl

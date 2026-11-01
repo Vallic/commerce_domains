@@ -177,3 +177,13 @@ function commerce_domains_owner_update_11004(): void {
     \Drupal::service('commerce.configurable_field_manager')->createField($field);
   }
 }
+
+/**
+ * Adds default renewal costs by extension, none to start with.
+ */
+function commerce_domains_owner_update_11005(): void {
+  $config = \Drupal::configFactory()->getEditable('commerce_domains_owner.settings');
+  if ($config->get('renewal_costs') === NULL) {
+    $config->set('renewal_costs', [])->save();
+  }
+}
