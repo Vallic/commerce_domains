@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Hook;
 
+use Drupal\commerce_domains\Controller\RegistrarTabController;
 use Drupal\commerce_domains\RegistrarSync;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Entity\ContentEntityFormInterface;
@@ -49,6 +50,21 @@ class ProductFormHooks {
         $form[$field]['#disabled'] = TRUE;
         $form[$field]['widget'][0]['value']['#description'] = $this->t("From @registrar's registration details. Refresh them on the provider's Registrations tab.", $args);
       }
+    }
+    // The Registrar tab only shows what the registrar reports: edited by
+    // hand only for registrars without an API, or one not holding it.
+    if ($form_object->getOperation() === RegistrarTabController::TAB) {
+      foreach (['domain_registrar', 'domain_expires', 'domain_registered'] as $field) {
+        if (isset($form[$field])) {
+          $form[$field]['#disabled'] = TRUE;
+        }
+      }
+      $form['actions']['#access'] = FALSE;
+      $form['read_from'] = [
+        '#type' => 'item',
+        '#markup' => $this->t("Read from @registrar's API, which holds the domain; the registrar's sync keeps it up to date.", $args),
+        '#weight' => -100,
+      ];
     }
     if (isset($form['domain_auto_renew']) && !$product->get('domain_auto_renew')->isEmpty()) {
       $form['domain_auto_renew']['#disabled'] = TRUE;

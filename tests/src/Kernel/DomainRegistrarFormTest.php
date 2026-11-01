@@ -99,6 +99,7 @@ class DomainRegistrarFormTest extends DomainsKernelTestBase {
     $this->assertArrayHasKey('domain_expires', $page['fields']);
     $this->assertArrayNotHasKey('account', $page, 'No API to manage it with.');
     $this->assertEmpty($page['fields']['domain_registrar']['#disabled'] ?? NULL, 'Chosen by hand.');
+    $this->assertNotFalse($page['fields']['actions']['#access'] ?? TRUE, 'Saved by hand.');
     $this->assertTrue(RegistrarTabController::access($hover, $this->container->get('current_user'))->isAllowed());
 
     // Once the registrar's API holds the domain, the choice is locked.
@@ -108,6 +109,8 @@ class DomainRegistrarFormTest extends DomainsKernelTestBase {
     $this->assertInstanceOf(ProductInterface::class, $example);
     $page = $controller->page($example);
     $this->assertTrue($page['fields']['domain_registrar']['#disabled']);
+    $this->assertTrue($page['fields']['domain_registered']['#disabled'], 'Read from the registrar, even when it reports no date.');
+    $this->assertFalse($page['fields']['actions']['#access'], 'Nothing to save.');
     $this->assertArrayHasKey('details', $page['account']);
   }
 

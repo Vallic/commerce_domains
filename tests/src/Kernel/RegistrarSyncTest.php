@@ -174,9 +174,9 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $this->assertNull($this->sync->registrationSource($load('gone.com')), 'Not in the account.');
     $this->assertNull($this->sync->registrationSource($load('moved.com')), 'GNAME has no API here.');
 
-    // Without a stored date there is nothing to protect yet.
+    // The Registrar tab shows what the registrar reports, even no date.
     $load('current.com')->set('domain_expires', NULL)->save();
-    $this->assertFalse($locked('current.com'));
+    $this->assertTrue($locked('current.com'));
 
     Provider::load('reg')->disable()->save();
     $this->assertNull($this->sync->registrationSource($load('renewed.com')));
