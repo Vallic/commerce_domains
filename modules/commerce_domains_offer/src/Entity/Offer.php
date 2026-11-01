@@ -188,10 +188,18 @@ class Offer extends ContentEntityBase implements OfferInterface {
    */
   public function setPaymentLink(ProviderInterface $provider, PaymentLink $link, ?int $lease_months = NULL): static {
     $this->set('payment_link_provider', $provider->id())
-      ->set('payment_link_id', $link->id)
+      // A link the seller pasted has no ID: nothing reads its state back.
+      ->set('payment_link_id', $link->id !== '' ? $link->id : NULL)
       ->set('payment_link_url', $link->url)
       ->set('payment_link_lease_months', $lease_months);
     return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isPaymentLinkPasted(): bool {
+    return $this->getPaymentLinkUrl() !== '' && $this->getPaymentLinkId() === '';
   }
 
   /**

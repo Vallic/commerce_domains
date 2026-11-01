@@ -14,6 +14,7 @@ use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains_offer\Entity\OfferInterface;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_price\Price;
+use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\commerce_store\Entity\StoreInterface;
 use Drupal\Component\Datetime\TimeInterface;
@@ -34,7 +35,8 @@ use Psr\Log\LoggerInterface;
  * payment link provider set (payment_link_provider), accepting makes the
  * provider's payment link instead, and cron marks the offer purchased once
  * the provider reports it paid; a link that can't be made falls back to the
- * order.
+ * order. The seller can also paste a link made on a marketplace without an
+ * API for it (Atom, Dynadot, Afternic…), and marks the offer paid by hand.
  */
 class OfferManager {
 
@@ -108,7 +110,8 @@ class OfferManager {
    *   accepts the counter-offer.
    * @param array $terms
    *   For a lease to own paid by link: lease_months and down_payment
-   *   (percent).
+   *   (percent). For a link the seller pasted: link_provider (the provider
+   *   entity) and link_url, with lease_months for a lease.
    *
    * @throws \RuntimeException
    *   When a lease's payment link can't be made; the offer is unchanged.
@@ -116,7 +119,10 @@ class OfferManager {
   public function accept(OfferInterface $offer, array $terms = []): void {
     $by_buyer = $offer->getState()->getId() === 'countered';
     $lease = !empty($terms['lease_months']);
-    if (!$this->linkPayment($offer, $terms)) {
+    if (!empty($terms['link_url']) && ($terms['link_provider'] ?? NULL) instanceof ProviderInterface) {
+      $this->pasteLink($offer, $terms['link_provider'], $terms['link_url'], $lease ? (int) $terms['lease_months'] : NULL);
+    }
+    elseif (!$this->linkPayment($offer, $terms)) {
       // A lease is only paid by link: it never falls back to a checkout
       // for the full price.
       if ($lease) {
@@ -289,6 +295,96 @@ class OfferManager {
   }
 
   /**
+   * Returns the providers whose payment links a seller can paste.
+   *
+   * The marketplaces: those listing by API and those the owner lists on by
+   * hand.
+   *
+   * @return \Drupal\commerce_domains\Entity\ProviderInterface[]
+   *   The enabled marketplaces, keyed by ID, by label.
+   */
+  public function linkProviders(): array {
+    $providers = array_filter(
+      $this->entityTypeManager->getStorage('commerce_domains_provider')->loadByProperties(['status' => TRUE]),
+      fn($provider) => $provider instanceof ProviderInterface && $provider->isMarketplace(),
+    );
+    uasort($providers, fn(ProviderInterface $a, ProviderInterface $b) => strnatcasecmp((string) $a->label(), (string) $b->label()));
+    return $providers;
+  }
+
+  /**
+   * Sends the buyer of an accepted offer a link the seller pasted instead.
+   *
+   * For an offer accepted to checkout, e.g. a counter-offer the buyer
+   * accepted: its unpaid order is canceled, and the buyer gets the link.
+   *
+   * @throws \LogicException
+   *   When the offer isn't accepted, already has a link, or its order is
+   *   past paying.
+   */
+  public function replaceWithLink(OfferInterface $offer, ProviderInterface $provider, string $url, ?int $lease_months = NULL): void {
+    $order = $offer->getOrder();
+    if ($offer->getState()->getId() !== 'accepted' || $offer->getPaymentLinkUrl() !== '' || ($order && $order->getState()->getId() !== 'draft')) {
+      throw new \LogicException(sprintf('Offer %s can not take a payment link.', $offer->id()));
+    }
+    if ($order) {
+      $order->getState()->applyTransitionById('cancel');
+      $order->save();
+      $offer->set('order', NULL);
+    }
+    $this->pasteLink($offer, $provider, $url, $lease_months);
+    $offer->save();
+    $this->notifyBuyer($offer, 'accepted');
+  }
+
+  /**
+   * Marks an offer paid through a link the seller pasted.
+   *
+   * The offer is purchased and the domain goes off sale; Commerce Domains
+   * Owner records the sale.
+   */
+  public function markPaid(OfferInterface $offer): void {
+    if ($offer->getState()->getId() !== 'accepted' || !$offer->isPaymentLinkPasted()) {
+      throw new \LogicException(sprintf('Offer %s is not waiting on a pasted payment link.', $offer->id()));
+    }
+    $offer->getState()->applyTransitionById('purchase');
+    $offer->save();
+    $product = $offer->getVariation()?->getProduct();
+    if ($product) {
+      $this->availability->markProductSold($product);
+    }
+    $this->logger->info('Offer @offer on @domain marked paid through @provider.', [
+      '@offer' => $offer->id(),
+      '@domain' => $offer->getDomain(),
+      '@provider' => $offer->getPaymentLinkProvider()?->label(),
+    ]);
+  }
+
+  /**
+   * Ends an offer whose pasted payment link the buyer didn't pay.
+   */
+  public function markUnpaid(OfferInterface $offer): void {
+    if ($offer->getState()->getId() !== 'accepted' || !$offer->isPaymentLinkPasted()) {
+      throw new \LogicException(sprintf('Offer %s is not waiting on a pasted payment link.', $offer->id()));
+    }
+    $offer->getState()->applyTransitionById('expire');
+    $offer->save();
+    $this->notifyBuyer($offer, 'expired');
+  }
+
+  /**
+   * Gives an offer a payment link the seller pasted.
+   */
+  protected function pasteLink(OfferInterface $offer, ProviderInterface $provider, string $url, ?int $lease_months): void {
+    $offer->setPaymentLink($provider, new PaymentLink('', $url, PaymentLink::PENDING), $lease_months ?: NULL);
+    $this->logger->info('Offer @offer on @domain: paid through a link pasted from @provider.', [
+      '@offer' => $offer->id(),
+      '@domain' => $offer->getDomain(),
+      '@provider' => $provider->label(),
+    ]);
+  }
+
+  /**
    * Says why a lease can't be paid by link, or NULL when it can.
    *
    * Each payment, the down payment and every monthly one, must reach the
@@ -346,18 +442,20 @@ class OfferManager {
    * Reads the payment links of accepted offers, and settles those that ended.
    *
    * Paid: the offer is purchased and the domain goes off sale. Canceled or
-   * expired: the offer expires.
+   * expired: the offer expires. A pasted link is taken as paid once the
+   * domain is recorded as sold on its marketplace (Commerce Domains Owner),
+   * e.g. from the marketplace's sales report.
    *
    * @return int
    *   How many offers changed.
    */
   public function checkPaymentLinks(): int {
+    $changed = $this->settlePastedLinks();
     $storage = $this->entityTypeManager->getStorage('commerce_domains_offer');
     $ids = $storage->getQuery()->accessCheck(FALSE)
       ->condition('state', 'accepted')
       ->exists('payment_link_id')
       ->execute();
-    $changed = 0;
     /** @var \Drupal\commerce_domains_offer\Entity\OfferInterface $offer */
     foreach ($storage->loadMultiple($ids) as $offer) {
       $plugin = $offer->getPaymentLinkProvider()?->getPlugin();
@@ -387,6 +485,38 @@ class OfferManager {
       elseif ($link->state === PaymentLink::ENDED) {
         $offer->getState()->applyTransitionById('expire');
         $offer->save();
+        $changed++;
+      }
+    }
+    return $changed;
+  }
+
+  /**
+   * Purchases the offers with pasted links whose domain sold there.
+   *
+   * @return int
+   *   How many offers were purchased.
+   */
+  protected function settlePastedLinks(): int {
+    $storage = $this->entityTypeManager->getStorage('commerce_domains_offer');
+    $ids = $storage->getQuery()->accessCheck(FALSE)
+      ->condition('state', 'accepted')
+      ->exists('payment_link_url')
+      ->notExists('payment_link_id')
+      ->execute();
+    $changed = 0;
+    $products = $this->entityTypeManager->getStorage('commerce_product');
+    /** @var \Drupal\commerce_domains_offer\Entity\OfferInterface $offer */
+    foreach ($storage->loadMultiple($ids) as $offer) {
+      // As saved now: the sale may have been recorded since the variation
+      // was loaded.
+      $product_id = $offer->getVariation()?->getProductId();
+      $product = $product_id ? $products->loadUnchanged($product_id) : NULL;
+      $provider = $offer->getPaymentLinkProvider();
+      if ($product instanceof ProductInterface && $provider && $product->hasField('domain_sold') && $product->hasField('domain_sold_via')
+        && !$product->get('domain_sold')->isEmpty() && $product->get('domain_sold_via')->target_id === $provider->id()) {
+        $this->markPaid($offer);
+        $this->notifySeller($offer, 'paid_by_link');
         $changed++;
       }
     }

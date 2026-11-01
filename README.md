@@ -618,6 +618,20 @@ the form checks; a lease link that can't be made leaves the offer pending
 rather than falling back to a checkout for the full price. The sale is
 recorded with the lease's number of payments.
 
+**Pasted payment links.** Marketplaces without an API for payment links
+(Atom, Dynadot, Afternic…) make them in their own pages. Accepting an offer
+can then send the buyer a link you paste: choose *With a payment link I
+paste from a marketplace*, the marketplace (any enabled provider that is a
+marketplace) and the https link, plus the number of monthly payments for a
+lease to own. An offer already waiting at checkout, such as a counter-offer
+the buyer accepted, takes one under *Send a payment link from a marketplace
+instead*, which cancels its unpaid order. The site can't read these links,
+so the offer page has *Paid*, which purchases the offer, takes the domain
+off sale and records the sale at the agreed price, and *Not paid: end the
+offer*. Cron also marks the offer paid, and mails the owner, once Commerce
+Domains Owner has the domain recorded as sold on that marketplace, e.g. from
+Atom's sales report. Unpaid, the offer expires with the others.
+
 The settings page also sets the least price that takes offers, in each
 domain's own currency, whether Atom premium names take them, and whether
 buyers must give a phone number. With

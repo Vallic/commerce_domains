@@ -121,6 +121,13 @@ interface OfferInterface extends ContentEntityInterface, EntityChangedInterface,
   public function setPaymentLink(ProviderInterface $provider, PaymentLink $link, ?int $lease_months = NULL): static;
 
   /**
+   * Whether the seller pasted the payment link, e.g. from a marketplace.
+   *
+   * The site can't read such a link's state: the seller marks it paid.
+   */
+  public function isPaymentLinkPasted(): bool;
+
+  /**
    * Returns the monthly payments of a lease to own paid by link, or NULL.
    */
   public function getPaymentLinkLeaseMonths(): ?int;

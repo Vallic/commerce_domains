@@ -9,9 +9,12 @@ use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_domains_offer\Entity\OfferInterface;
 use Drupal\commerce_domains_offer\OfferManager;
 use Drupal\commerce_price\Price;
+use Drupal\Component\Utility\UrlHelper;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Link;
+use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -58,6 +61,9 @@ final class OfferAdminForm extends FormBase {
     $order = $offer->getOrder();
     $buyer = array_filter([$offer->getBuyerName(), $offer->getEmail(), (string) $offer->get('phone')->value]);
     $order_label = $order ? $this->t('Order @number', ['@number' => $order->getOrderNumber() ?: $order->id()]) : '';
+    $link_url = $offer->getPaymentLinkUrl();
+    $months = $offer->getPaymentLinkLeaseMonths();
+    $lease = $months ? $this->formatPlural($months, '1 monthly payment', '@count monthly payments') : '';
     $rows = [
       [$this->t('Domain'), $product ? $product->toLink($offer->getDomain()) : $offer->getDomain()],
       [$this->t('Buyer'), implode(', ', $buyer)],
@@ -67,6 +73,9 @@ final class OfferAdminForm extends FormBase {
       [$this->t('Made'), $this->dateFormatter->format((int) $offer->get('created')->value)],
       [$this->t('Message'), (string) $offer->get('message')->value],
       [$this->t('Order'), $order ? $order->toLink($order_label) : ''],
+      [$this->t('Paid through'), (string) $offer->getPaymentLinkProvider()?->label()],
+      [$this->t('Payment link'), $link_url !== '' ? Link::fromTextAndUrl($link_url, Url::fromUri($link_url)) : ''],
+      [$this->t('Lease to own'), $lease],
     ];
     $form['details'] = [
       '#type' => 'table',
@@ -80,23 +89,37 @@ final class OfferAdminForm extends FormBase {
       ];
       return $form;
     }
+    if ($state === 'accepted') {
+      return $this->buildAccepted($form, $offer);
+    }
     if (!in_array($state, ['pending', 'countered'], TRUE)) {
       return $form;
     }
+    $selector = ':input[name="payment"]';
+    $options = [];
     $provider = $state === 'pending' ? $this->offerManager->paymentLinkProvider() : NULL;
+    if ($provider) {
+      $options['buy_now'] = $this->t('At once on @provider', ['@provider' => $provider->label()]);
+      $options['lease'] = $this->t('Lease to own on @provider: a down payment, then monthly', ['@provider' => $provider->label()]);
+    }
+    else {
+      $options['checkout'] = $this->t('At checkout on this site');
+    }
+    $link_providers = $state === 'pending' ? $this->offerManager->linkProviders() : [];
+    if ($link_providers) {
+      $options['pasted'] = $this->t('With a payment link I paste from a marketplace');
+    }
+    if (count($options) > 1) {
+      $form['payment'] = [
+        '#type' => 'radios',
+        '#title' => $this->t('The buyer pays'),
+        '#options' => $options,
+        '#default_value' => array_key_first($options),
+      ];
+    }
     if ($provider) {
       $terms = $offer->getVariation() ? SaleTerms::fromVariation($offer->getVariation()) : new SaleTerms();
       $longest = $terms->leaseMonthsAt((float) $offer->getAmount()?->getNumber());
-      $selector = ':input[name="payment"]';
-      $form['payment'] = [
-        '#type' => 'radios',
-        '#title' => $this->t('The buyer pays on @provider', ['@provider' => $provider->label()]),
-        '#options' => [
-          'buy_now' => $this->t('At once'),
-          'lease' => $this->t('Lease to own: a down payment, then monthly'),
-        ],
-        '#default_value' => 'buy_now',
-      ];
       $form['lease_months'] = [
         '#type' => 'number',
         '#title' => $this->t('Monthly payments'),
@@ -113,6 +136,12 @@ final class OfferAdminForm extends FormBase {
         '#max' => 99,
         '#default_value' => $terms->leaseDownPayment ?? 10,
         '#states' => ['visible' => [$selector => ['value' => 'lease']]],
+      ];
+    }
+    if ($link_providers) {
+      $form['link'] = $this->linkElements($link_providers) + [
+        '#type' => 'container',
+        '#states' => ['visible' => [$selector => ['value' => 'pasted']]],
       ];
     }
     $form['actions'] = ['#type' => 'actions'];
@@ -162,6 +191,10 @@ final class OfferAdminForm extends FormBase {
    * Checks a lease can be paid by link.
    */
   public function validateAccept(array &$form, FormStateInterface $form_state): void {
+    if ($form_state->getValue('payment') === 'pasted') {
+      $this->validateLink($form, $form_state);
+      return;
+    }
     if ($form_state->getValue('payment') !== 'lease') {
       return;
     }
@@ -176,10 +209,14 @@ final class OfferAdminForm extends FormBase {
    */
   public function accept(array &$form, FormStateInterface $form_state): void {
     $offer = $this->offer($form_state);
-    $terms = $form_state->getValue('payment') === 'lease' ? [
-      'lease_months' => (int) $form_state->getValue('lease_months'),
-      'down_payment' => (int) $form_state->getValue('down_payment'),
-    ] : [];
+    $terms = match ($form_state->getValue('payment')) {
+      'lease' => [
+        'lease_months' => (int) $form_state->getValue('lease_months'),
+        'down_payment' => (int) $form_state->getValue('down_payment'),
+      ],
+      'pasted' => $this->linkTerms($form_state),
+      default => [],
+    };
     try {
       $this->offerManager->accept($offer, $terms);
     }
@@ -188,6 +225,128 @@ final class OfferAdminForm extends FormBase {
       return;
     }
     $this->messenger()->addStatus($this->t('Accepted. The buyer has been sent a link to pay.'));
+  }
+
+  /**
+   * Builds the page of an accepted offer: what is left to the seller.
+   *
+   * A link the seller pasted is marked paid, or unpaid, by hand. An offer
+   * waiting at checkout can be sent a pasted link instead.
+   */
+  protected function buildAccepted(array $form, OfferInterface $offer): array {
+    if ($offer->isPaymentLinkPasted()) {
+      $form['pasted'] = [
+        '#markup' => '<p>' . $this->t('The site can not see whether the buyer paid on @provider: mark the offer once they have.', ['@provider' => (string) $offer->getPaymentLinkProvider()?->label()]) . '</p>',
+      ];
+      $form['actions'] = ['#type' => 'actions'];
+      $form['actions']['paid'] = [
+        '#type' => 'submit',
+        '#value' => $this->t('Paid'),
+        '#submit' => ['::paid'],
+        '#button_type' => 'primary',
+      ];
+      $form['actions']['unpaid'] = [
+        '#type' => 'submit',
+        '#value' => $this->t('Not paid: end the offer'),
+        '#submit' => ['::unpaid'],
+      ];
+      return $form;
+    }
+    $order = $offer->getOrder();
+    $providers = $this->offerManager->linkProviders();
+    if ($offer->getPaymentLinkUrl() !== '' || !$providers || ($order && $order->getState()->getId() !== 'draft')) {
+      return $form;
+    }
+    $form['link'] = $this->linkElements($providers) + [
+      '#type' => 'details',
+      '#title' => $this->t('Send a payment link from a marketplace instead'),
+      '#description' => $order ? $this->t('The order waiting at checkout is canceled.') : NULL,
+    ];
+    $form['link']['send_link'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('Send the link'),
+      '#validate' => ['::validateLink'],
+      '#submit' => ['::sendLink'],
+    ];
+    return $form;
+  }
+
+  /**
+   * Returns the fields of a pasted payment link.
+   *
+   * @param \Drupal\commerce_domains\Entity\ProviderInterface[] $providers
+   *   The marketplaces to choose from.
+   */
+  protected function linkElements(array $providers): array {
+    return [
+      'link_provider' => [
+        '#type' => 'select',
+        '#title' => $this->t('Marketplace'),
+        '#options' => array_map(fn($provider) => $provider->label(), $providers),
+      ],
+      'link_url' => [
+        '#type' => 'url',
+        '#title' => $this->t('Payment link'),
+        '#description' => $this->t("The marketplace's checkout link for this buyer at the agreed price. The buyer gets it by email."),
+        '#maxlength' => 2048,
+      ],
+      'link_lease_months' => [
+        '#type' => 'number',
+        '#title' => $this->t('Monthly payments'),
+        '#description' => $this->t('For a lease to own; leave empty when paid at once.'),
+        '#min' => 2,
+        '#max' => 120,
+      ],
+    ];
+  }
+
+  /**
+   * Requires a marketplace and an https link.
+   */
+  public function validateLink(array &$form, FormStateInterface $form_state): void {
+    $url = trim((string) $form_state->getValue('link_url'));
+    if (!isset($this->offerManager->linkProviders()[$form_state->getValue('link_provider')])) {
+      $form_state->setErrorByName('link_provider', $this->t('Choose the marketplace.'));
+    }
+    if (!UrlHelper::isValid($url, TRUE) || parse_url($url, PHP_URL_SCHEME) !== 'https') {
+      $form_state->setErrorByName('link_url', $this->t('Paste the payment link, starting with https://.'));
+    }
+  }
+
+  /**
+   * Returns the terms of a pasted payment link.
+   */
+  protected function linkTerms(FormStateInterface $form_state): array {
+    return [
+      'link_provider' => $this->offerManager->linkProviders()[$form_state->getValue('link_provider')] ?? NULL,
+      'link_url' => trim((string) $form_state->getValue('link_url')),
+      'lease_months' => (int) $form_state->getValue('link_lease_months'),
+    ];
+  }
+
+  /**
+   * Sends the buyer of an accepted offer the pasted link.
+   */
+  public function sendLink(array &$form, FormStateInterface $form_state): void {
+    $terms = $this->linkTerms($form_state);
+    $this->offerManager->replaceWithLink($this->offer($form_state), $terms['link_provider'], $terms['link_url'], $terms['lease_months'] ?: NULL);
+    $this->messenger()->addStatus($this->t('The buyer has been sent the link to pay.'));
+  }
+
+  /**
+   * Marks the offer paid through its pasted link.
+   */
+  public function paid(array &$form, FormStateInterface $form_state): void {
+    $this->offerManager->markPaid($this->offer($form_state));
+    $this->messenger()->addStatus($this->t('Marked paid. The domain is off sale.'));
+  }
+
+  /**
+   * Ends the offer whose pasted link was not paid.
+   */
+  public function unpaid(array &$form, FormStateInterface $form_state): void {
+    $this->offerManager->markUnpaid($this->offer($form_state));
+    $this->messenger()->addStatus($this->t('The offer has ended.'));
   }
 
   /**
