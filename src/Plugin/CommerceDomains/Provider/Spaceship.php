@@ -9,7 +9,9 @@ use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
+use Drupal\commerce_domains\PaymentLink;
 use Drupal\commerce_domains\Registration;
+use Drupal\commerce_price\Price;
 use Drupal\commerce_domains\Clients\SpaceshipClient;
 
 /**
@@ -25,7 +27,7 @@ use Drupal\commerce_domains\Clients\SpaceshipClient;
   label: new TranslatableMarkup('Spaceship'),
   description: new TranslatableMarkup('Pushes listings to SellerHub through the Spaceship API.'),
 )]
-final class Spaceship extends MarketplacePluginBase implements DomainManagementInterface, DnsRecordsInterface, CsvExportInterface {
+final class Spaceship extends MarketplacePluginBase implements DomainManagementInterface, DnsRecordsInterface, CsvExportInterface, PaymentLinksInterface {
 
   use DnsRecordByRecordTrait;
   use RegistrarTrait;
@@ -337,6 +339,75 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
   public function deleteListings(array $names): array {
     $client = $this->client();
     return $client->eachDomain(array_values($names), $client->deleteDomain(...));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function paymentLinkCurrencies(): array {
+    return ['USD'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function paymentLinkMinimum(): float {
+    return 100.0;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * A SafePay transaction the seller opens, for a domain listed in
+   * SellerHub; the buyer confirms and pays on Spaceship. A lease to own is
+   * paid as the down payment and then monthly; Spaceship takes at least 100
+   * for each payment.
+   */
+  public function createPaymentLink(string $name, Price $price, string $buyer_email, array $options = []): PaymentLink {
+    $buyer_fee = (int) ($options['buyer_fee'] ?? 0);
+    $months = (int) ($options['lease_months'] ?? 0);
+    $lease = $months > 0 ? [
+      'type' => 'leaseToOwn',
+      'ltoSettings' => [
+        'downPaymentPercentage' => (int) ($options['down_payment'] ?? 0),
+        'installmentPeriods' => $months,
+      ],
+    ] : [];
+    return self::paymentLink($this->client()->createSafePay($lease + [
+      'domainName' => $name,
+      'initiatedBy' => 'seller',
+      'basePrice' => [
+        'amount' => number_format((float) $price->getNumber(), 2, '.', ''),
+        'currency' => $price->getCurrencyCode(),
+      ],
+      'type' => 'buyNow',
+      'feePercentageShare' => ['seller' => 100 - $buyer_fee, 'buyer' => $buyer_fee],
+      'buyerEmail' => $buyer_email,
+    ]));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function fetchPaymentLink(string $id): PaymentLink {
+    return self::paymentLink($this->client()->getSafePay($id));
+  }
+
+  /**
+   * Maps a SafePay transaction to a payment link.
+   */
+  protected static function paymentLink(array $transaction): PaymentLink {
+    $status = (string) ($transaction['status'] ?? '');
+    return new PaymentLink(
+      id: (string) ($transaction['transactionId'] ?? ''),
+      url: (string) ($transaction['url']['buyer'] ?? ''),
+      state: match ($status) {
+        'purchased' => PaymentLink::PAID,
+        'deactivated', 'expired' => PaymentLink::ENDED,
+        default => PaymentLink::PENDING,
+      },
+      status: $status !== '' ? $status : NULL,
+    );
   }
 
   /**

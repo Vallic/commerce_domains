@@ -10,6 +10,7 @@ use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingStatsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\PaymentLinksInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\PremiumListingsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\SalesReportInterface;
@@ -84,7 +85,8 @@ class ProviderTest extends DomainsKernelTestBase {
     $stats = ['afternic', 'atom', 'test_atom', 'test_marketplace'];
     // Atom, and the test plugin like it.
     $atom_like = ['atom', 'test_atom'];
-    $expected = array_unique([...$marketplaces, ...$registrars, ...$csv, ...$appraisers]);
+    $payment_links = ['spaceship', 'test_payment_links'];
+    $expected = array_unique([...$marketplaces, ...$registrars, ...$csv, ...$appraisers, ...$payment_links]);
     sort($expected);
     $this->assertSame($expected, $ids);
     $this->assertEqualsCanonicalizing($marketplaces, $manager->getPluginIdsWith(MarketplaceInterface::class));
@@ -95,6 +97,7 @@ class ProviderTest extends DomainsKernelTestBase {
     $this->assertEqualsCanonicalizing($stats, $manager->getPluginIdsWith(ListingStatsInterface::class));
     $this->assertEqualsCanonicalizing($atom_like, $manager->getPluginIdsWith(SalesReportInterface::class));
     $this->assertEqualsCanonicalizing($atom_like, $manager->getPluginIdsWith(PremiumListingsInterface::class));
+    $this->assertEqualsCanonicalizing($payment_links, $manager->getPluginIdsWith(PaymentLinksInterface::class));
 
     foreach ($ids as $id) {
       Provider::create(['id' => $id, 'label' => ucfirst($id), 'plugin' => $id])->save();

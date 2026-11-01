@@ -17,3 +17,9 @@ commerce_domains_offer.settings:
     require_phone:
       type: boolean
       label: 'Buyers must give a phone number'
+    payment_link_provider:
+      type: string
+      label: 'Provider whose payment link accepted offers are paid with; empty for checkout'
+    payment_link_buyer_fee:
+      type: integer
+      label: 'Share of the payment link fee the buyer pays, in percent'

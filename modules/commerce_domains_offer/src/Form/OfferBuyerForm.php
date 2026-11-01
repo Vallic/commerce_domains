@@ -12,6 +12,7 @@ use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Access\AccessResultInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\TrustedRedirectResponse;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -95,10 +96,12 @@ final class OfferBuyerForm extends FormBase {
         '#submit' => ['::decline'],
       ];
     }
-    elseif ($offer->getSource() === OfferInterface::SOURCE_SITE && $offer->getState()->getId() === 'accepted' && $offer->getOrder()?->getState()->getId() === 'draft') {
+    elseif ($offer->getSource() === OfferInterface::SOURCE_SITE && $offer->getState()->getId() === 'accepted'
+      && ($offer->getPaymentLinkUrl() !== '' || $offer->getOrder()?->getState()->getId() === 'draft')) {
+      $provider = $offer->getPaymentLinkProvider();
       $form['actions']['pay'] = [
         '#type' => 'submit',
-        '#value' => $this->t('Pay @agreed', $args),
+        '#value' => $provider ? $this->t('Pay @agreed on @provider', $args + ['@provider' => $provider->label()]) : $this->t('Pay @agreed', $args),
         '#submit' => ['::pay'],
         '#button_type' => 'primary',
       ];
@@ -132,7 +135,11 @@ final class OfferBuyerForm extends FormBase {
    */
   public function pay(array &$form, FormStateInterface $form_state): void {
     $url = $this->offerManager->checkoutUrl($form_state->get('offer'), $this->currentUser());
-    if ($url) {
+    if ($url?->isExternal()) {
+      // The provider's payment link.
+      $form_state->setResponse(new TrustedRedirectResponse($url->toString()));
+    }
+    elseif ($url) {
       $form_state->setRedirectUrl($url);
     }
   }

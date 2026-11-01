@@ -180,6 +180,27 @@ final class SpaceshipClient extends ApiClient {
   }
 
   /**
+   * Opens a SafePay transaction: the buyer pays Spaceship for a domain.
+   *
+   * @param array $transaction
+   *   domainName, initiatedBy, basePrice, type, feePercentageShare,
+   *   buyerEmail and, for a lease, ltoSettings.
+   *
+   * @return array
+   *   The transaction, with transactionId, status and url.buyer.
+   */
+  public function createSafePay(array $transaction): array {
+    return $this->request('POST', 'sellerhub/safepay-transactions', [RequestOptions::JSON => $transaction]);
+  }
+
+  /**
+   * Fetches a SafePay transaction.
+   */
+  public function getSafePay(string $id): array {
+    return $this->request('GET', 'sellerhub/safepay-transactions/' . rawurlencode($id));
+  }
+
+  /**
    * Fetches every page of a take/skip list.
    *
    * @return array[]

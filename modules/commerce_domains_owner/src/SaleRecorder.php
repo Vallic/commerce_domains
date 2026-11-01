@@ -25,6 +25,16 @@ use Drupal\commerce_product\Entity\ProductVariationInterface;
  */
 class SaleRecorder {
 
+  // The fields of a domain's sale.
+  public const SALE_FIELDS = [
+    'domain_sold',
+    'domain_sale_price',
+    'domain_sale_commission',
+    'domain_sold_via',
+    'domain_lease_months',
+    'domain_sale_order',
+  ];
+
   public function __construct(
     protected Availability $availability,
   ) {}
@@ -61,6 +71,9 @@ class SaleRecorder {
         }
       }
       $product->set('domain_sale_price', $price);
+      if ($product->hasField('domain_sale_commission')) {
+        $product->set('domain_sale_commission', 0);
+      }
       $this->save($product);
     }
     return $sold;
@@ -90,7 +103,7 @@ class SaleRecorder {
     $undone = [];
     foreach (self::domainItems($order) as [, $product]) {
       if ($this->isSaleOf($product, $order)) {
-        foreach (['domain_sold', 'domain_sale_price', 'domain_sold_via', 'domain_lease_months', 'domain_sale_order'] as $field) {
+        foreach (self::SALE_FIELDS as $field) {
           if ($product->hasField($field)) {
             $product->set($field, NULL);
           }
@@ -103,13 +116,38 @@ class SaleRecorder {
   }
 
   /**
+   * Records a sale paid through a provider, e.g. an offer's payment link.
+   *
+   * What the domain sold for is the agreed price; the provider's commission
+   * is left for the owner, as it depends on how its fee was split. A domain
+   * already recorded as sold keeps that sale.
+   *
+   * @return bool
+   *   Whether the sale was recorded.
+   */
+  public function recordSale(ProductInterface $product, ProviderInterface $provider, Price $price, int $time, ?int $lease_months = NULL): bool {
+    if (!$product->hasField('domain_sold') || !$product->get('domain_sold')->isEmpty()) {
+      return FALSE;
+    }
+    $product->set('domain_sold', $time)
+      ->set('domain_sold_via', $provider->id())
+      ->set('domain_sale_price', $price)
+      ->set('domain_sale_order', NULL);
+    if ($product->hasField('domain_lease_months')) {
+      $product->set('domain_lease_months', $lease_months ? min($lease_months, DomainCosts::MAX_LEASE_MONTHS) : NULL);
+    }
+    $this->save($product);
+    return TRUE;
+  }
+
+  /**
    * Undoes a sale entered by hand or found on a marketplace.
    *
    * Clears the sale and puts the domain back on sale, which relists it on
    * the marketplaces. A sale on this site is undone by canceling its order.
    */
   public function undo(ProductInterface $product): void {
-    foreach (['domain_sold', 'domain_sale_price', 'domain_sold_via', 'domain_lease_months', 'domain_sale_order'] as $field) {
+    foreach (self::SALE_FIELDS as $field) {
       if ($product->hasField($field)) {
         $product->set($field, NULL);
       }
@@ -133,8 +171,8 @@ class SaleRecorder {
    *   Whether the sale was recorded.
    */
   public function recordElsewhere(ProductInterface $product, ProviderInterface $provider, int $time, ?MarketplaceSale $sale = NULL): bool {
-    // Without what it brought there is no sale; the owner enters it.
-    if (!$product->hasField('domain_sold') || !$product->get('domain_sold')->isEmpty() || $sale?->received === NULL) {
+    // Without its price there is no sale; the owner enters it.
+    if (!$product->hasField('domain_sold') || !$product->get('domain_sold')->isEmpty() || ($sale === NULL || ($sale->price ?? $sale->received) === NULL)) {
       return FALSE;
     }
     $product->set('domain_sold', $time)
@@ -151,10 +189,11 @@ class SaleRecorder {
    * Returns what a marketplace's report of a sale adds to the domain.
    *
    * Only for a sale recorded as made there, or a domain off sale with no
-   * sale recorded, once the report says what it brought: a sale on this
-   * site or elsewhere stands. The report's
-   * date replaces the time the sale was found; what it brought and the
-   * lease are only filled in when empty, so the owner's entries stand.
+   * sale recorded, once the report gives its price: a sale on this site or
+   * elsewhere stands. The report's date replaces the time the sale was
+   * found; the price (what the buyer paid), the commission (worked out from
+   * what the seller received) and the lease are only filled in when empty,
+   * so the owner's entries stand.
    *
    * @return array<string, mixed>
    *   New values, keyed by field name; empty when nothing changes.
@@ -175,14 +214,18 @@ class SaleRecorder {
     if ($via === NULL) {
       $changes['domain_sold_via'] = $provider->id();
     }
-    if ($sale->received !== NULL && $product->get('domain_sale_price')->isEmpty()) {
-      $changes['domain_sale_price'] = new Price((string) $sale->received, $sale->currency);
+    $price = $sale->price ?? $sale->received;
+    if ($price !== NULL && $product->get('domain_sale_price')->isEmpty()) {
+      $changes['domain_sale_price'] = new Price((string) $price, $sale->currency);
+    }
+    if ($sale->price && $sale->received !== NULL && $product->hasField('domain_sale_commission') && $product->get('domain_sale_commission')->isEmpty()) {
+      $changes['domain_sale_commission'] = (string) round(max(0, 100 * (1 - $sale->received / $sale->price)), 2);
     }
     if ($sale->leaseMonths !== NULL && $product->hasField('domain_lease_months') && $product->get('domain_lease_months')->isEmpty()) {
       $changes['domain_lease_months'] = min($sale->leaseMonths, DomainCosts::MAX_LEASE_MONTHS);
     }
     // Only a sale with a date and an amount can be recorded.
-    return !$recorded && (!isset($changes['domain_sold']) || $sale->received === NULL) ? [] : $changes;
+    return !$recorded && (!isset($changes['domain_sold']) || $price === NULL) ? [] : $changes;
   }
 
   /**

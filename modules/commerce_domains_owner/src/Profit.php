@@ -26,6 +26,16 @@ final class Profit {
     public readonly ?Price $profit,
     // Why there is no profit, for people.
     public readonly ?TranslatableMarkup $problem = NULL,
+    // The marketplace's commission, in the sale's currency; NULL without
+    // one recorded, which counts as none.
+    public readonly ?Price $commission = NULL,
   ) {}
+
+  /**
+   * Returns what the seller received: the sale price less the commission.
+   */
+  public function received(): ?Price {
+    return $this->salePrice && $this->commission ? $this->salePrice->subtract($this->commission) : $this->salePrice;
+  }
 
 }

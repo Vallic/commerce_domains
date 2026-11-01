@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_offer\Form;
 
 use CommerceGuys\Intl\Formatter\CurrencyFormatterInterface;
+use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_domains_offer\Entity\OfferInterface;
 use Drupal\commerce_domains_offer\OfferManager;
 use Drupal\commerce_price\Price;
@@ -82,12 +83,45 @@ final class OfferAdminForm extends FormBase {
     if (!in_array($state, ['pending', 'countered'], TRUE)) {
       return $form;
     }
+    $provider = $state === 'pending' ? $this->offerManager->paymentLinkProvider() : NULL;
+    if ($provider) {
+      $terms = $offer->getVariation() ? SaleTerms::fromVariation($offer->getVariation()) : new SaleTerms();
+      $longest = $terms->leaseMonthsAt((float) $offer->getAmount()?->getNumber());
+      $selector = ':input[name="payment"]';
+      $form['payment'] = [
+        '#type' => 'radios',
+        '#title' => $this->t('The buyer pays on @provider', ['@provider' => $provider->label()]),
+        '#options' => [
+          'buy_now' => $this->t('At once'),
+          'lease' => $this->t('Lease to own: a down payment, then monthly'),
+        ],
+        '#default_value' => 'buy_now',
+      ];
+      $form['lease_months'] = [
+        '#type' => 'number',
+        '#title' => $this->t('Monthly payments'),
+        '#min' => 1,
+        '#max' => 120,
+        '#default_value' => $longest ?: 12,
+        '#states' => ['visible' => [$selector => ['value' => 'lease']]],
+      ];
+      $form['down_payment'] = [
+        '#type' => 'number',
+        '#title' => $this->t('Down payment'),
+        '#field_suffix' => '%',
+        '#min' => 0,
+        '#max' => 99,
+        '#default_value' => $terms->leaseDownPayment ?? 10,
+        '#states' => ['visible' => [$selector => ['value' => 'lease']]],
+      ];
+    }
     $form['actions'] = ['#type' => 'actions'];
     if ($state === 'pending') {
       $form['actions']['accept'] = [
         '#type' => 'submit',
         '#value' => $this->t('Accept @amount', ['@amount' => $this->money($offer->getAmount())]),
         '#submit' => ['::accept'],
+        '#validate' => ['::validateAccept'],
         '#button_type' => 'primary',
       ];
     }
@@ -125,11 +159,34 @@ final class OfferAdminForm extends FormBase {
   public function submitForm(array &$form, FormStateInterface $form_state): void {}
 
   /**
+   * Checks a lease can be paid by link.
+   */
+  public function validateAccept(array &$form, FormStateInterface $form_state): void {
+    if ($form_state->getValue('payment') !== 'lease') {
+      return;
+    }
+    $problem = $this->offerManager->leaseProblem($this->offer($form_state), (int) $form_state->getValue('lease_months'), (int) $form_state->getValue('down_payment'));
+    if ($problem) {
+      $form_state->setErrorByName('lease_months', $problem);
+    }
+  }
+
+  /**
    * Accepts the offer.
    */
   public function accept(array &$form, FormStateInterface $form_state): void {
     $offer = $this->offer($form_state);
-    $this->offerManager->accept($offer);
+    $terms = $form_state->getValue('payment') === 'lease' ? [
+      'lease_months' => (int) $form_state->getValue('lease_months'),
+      'down_payment' => (int) $form_state->getValue('down_payment'),
+    ] : [];
+    try {
+      $this->offerManager->accept($offer, $terms);
+    }
+    catch (\RuntimeException $e) {
+      $this->messenger()->addError($e->getMessage());
+      return;
+    }
     $this->messenger()->addStatus($this->t('Accepted. The buyer has been sent a link to pay.'));
   }
 

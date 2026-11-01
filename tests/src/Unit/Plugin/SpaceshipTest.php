@@ -6,6 +6,9 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use GuzzleHttp\Psr7\Response;
 use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\PaymentLink;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\PaymentLinksInterface;
+use Drupal\commerce_price\Price;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Spaceship;
@@ -269,6 +272,66 @@ class SpaceshipTest extends ProviderTestBase {
       'items' => [['type' => 'A', 'name' => '@', 'address' => '192.0.2.1', 'ttl' => 600]],
     ], $this->body(7));
     $this->assertCount(8, $this->history);
+  }
+
+  /**
+   * Tests SafePay payment links: made for a buyer, read back.
+   */
+  public function testPaymentLinks(): void {
+    $transaction = fn(string $status) => self::json([
+      'transactionId' => '550e8400-e29b-41d4-a716-446655440000',
+      'status' => $status,
+      'domainName' => 'a.com',
+      'url' => [
+        'buyer' => 'https://www.spaceship.com/sellerhub/safepay/buyer/550e8400',
+        'seller' => 'https://www.spaceship.com/sellerhub/safepay/seller/550e8400',
+      ],
+    ], 201);
+    $plugin = $this->plugin(Spaceship::class, 'spaceship', self::KEYS, [
+      $transaction('pendingBuyerConfirm'),
+      $transaction('purchased'),
+      $transaction('expired'),
+    ]);
+    $this->assertInstanceOf(PaymentLinksInterface::class, $plugin);
+    $this->assertSame(['USD'], $plugin->paymentLinkCurrencies());
+    $link = $plugin->createPaymentLink('a.com', new Price('1500', 'USD'), 'buyer@example.com', ['buyer_fee' => 25]);
+    $this->assertEquals(new PaymentLink('550e8400-e29b-41d4-a716-446655440000', 'https://www.spaceship.com/sellerhub/safepay/buyer/550e8400', PaymentLink::PENDING, 'pendingBuyerConfirm'), $link);
+    $this->assertSame('POST https://spaceship.dev/api/v1/sellerhub/safepay-transactions', $this->call(0));
+    $this->assertSame([
+      'domainName' => 'a.com',
+      'initiatedBy' => 'seller',
+      'basePrice' => ['amount' => '1500.00', 'currency' => 'USD'],
+      'type' => 'buyNow',
+      'feePercentageShare' => ['seller' => 75, 'buyer' => 25],
+      'buyerEmail' => 'buyer@example.com',
+    ], $this->body(0));
+
+    $this->assertSame(PaymentLink::PAID, $plugin->fetchPaymentLink($link->id)->state);
+    $this->assertSame(100.0, $plugin->paymentLinkMinimum());
+    $this->assertSame('GET https://spaceship.dev/api/v1/sellerhub/safepay-transactions/550e8400-e29b-41d4-a716-446655440000', $this->call(1));
+    $this->assertSame(PaymentLink::ENDED, $plugin->fetchPaymentLink($link->id)->state);
+  }
+
+  /**
+   * Tests a SafePay lease to own.
+   */
+  public function testLeasePaymentLink(): void {
+    $plugin = $this->plugin(Spaceship::class, 'spaceship', self::KEYS, [
+      self::json([
+        'transactionId' => 't-1',
+        'status' => 'pendingBuyerConfirm',
+        'url' => ['buyer' => 'https://pay', 'seller' => 'https://sell'],
+      ], 201),
+    ]);
+    $this->assertInstanceOf(PaymentLinksInterface::class, $plugin);
+    $plugin->createPaymentLink('a.com', new Price('6000', 'USD'), 'buyer@example.com', [
+      'lease_months' => 12,
+      'down_payment' => 10,
+    ]);
+    $body = $this->body(0);
+    $this->assertSame('leaseToOwn', $body['type']);
+    $this->assertSame(['downPaymentPercentage' => 10, 'installmentPeriods' => 12], $body['ltoSettings']);
+    $this->assertSame(['amount' => '6000.00', 'currency' => 'USD'], $body['basePrice']);
   }
 
 }

@@ -33,7 +33,7 @@ class ProductTabHooks {
         'title' => new TranslatableMarkup('Registrar'),
         'route' => 'commerce_domains.product_registrar',
         'fields' => ['domain_registrar', 'domain_expires', 'domain_registered'],
-        'weight' => 20,
+        'weight' => 14,
       ],
     ];
   }

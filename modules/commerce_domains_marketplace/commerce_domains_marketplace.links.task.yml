@@ -7,4 +7,4 @@ commerce_domains_marketplace.product_marketplaces:
   title: 'Marketplaces'
   route_name: commerce_domains_marketplace.product_marketplaces
   base_route: entity.commerce_product.canonical
-  weight: 21
+  weight: 17

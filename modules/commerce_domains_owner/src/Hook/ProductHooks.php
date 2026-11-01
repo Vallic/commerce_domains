@@ -35,7 +35,13 @@ class ProductHooks {
       'domain_auto_renew',
       'domain_renewal',
     ],
-    'domain_sale' => ['domain_sale_price', 'domain_sold', 'domain_sold_via', 'domain_lease_months'],
+    'domain_sale' => [
+      'domain_sale_price',
+      'domain_sale_commission',
+      'domain_sold',
+      'domain_sold_via',
+      'domain_lease_months',
+    ],
     'domain_valuation' => DomainCosts::APPRAISAL_FIELDS,
   ];
 
@@ -113,7 +119,7 @@ class ProductHooks {
   public function productPresave(ProductInterface $product): void {
     $this->renewals->restore($product);
     if (self::saleWithoutPrice($product)) {
-      foreach (['domain_sold', 'domain_sold_via', 'domain_lease_months'] as $field) {
+      foreach (['domain_sold', 'domain_sold_via', 'domain_sale_commission', 'domain_lease_months'] as $field) {
         if ($product->hasField($field)) {
           $product->set($field, NULL);
         }

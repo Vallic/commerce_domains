@@ -153,6 +153,7 @@ class NotificationsTest extends OwnerKernelTestBase {
     $this->assertSame((int) $order->getPlacedTime(), (int) $product->get('domain_sold')->value);
     $this->assertEquals(new Price('1500', 'USD'), Costs::price($product, 'domain_sale_price'));
     $this->assertSame((int) $order->id(), (int) $product->get('domain_sale_order')->value);
+    $this->assertEquals(0, $product->get('domain_sale_commission')->value, 'Sold directly: no commission.');
     $this->assertTrue($product->get('domain_sold_via')->isEmpty());
     $this->assertTrue($product->get('domain_lease_months')->isEmpty(), 'Orders are paid at once.');
 

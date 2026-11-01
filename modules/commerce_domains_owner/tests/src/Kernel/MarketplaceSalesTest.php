@@ -170,4 +170,31 @@ class MarketplaceSalesTest extends OwnerKernelTestBase {
     $this->assertPrice('1616.3', $off);
   }
 
+  /**
+   * Tests the commission: from the report, and taken off the profit.
+   */
+  public function testCommission(): void {
+    $this->createProvider('market', 'test_atom');
+    $product = $this->createDomain('Gross.com', 1000, ['domain_purchase_price' => new Price('100', 'USD')], ['in_stock' => FALSE]);
+    // Paid 2000; the seller received 1700 after the marketplace's 15%.
+    $this->setSales(['gross.com' => [self::SOLD, 1700.0, NULL, 2000.0]]);
+    $this->container->get(MarketplaceSales::class)->cron();
+    $product = $this->reload($product);
+    $this->assertPrice('2000', $product);
+    $this->assertEquals(15, $product->get('domain_sale_commission')->value);
+    $profit = $this->container->get(Costs::class)->profit($product);
+    $this->assertEquals(new Price('300', 'USD'), $profit->commission);
+    $this->assertEquals(new Price('1700', 'USD'), $profit->received());
+    $this->assertEquals(new Price('1600', 'USD'), $profit->profit, 'Received less the purchase price.');
+
+    // Before the net is worked out, the price alone records the sale.
+    $pending = $this->createDomain('Pending.com', 1000, [], ['in_stock' => FALSE]);
+    $this->container->get('state')->delete(MarketplaceSales::LAST_RUN_KEY);
+    $this->setSales(['pending.com' => [self::SOLD, NULL, NULL, 2500.0]]);
+    $this->container->get(MarketplaceSales::class)->cron();
+    $pending = $this->reload($pending);
+    $this->assertPrice('2500', $pending);
+    $this->assertTrue($pending->get('domain_sale_commission')->isEmpty(), 'Filled in once the net is known.');
+  }
+
 }

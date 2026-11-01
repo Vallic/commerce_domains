@@ -25,19 +25,19 @@ class ProductTabHooks {
         'title' => new TranslatableMarkup('Costs'),
         'path' => 'costs',
         'fields' => ProductHooks::TABS['domain_costs'],
-        'weight' => 6,
+        'weight' => 11,
       ],
       'domain_sale' => [
         'title' => new TranslatableMarkup('Sale'),
         'path' => 'sale',
         'fields' => ProductHooks::TABS['domain_sale'],
-        'weight' => 7,
+        'weight' => 12,
       ],
       'domain_valuation' => [
         'title' => new TranslatableMarkup('Valuation'),
         'path' => 'valuation',
         'fields' => ProductHooks::TABS['domain_valuation'],
-        'weight' => 8,
+        'weight' => 13,
         'read_only' => TRUE,
       ],
     ];

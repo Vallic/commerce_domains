@@ -34,6 +34,7 @@ class DomainCosts extends EntityTraitBase {
     'domain_auto_renew',
     'domain_renewal',
     'domain_sale_price',
+    'domain_sale_commission',
     'domain_sold',
     'domain_sold_via',
     'domain_lease_months',
@@ -115,9 +116,22 @@ class DomainCosts extends EntityTraitBase {
 
     $fields['domain_sale_price'] = BundleFieldDefinition::create('commerce_price')
       ->setLabel(new TranslatableMarkup('Sold for'))
-      ->setDescription(new TranslatableMarkup('Filled in from the order when the domain sells on this site. For a sale elsewhere, enter what you received after commission.'))
+      ->setDescription(new TranslatableMarkup("What the buyer paid, before any commission: filled in from the order when the domain sells on this site, or from the marketplace's sales report."))
       ->setDisplayOptions('form', [
         'type' => 'commerce_price_default',
+        'weight' => 35,
+      ]);
+
+    $fields['domain_sale_commission'] = BundleFieldDefinition::create('decimal')
+      ->setLabel(new TranslatableMarkup('Commission'))
+      ->setDescription(new TranslatableMarkup("The marketplace's share of the price, in percent: 0 for a sale on this site or in private. What you received is the price less it."))
+      ->setSetting('precision', 5)
+      ->setSetting('scale', 2)
+      ->setSetting('min', 0)
+      ->setSetting('max', 100)
+      ->setSetting('suffix', '%')
+      ->setDisplayOptions('form', [
+        'type' => 'number',
         'weight' => 35,
       ]);
 

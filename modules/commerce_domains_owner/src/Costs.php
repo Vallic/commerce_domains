@@ -13,7 +13,8 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 /**
  * Works out what a sold domain earned.
  *
- * Profit is the sale price minus the purchase price minus the renewals paid.
+ * Profit is what the seller received (the sale price less the marketplace's
+ * commission) minus the purchase price minus the renewals paid.
  * Renewals paid is the yearly renewal cost times the renewals while the
  * domain was held: one on each anniversary of its expiry date (or, without
  * one, of its purchase date) after the purchase, up to the sale. Without a
@@ -40,10 +41,14 @@ class Costs {
     $renewals = $purchased !== NULL && $sold !== NULL ? self::renewals($purchased, $sold, self::time($product, 'domain_expires')) : 0;
     $renewals_paid = $renewal?->multiply((string) $renewals);
 
+    $percent = $product->hasField('domain_sale_commission') ? (float) $product->get('domain_sale_commission')->value : 0.0;
+    $commission = $sale && $percent > 0 ? new Price((string) round((float) $sale->getNumber() * $percent / 100, 2), $sale->getCurrencyCode()) : NULL;
     if (!$sale || !$purchase) {
       $problem = $sale ? new TranslatableMarkup('No purchase price.') : new TranslatableMarkup('No sale price.');
-      return new Profit($sale, $purchase, $renewals, $renewals_paid, NULL, $problem);
+      return new Profit($sale, $purchase, $renewals, $renewals_paid, NULL, $problem, $commission);
     }
+    // What the seller kept.
+    $received = $commission ? $sale->subtract($commission) : $sale;
 
     $currency = $sale->getCurrencyCode();
     $cost = $this->convert($purchase, $currency);
@@ -53,9 +58,9 @@ class Costs {
     }
     if (!$cost) {
       $problem = new TranslatableMarkup('The costs are in another currency than the sale, and there is no exchange rate for it.');
-      return new Profit($sale, $purchase, $renewals, $renewals_paid, NULL, $problem);
+      return new Profit($sale, $purchase, $renewals, $renewals_paid, NULL, $problem, $commission);
     }
-    return new Profit($sale, $purchase, $renewals, $renewals_paid, $sale->subtract($cost));
+    return new Profit($sale, $purchase, $renewals, $renewals_paid, $received->subtract($cost), NULL, $commission);
   }
 
   /**

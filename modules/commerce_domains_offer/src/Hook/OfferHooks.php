@@ -25,10 +25,12 @@ class OfferHooks {
   /**
    * Implements hook_cron().
    *
-   * Expires offers left unanswered or unpaid too long.
+   * Expires offers left unanswered or unpaid too long, and settles the
+   * accepted offers whose payment links were paid or ended.
    */
   #[Hook('cron')]
   public function cron(): void {
+    $this->offerManager->checkPaymentLinks();
     $this->offerManager->expireStale();
   }
 
@@ -80,6 +82,10 @@ class OfferHooks {
       'buyer_accepted' => [
         $this->t('Counter-offer on @domain accepted', $args, $options),
         $this->t("@name accepted @agreed for @domain. Their order waits for payment:\n\n@admin_link", $args, $options),
+      ],
+      'paid_by_link' => [
+        $this->t('Paid: @domain', $args, $options),
+        $this->t("@name paid @agreed for @domain through the payment link. Hand the domain over as the provider asks:\n\n@admin_link", $args, $options),
       ],
       'buyer_declined' => [
         $this->t('Counter-offer on @domain declined', $args, $options),

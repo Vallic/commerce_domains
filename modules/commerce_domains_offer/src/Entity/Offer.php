@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_offer\Entity;
 
+use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains\PaymentLink;
 use Drupal\commerce_domains_offer\OfferListBuilder;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_price\Price;
@@ -162,8 +164,76 @@ class Offer extends ContentEntityBase implements OfferInterface {
   /**
    * {@inheritdoc}
    */
+  public function getPaymentLinkProvider(): ?ProviderInterface {
+    $provider = $this->get('payment_link_provider')->entity;
+    return $provider instanceof ProviderInterface ? $provider : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getPaymentLinkId(): string {
+    return (string) $this->get('payment_link_id')->value;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getPaymentLinkUrl(): string {
+    return (string) $this->get('payment_link_url')->value;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setPaymentLink(ProviderInterface $provider, PaymentLink $link, ?int $lease_months = NULL): static {
+    $this->set('payment_link_provider', $provider->id())
+      ->set('payment_link_id', $link->id)
+      ->set('payment_link_url', $link->url)
+      ->set('payment_link_lease_months', $lease_months);
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getPaymentLinkLeaseMonths(): ?int {
+    $months = $this->get('payment_link_lease_months')->value;
+    return $months ? (int) $months : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getToken(): string {
     return (string) $this->get('token')->value;
+  }
+
+  /**
+   * Returns the fields of a payment link, which update 11003 adds.
+   *
+   * @return \Drupal\Core\Field\BaseFieldDefinition[]
+   *   The fields, keyed by name.
+   */
+  public static function paymentLinkFields(): array {
+    $fields['payment_link_provider'] = BaseFieldDefinition::create('entity_reference')
+      ->setLabel(new TranslatableMarkup('Paid through'))
+      ->setDescription(new TranslatableMarkup('The provider whose payment link the buyer pays with, instead of checkout.'))
+      ->setSetting('target_type', 'commerce_domains_provider');
+
+    $fields['payment_link_id'] = BaseFieldDefinition::create('string')
+      ->setLabel(new TranslatableMarkup('Payment link ID'))
+      ->setSetting('max_length', 128);
+
+    $fields['payment_link_url'] = BaseFieldDefinition::create('string')
+      ->setLabel(new TranslatableMarkup('Payment link'))
+      ->setSetting('max_length', 2048);
+
+    $fields['payment_link_lease_months'] = BaseFieldDefinition::create('integer')
+      ->setLabel(new TranslatableMarkup('Lease to own'))
+      ->setDescription(new TranslatableMarkup('For a lease paid by link, the number of monthly payments; empty when paid at once.'))
+      ->setSetting('unsigned', TRUE);
+    return $fields;
   }
 
   /**
@@ -256,6 +326,8 @@ class Offer extends ContentEntityBase implements OfferInterface {
       ->setLabel(new TranslatableMarkup('Order'))
       ->setDescription(new TranslatableMarkup('The order accepting the offer created.'))
       ->setSetting('target_type', 'commerce_order');
+
+    $fields += static::paymentLinkFields();
 
     $fields['token'] = BaseFieldDefinition::create('string')
       ->setLabel(new TranslatableMarkup('Token'))

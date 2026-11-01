@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_offer\Entity;
 
+use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains\PaymentLink;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
@@ -95,6 +97,33 @@ interface OfferInterface extends ContentEntityInterface, EntityChangedInterface,
    * @return $this
    */
   public function setOrder(OrderInterface $order): static;
+
+  /**
+   * Returns the provider the buyer pays through, for a payment link.
+   */
+  public function getPaymentLinkProvider(): ?ProviderInterface;
+
+  /**
+   * Returns the provider's ID for the payment link, or '' for none.
+   */
+  public function getPaymentLinkId(): string;
+
+  /**
+   * Returns where the buyer pays, or '' without a payment link.
+   */
+  public function getPaymentLinkUrl(): string;
+
+  /**
+   * Records the payment link made for the accepted offer.
+   *
+   * @return $this
+   */
+  public function setPaymentLink(ProviderInterface $provider, PaymentLink $link, ?int $lease_months = NULL): static;
+
+  /**
+   * Returns the monthly payments of a lease to own paid by link, or NULL.
+   */
+  public function getPaymentLinkLeaseMonths(): ?int;
 
   /**
    * Returns the secret that gives the buyer's links access.

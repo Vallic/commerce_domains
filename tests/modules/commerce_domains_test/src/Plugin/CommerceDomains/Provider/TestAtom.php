@@ -14,7 +14,8 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  * The test marketplace, with a sales report and premium names, like Atom.
  *
  * On top of TestMarketplace's State keys:
- * - sales: [sold, received, lease months] keyed by domain.
+ * - sales: [sold, received, lease months, price] keyed by domain; the price
+ *   the buyer paid is what was received unless given.
  * A listing with 'premium' => TRUE is one of its premium names.
  */
 #[CommerceDomainsProvider(
@@ -30,8 +31,9 @@ final class TestAtom extends TestMarketplace implements SalesReportInterface, Pr
     $this->failIfAsked();
     $this->record('sales', $names);
     $sales = [];
-    foreach ($this->state->get(static::STATE_PREFIX . 'sales', []) as $name => [$sold, $received, $months]) {
-      $sales[$name] = new MarketplaceSale($name, $sold, $received, $received, leaseMonths: $months, status: 'done');
+    foreach ($this->state->get(static::STATE_PREFIX . 'sales', []) as $name => $sale) {
+      [$sold, $received, $months] = $sale;
+      $sales[$name] = new MarketplaceSale($name, $sold, $sale[3] ?? $received, $received, leaseMonths: $months, status: 'done');
     }
     return $names === NULL ? $sales : array_intersect_key($sales, array_flip($names));
   }

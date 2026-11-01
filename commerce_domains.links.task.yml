@@ -11,13 +11,13 @@ commerce_domains.product_registrar:
   title: 'Registrar'
   route_name: commerce_domains.product_registrar
   base_route: entity.commerce_product.canonical
-  weight: 20
+  weight: 14
 
 commerce_domains.product_dns:
   title: 'DNS'
   route_name: commerce_domains.product_dns
   base_route: entity.commerce_product.canonical
-  weight: 21
+  weight: 15
 
 # Details, and the tabs other modules add; see ProductTabs.
 commerce_domains.product_tab:

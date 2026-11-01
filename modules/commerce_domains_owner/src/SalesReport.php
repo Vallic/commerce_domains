@@ -182,12 +182,19 @@ class SalesReport {
    */
   public function soldFor(ProductInterface $product, ?Price $price): string {
     $months = self::leaseMonths($product);
+    $percent = $product->hasField('domain_sale_commission') ? (float) $product->get('domain_sale_commission')->value : 0.0;
+    if ($percent > 0 && $price) {
+      $price_text = (string) $this->t('@price less @percent% commission', [
+        '@price' => $this->money($price),
+        '@percent' => rtrim(rtrim(number_format($percent, 2), '0'), '.'),
+      ]);
+    }
     if (!$months) {
-      return $this->money($price);
+      return $price_text ?? $this->money($price);
     }
     $sold = new \DateTimeImmutable('@' . (int) $product->get('domain_sold')->value);
     $args = [
-      '@price' => $this->money($price),
+      '@price' => $price_text ?? $this->money($price),
       '@ends' => $this->dateFormatter->format($sold->modify(sprintf('+%d months', $months))->getTimestamp(), 'custom', 'Y-m'),
     ];
     return $price

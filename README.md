@@ -598,6 +598,26 @@ Commerce Domains Offers (submodule) lets buyers make offers on the site:
    after 14 days, which *Commerce → Configuration → Domains → Domain offers*
    changes.
 
+**Payment links.** With a provider that makes them (Spaceship's SafePay),
+*Accepted offers are paid through* on the offer settings page sends the
+buyer to the provider's payment link instead of checkout: accepting opens
+the transaction for the agreed price and the buyer's email, the buyer's
+email and offer page link to it, and the provider takes the payment and
+hands the domain over. Cron reads the open links: once paid, the offer is
+purchased, the domain goes off sale, the owner is mailed, and Commerce
+Domains Owner records the sale at the agreed price; one canceled or expired
+expires the offer. Spaceship takes US dollars only (other prices are
+converted at the domain's own prices), needs the domain listed in
+SellerHub, and splits its fee as *Buyer's share of the provider's fee*
+says. When a link can't be made, the offer gets a checkout order instead.
+
+Accepting can also make the link a lease to own: choose *Lease to own*, the
+number of monthly payments and the down payment (they start from the
+domain's sale terms). Spaceship takes at least 100 for every payment, which
+the form checks; a lease link that can't be made leaves the offer pending
+rather than falling back to a checkout for the full price. The sale is
+recorded with the lease's number of payments.
+
 The settings page also sets the least price that takes offers, in each
 domain's own currency, whether Atom premium names take them, and whether
 buyers must give a phone number. With
@@ -744,19 +764,22 @@ on the site is undone by canceling its order. Other modules add tabs with
 Only people with *View the domain dashboard* or *Manage the domain
 portfolio* see these fields, in forms, Views and JSON:API alike. A sale on
 the site fills in the sale from its order, and cancelling the order clears
-it. A sale needs what it sold for: a sold date without it is no sale, and
+it. *Sold for* is the full price the buyer paid, and *Commission* the
+marketplace's share of it in percent: 0 for a sale on the site or in
+private. The profit counts what was received, the price less the
+commission. A sale needs its price: a sold date without it is no sale, and
 is cleared when the domain is saved, however it was set; the form asks for
 the price with the date. A marketplace that only shows a domain sold takes
-it off sale, and you enter the sale with what it brought after commission
-(for a lease to own, what the payments add up to, and their number).
-A marketplace with a sales report (Atom) fills those in too: the sale date
-replaces when the sale was found, and what it brought after commission and
-the number of payments are filled in where empty, so your entries stand.
-A sale is only recorded once the report says what it brought: until then
-the domain is off sale but has no sale, so saving it, e.g. as internal,
-stores none. Cron reads the reports once a day, as the amounts are often
-worked out days after the sale, and then records the sale of a domain off
-sale with none recorded. Sales on the site or another marketplace stand.
+it off sale, and you enter the sale (for a lease to own, what the payments
+add up to, and their number). A marketplace with a sales report (Atom)
+fills those in too: the sale date replaces when the sale was found, the
+price and the number of payments are filled in where empty, and the
+commission once the report says what the seller received (Atom works it
+out days after the sale), so your entries stand. Cron reads the reports
+once a day, and records the sale of a domain off sale with none recorded.
+Sales on the site or another marketplace stand. Sales recorded before the
+commission field kept what was received as their price, and no
+commission.
 
 ```sh
 drush cdsales atom --dry-run

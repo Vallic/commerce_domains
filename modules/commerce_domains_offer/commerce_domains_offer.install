@@ -7,6 +7,8 @@
 
 declare(strict_types=1);
 
+use Drupal\commerce_domains_offer\Entity\Offer;
+
 /**
  * Adds the price and Atom premium settings for offers.
  */
@@ -23,4 +25,20 @@ function commerce_domains_offer_update_11001(): void {
 function commerce_domains_offer_update_11002(): void {
   $config = \Drupal::configFactory()->getEditable('commerce_domains_offer.settings');
   $config->set('require_phone', $config->get('require_phone') ?? FALSE)->save();
+}
+
+/**
+ * Adds payment links to offers, and their settings.
+ */
+function commerce_domains_offer_update_11003(): void {
+  $manager = \Drupal::entityDefinitionUpdateManager();
+  foreach (Offer::paymentLinkFields() as $name => $definition) {
+    if (!$manager->getFieldStorageDefinition($name, 'commerce_domains_offer')) {
+      $manager->installFieldStorageDefinition($name, 'commerce_domains_offer', 'commerce_domains_offer', $definition);
+    }
+  }
+  $config = \Drupal::configFactory()->getEditable('commerce_domains_offer.settings');
+  $config->set('payment_link_provider', $config->get('payment_link_provider') ?? '')
+    ->set('payment_link_buyer_fee', $config->get('payment_link_buyer_fee') ?? 0)
+    ->save();
 }

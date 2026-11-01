@@ -155,3 +155,25 @@ function commerce_domains_owner_update_11003(): string {
     ? sprintf('Cleared %d sales without a price; still off sale: %s.', count($names), implode(', ', $names))
     : 'No sales without a price.';
 }
+
+/**
+ * Adds the commission to the sale.
+ *
+ * Sales recorded before it keep their price as it was entered, what was
+ * received, and no commission: their profit stays the same.
+ */
+function commerce_domains_owner_update_11004(): void {
+  $trait = \Drupal::service('plugin.manager.commerce_entity_trait')->createInstance(DomainCosts::ID);
+  $definition = $trait->buildFieldDefinitions()['domain_sale_commission'];
+  /** @var \Drupal\commerce_product\Entity\ProductTypeInterface $type */
+  foreach (\Drupal::entityTypeManager()->getStorage('commerce_product_type')->loadMultiple() as $type) {
+    if (!in_array(DomainCosts::ID, $type->getTraits(), TRUE) || FieldConfig::loadByName('commerce_product', $type->id(), 'domain_sale_commission')) {
+      continue;
+    }
+    $field = clone $definition;
+    $field->setTargetEntityTypeId('commerce_product');
+    $field->setTargetBundle($type->id());
+    $field->setName('domain_sale_commission');
+    \Drupal::service('commerce.configurable_field_manager')->createField($field);
+  }
+}

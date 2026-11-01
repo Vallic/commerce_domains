@@ -5,6 +5,12 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_offer;
 
 use Drupal\commerce_cart\CartSessionInterface;
+use Drupal\commerce_domains\Availability;
+use Drupal\commerce_domains\Catalog;
+use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains\PaymentLink;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\PaymentLinksInterface;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains_offer\Entity\OfferInterface;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_price\Price;
@@ -15,6 +21,7 @@ use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Mail\MailManagerInterface;
 use Drupal\Core\Session\AccountInterface;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\Core\Url;
 use Psr\Log\LoggerInterface;
 
@@ -23,7 +30,11 @@ use Psr\Log\LoggerInterface;
  *
  * The seller answers pending offers; the buyer answers counter-offers.
  * Accepting creates a draft order for the domain at the agreed amount, which
- * the buyer pays through checkout from the link in their email.
+ * the buyer pays through checkout from the link in their email. With a
+ * payment link provider set (payment_link_provider), accepting makes the
+ * provider's payment link instead, and cron marks the offer purchased once
+ * the provider reports it paid; a link that can't be made falls back to the
+ * order.
  */
 class OfferManager {
 
@@ -37,6 +48,8 @@ class OfferManager {
     protected CartSessionInterface $cartSession,
     protected TimeInterface $time,
     protected LoggerInterface $logger,
+    protected Catalog $catalog,
+    protected Availability $availability,
   ) {}
 
   /**
@@ -93,10 +106,24 @@ class OfferManager {
    * @param \Drupal\commerce_domains_offer\Entity\OfferInterface $offer
    *   The offer: pending when the seller accepts, countered when the buyer
    *   accepts the counter-offer.
+   * @param array $terms
+   *   For a lease to own paid by link: lease_months and down_payment
+   *   (percent).
+   *
+   * @throws \RuntimeException
+   *   When a lease's payment link can't be made; the offer is unchanged.
    */
-  public function accept(OfferInterface $offer): void {
+  public function accept(OfferInterface $offer, array $terms = []): void {
     $by_buyer = $offer->getState()->getId() === 'countered';
-    $offer->setOrder($this->createOrder($offer));
+    $lease = !empty($terms['lease_months']);
+    if (!$this->linkPayment($offer, $terms)) {
+      // A lease is only paid by link: it never falls back to a checkout
+      // for the full price.
+      if ($lease) {
+        throw new \RuntimeException((string) new TranslatableMarkup('The payment link for the lease could not be made; see the log. The offer is unchanged.'));
+      }
+      $offer->setOrder($this->createOrder($offer));
+    }
     $offer->getState()->applyTransitionById('accept');
     $offer->save();
     $this->notifyBuyer($offer, 'accepted');
@@ -179,6 +206,9 @@ class OfferManager {
    *   The checkout page, or NULL when there's no order left to pay.
    */
   public function checkoutUrl(OfferInterface $offer, AccountInterface $account): ?Url {
+    if ($offer->getPaymentLinkUrl() !== '') {
+      return $offer->getState()->getId() === 'accepted' ? Url::fromUri($offer->getPaymentLinkUrl()) : NULL;
+    }
     $order = $offer->getOrder();
     if ($offer->getState()->getId() !== 'accepted' || !$order || $order->getState()->getId() !== 'draft') {
       return NULL;
@@ -193,6 +223,174 @@ class OfferManager {
       $this->cartSession->addCartId($order->id());
     }
     return Url::fromRoute('commerce_checkout.form', ['commerce_order' => $order->id()]);
+  }
+
+  /**
+   * Returns the provider set to make payment links, when it can.
+   */
+  public function paymentLinkProvider(): ?ProviderInterface {
+    $id = (string) $this->configFactory->get('commerce_domains_offer.settings')->get('payment_link_provider');
+    $provider = $id !== '' ? $this->entityTypeManager->getStorage('commerce_domains_provider')->load($id) : NULL;
+    return $provider instanceof ProviderInterface && $provider->status() && $provider->hasCapability(PaymentLinksInterface::class)
+      && $provider->getPlugin()->getSetupError() === NULL ? $provider : NULL;
+  }
+
+  /**
+   * Makes the payment link for an accepted offer, when a provider is set.
+   *
+   * @param \Drupal\commerce_domains_offer\Entity\OfferInterface $offer
+   *   The offer.
+   * @param array $terms
+   *   For a lease to own: lease_months and down_payment (percent).
+   *
+   * @return bool
+   *   Whether the offer got one.
+   */
+  protected function linkPayment(OfferInterface $offer, array $terms = []): bool {
+    $provider = $this->paymentLinkProvider();
+    $amount = $offer->getAgreedAmount();
+    $plugin = $provider?->getPlugin();
+    if (!$plugin instanceof PaymentLinksInterface || !$amount) {
+      return FALSE;
+    }
+    $price = $this->paymentLinkPrice($offer, $amount);
+    if (!$price) {
+      $this->logger->warning('No payment link for offer @offer on @domain: @amount can not be converted to a currency @provider takes.', [
+        '@offer' => $offer->id(),
+        '@domain' => $offer->getDomain(),
+        '@amount' => $amount->__toString(),
+        '@provider' => $provider->label(),
+      ]);
+      return FALSE;
+    }
+    try {
+      $link = $plugin->createPaymentLink(strtolower($offer->getDomain()), $price, $offer->getEmail(), [
+        'buyer_fee' => (int) $this->configFactory->get('commerce_domains_offer.settings')->get('payment_link_buyer_fee'),
+      ] + array_intersect_key($terms, array_flip(['lease_months', 'down_payment'])));
+    }
+    catch (ProviderException $e) {
+      $this->logger->warning('No @provider payment link for offer @offer on @domain, so it gets a checkout order: @error', [
+        '@provider' => $provider->label(),
+        '@offer' => $offer->id(),
+        '@domain' => $offer->getDomain(),
+        '@error' => $e->getMessage(),
+      ]);
+      return FALSE;
+    }
+    $offer->setPaymentLink($provider, $link, empty($terms['lease_months']) ? NULL : (int) $terms['lease_months']);
+    $this->logger->info('Offer @offer on @domain accepted at @amount: paid through @provider (@id).', [
+      '@offer' => $offer->id(),
+      '@domain' => $offer->getDomain(),
+      '@amount' => $price->__toString(),
+      '@provider' => $provider->label(),
+      '@id' => $link->id,
+    ]);
+    return TRUE;
+  }
+
+  /**
+   * Says why a lease can't be paid by link, or NULL when it can.
+   *
+   * Each payment, the down payment and every monthly one, must reach the
+   * provider's minimum.
+   */
+  public function leaseProblem(OfferInterface $offer, int $months, int $down_payment): ?TranslatableMarkup {
+    $plugin = $this->paymentLinkProvider()?->getPlugin();
+    $amount = $offer->getAgreedAmount();
+    $price = $amount ? $this->paymentLinkPrice($offer, $amount) : NULL;
+    if (!$plugin instanceof PaymentLinksInterface || !$price) {
+      return new TranslatableMarkup('No payment link provider can take this offer.');
+    }
+    $total = (float) $price->getNumber();
+    $down = $total * $down_payment / 100;
+    $installment = $months > 0 ? ($total - $down) / $months : 0;
+    $minimum = $plugin->paymentLinkMinimum();
+    if (($down_payment > 0 && $down < $minimum) || $installment < $minimum) {
+      return new TranslatableMarkup('Each payment must be at least @minimum @currency: here the down payment is @down and each monthly payment @installment.', [
+        '@minimum' => $minimum,
+        '@currency' => $price->getCurrencyCode(),
+        '@down' => number_format($down, 2),
+        '@installment' => number_format($installment, 2),
+      ]);
+    }
+    return NULL;
+  }
+
+  /**
+   * Returns an amount in a currency the payment link provider takes.
+   *
+   * @param \Drupal\commerce_domains_offer\Entity\OfferInterface $offer
+   *   The offer, whose domain's prices convert the amount.
+   * @param \Drupal\commerce_price\Price $amount
+   *   The amount, e.g. the agreed one.
+   *
+   * @return \Drupal\commerce_price\Price|null
+   *   The amount, or NULL without a provider or a way to convert it.
+   */
+  public function paymentLinkPrice(OfferInterface $offer, Price $amount): ?Price {
+    $plugin = $this->paymentLinkProvider()?->getPlugin();
+    $currencies = $plugin instanceof PaymentLinksInterface ? $plugin->paymentLinkCurrencies() : [];
+    if (!$currencies) {
+      return NULL;
+    }
+    if (in_array($amount->getCurrencyCode(), $currencies, TRUE)) {
+      return $amount;
+    }
+    $item = $this->catalog->load([strtolower($offer->getDomain())])[strtolower($offer->getDomain())] ?? NULL;
+    $currency = reset($currencies);
+    $number = $item && $currency ? $item->amount($amount, $currency) : NULL;
+    return $number ? new Price((string) round($number, 2), $currency) : NULL;
+  }
+
+  /**
+   * Reads the payment links of accepted offers, and settles those that ended.
+   *
+   * Paid: the offer is purchased and the domain goes off sale. Canceled or
+   * expired: the offer expires.
+   *
+   * @return int
+   *   How many offers changed.
+   */
+  public function checkPaymentLinks(): int {
+    $storage = $this->entityTypeManager->getStorage('commerce_domains_offer');
+    $ids = $storage->getQuery()->accessCheck(FALSE)
+      ->condition('state', 'accepted')
+      ->exists('payment_link_id')
+      ->execute();
+    $changed = 0;
+    /** @var \Drupal\commerce_domains_offer\Entity\OfferInterface $offer */
+    foreach ($storage->loadMultiple($ids) as $offer) {
+      $plugin = $offer->getPaymentLinkProvider()?->getPlugin();
+      if (!$plugin instanceof PaymentLinksInterface) {
+        continue;
+      }
+      try {
+        $link = $plugin->fetchPaymentLink($offer->getPaymentLinkId());
+      }
+      catch (ProviderException $e) {
+        $this->logger->warning('Reading the payment link of offer @offer failed: @error', [
+          '@offer' => $offer->id(),
+          '@error' => $e->getMessage(),
+        ]);
+        continue;
+      }
+      if ($link->state === PaymentLink::PAID) {
+        $offer->getState()->applyTransitionById('purchase');
+        $offer->save();
+        $product = $offer->getVariation()?->getProduct();
+        if ($product) {
+          $this->availability->markProductSold($product);
+        }
+        $this->notifySeller($offer, 'paid_by_link');
+        $changed++;
+      }
+      elseif ($link->state === PaymentLink::ENDED) {
+        $offer->getState()->applyTransitionById('expire');
+        $offer->save();
+        $changed++;
+      }
+    }
+    return $changed;
   }
 
   /**
