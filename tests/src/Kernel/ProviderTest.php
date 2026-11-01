@@ -80,7 +80,16 @@ class ProviderTest extends DomainsKernelTestBase {
       'unstoppable',
     ];
     // Registrars whose API can also change domains.
-    $managers = ['dynadot', 'namebright', 'namecheap', 'namesilo', 'porkbun', 'spaceship', 'test_managed_registrar'];
+    $managers = [
+      'dynadot',
+      'gname',
+      'namebright',
+      'namecheap',
+      'namesilo',
+      'porkbun',
+      'spaceship',
+      'test_managed_registrar',
+    ];
     $appraisers = ['atom', 'test_appraiser'];
     $stats = ['afternic', 'atom', 'test_atom', 'test_marketplace'];
     // Atom, and the test plugin like it.

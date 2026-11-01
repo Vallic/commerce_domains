@@ -50,6 +50,7 @@ idna
 idns
 iodef
 ionos
+isbzdns
 issuewild
 jcard
 jeremykendall
@@ -108,4 +109,5 @@ whois
 xlid
 ymdns
 zcsj
+zdxf
 ztstr
