@@ -513,6 +513,7 @@ with who made them; an auth code is shown on the page and never logged.
 | Registrar | Nameservers | Lock | Unlock | Auto-renew | Auth code |
 |-----------|-------------|------|--------|------------|-----------|
 | Dynadot   | yes         | yes  | ¹      | yes        | yes ²     |
+| GNAME     | yes         | ⁶    | ⁶      | ⁶          | ⁶         |
 | NameBright | yes        | yes  | yes    | yes        | yes       |
 | Namecheap | yes         | yes  | yes    | ³          | ³         |
 | NameSilo  | yes         | yes  | yes    | yes        | emailed ⁴ |
@@ -526,6 +527,9 @@ with who made them; an auth code is shown on the page and never logged.
 ⁴ NameSilo emails the code to the domain's administrative contact.
 ⁵ Porkbun's API has no endpoint for these: use the account. Porkbun also
   needs API access turned on for each domain.
+⁶ GNAME's API has no endpoint for the lock or auto-renew (the page shows
+  whether auto-renew is on), and gives an auth code only for a transfer
+  out: use the account.
 
 Dynadot nameservers must already be added to the account before a domain can
 use them. The Spaceship key needs the domains write scope for nameservers and
@@ -559,7 +563,7 @@ the kept zone puts it back.
 | Registrar | Writes | DNS when nameservers are | Types offered | Also kept as they are |
 |-----------|--------|--------------------------|---------------|------------------------|
 | Dynadot   | the whole zone | Dynadot DNS | A, AAAA, CNAME, MX, TXT, URL forward (masked or not), email forward | SRV ¹ |
-| GNAME     | record by record | `*.gname-dns.com` | A, CNAME, MX, TXT, URL forward | records switched off |
+| GNAME     | record by record | `*.share-dns.com`, `*.share-dns.net` (older: `*.gname-dns.com`) | A, CNAME, MX, TXT, URL forward | records switched off |
 | GoDaddy   | record by record | `*.domaincontrol.com` | A, AAAA, CNAME, MX, TXT, CAA, NS | SRV; SOA and the domain's NS are left out |
 | Namecheap | the whole zone | Namecheap BasicDNS | A, AAAA, CNAME, MX, TXT, CAA, NS, ALIAS, URL redirects (301, 302, masked) | |
 | NameSilo  | record by record | `*.dnsowl.com` | A, AAAA, CNAME, MX, TXT | any other type |
@@ -576,7 +580,7 @@ and 100 for subdomains, with one TTL for the zone (the lowest asked for);
 Namecheap takes TTLs of 60 to 60000 seconds, and its mail settings switch to
 custom MX when the zone has MX records; Porkbun's lowest TTL is 600 seconds;
 GoDaddy's is 600 and highest 86400; Spaceship takes 60 to 3600; GNAME's MX
-priorities go from 0 to 50, and its record list gives no TTLs. GoDaddy uses
+priorities go from 0 to 50. GoDaddy uses
 the API's version 3 with the personal access token already set; its token
 needs the DNS update scope. The Spaceship key needs the DNS records read and
 write scopes.

@@ -110,11 +110,23 @@ final class GnameClient extends ApiClient {
   }
 
   /**
+   * Replaces a domain's nameservers.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string[] $nameservers
+   *   The host names.
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $this->call('domain/dns', ['ym' => $name, 'dns' => implode(',', $nameservers)]);
+  }
+
+  /**
    * Fetches a domain's DNS records.
    *
    * @return array<int, array<string, mixed>>
    *   Records with id, zjt (the host, relative), lx (type), jxz (value), mx
-   *   (an MX record's priority), xlid (route) and zt (1 on, 2 off). No TTL.
+   *   (an MX record's priority), ttl, xlid (route) and zt (1 on, 2 off).
    */
   public function listResolutions(string $name): array {
     return $this->pages('resolution/list', ['ym' => $name]);

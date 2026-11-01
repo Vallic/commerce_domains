@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 use Drupal\commerce_domains\Clients\GnameClient;
 use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Gname;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
@@ -64,6 +65,7 @@ class GnameTest extends ProviderTestBase {
             'dqsj' => '2021-08-02',
             'zt' => '0',
             'ztstr' => 'normal',
+            'zdxf' => '1',
           ],
           ['id' => '1203', 'ym' => 'b.com', 'dqsj' => '', 'zt' => '53'],
         ],
@@ -71,7 +73,7 @@ class GnameTest extends ProviderTestBase {
       self::json(['code' => -1, 'msg' => 'Sorry,Authentication TOKEN error', 'data' => '']),
     ]);
     $this->assertEquals([
-      'a.com' => new Registration('a.com', 1627833600, NULL, NULL, 'normal', registered: 1596297600),
+      'a.com' => new Registration('a.com', 1627833600, NULL, TRUE, 'normal', registered: 1596297600),
       'b.com' => new Registration('b.com', NULL, NULL, NULL, '53'),
     ], $plugin->fetchRegistrations());
 
@@ -172,6 +174,7 @@ class GnameTest extends ProviderTestBase {
         'lx' => 'A',
         'jxz' => '192.0.2.1',
         'mx' => '0',
+        'ttl' => '600',
         'xlid' => '0',
         'zt' => '1',
       ],
@@ -201,7 +204,11 @@ class GnameTest extends ProviderTestBase {
     $plugin = $this->registrar(Gname::class, 'gname', self::KEYS, [
       $ours,
       $zone,
-      self::json(['code' => 1, 'msg' => 'OK', 'data' => ['ym' => 'b.com', 'ymdns' => 'ns1.elsewhere.net']]),
+      self::json([
+        'code' => 1,
+        'msg' => 'OK',
+        'data' => ['ym' => 'b.com', 'ymdns' => 'ns1.elsewhere.net', 'isbzdns' => '0'],
+      ]),
       $ours,
       $zone,
       $ok,
@@ -212,7 +219,7 @@ class GnameTest extends ProviderTestBase {
     $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
     $records = $plugin->getDnsRecords('a.com');
     $this->assertEquals([
-      new DnsRecord('A', '@', '192.0.2.1', id: '1'),
+      new DnsRecord('A', '@', '192.0.2.1', ttl: 600, id: '1'),
       new DnsRecord('MX', '@', 'mail.example.net', 10, id: '2'),
       new DnsRecord('A', 'old', '192.0.2.9', id: '3', extra: ['off' => '1']),
     ], $records);
@@ -244,6 +251,49 @@ class GnameTest extends ProviderTestBase {
       $this->assertStringContainsString('0 to 50', $e->getMessage());
     }
     $this->assertCount(9, $this->history, 'Refused before anything was deleted.');
+  }
+
+  /**
+   * Tests GNAME's own DNS, nameservers, and what its API can't change.
+   */
+  public function testDomainManagement(): void {
+    $plugin = $this->registrar(Gname::class, 'gname', self::KEYS, [
+      self::json([
+        'code' => 1,
+        'msg' => 'OK',
+        'data' => ['ym' => 'c.com', 'ymdns' => 'a.share-dns.com,b.share-dns.net', 'isbzdns' => '1'],
+      ]),
+      self::json(['code' => 1, 'msg' => 'OK', 'count' => 0, 'data' => []]),
+      self::json([
+        'code' => 1,
+        'msg' => 'OK',
+        'data' => ['ym' => 'c.com', 'ymdns' => 'NS1.Example.net., ns2.example.net'],
+      ]),
+      self::json(['code' => 1, 'msg' => 'submit DNS modification successfully', 'data' => '', 'ym' => 'c.com']),
+    ]);
+    $this->assertInstanceOf(DomainManagementInterface::class, $plugin);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
+    $this->assertSame([], $plugin->getDnsRecords('c.com'), 'On share-dns.com, the records are here.');
+    $this->assertSame(['ns1.example.net', 'ns2.example.net'], $plugin->getNameservers('c.com'));
+    $plugin->setNameservers('c.com', ['ns1.example.org', 'ns2.example.org']);
+    $this->assertSame('POST https://api.gname.com/api/domain/dns', $this->call(3));
+    $sent = array_intersect_key($this->form(3), ['ym' => 1, 'dns' => 1]);
+    $this->assertSame(['ym' => 'c.com', 'dns' => 'ns1.example.org,ns2.example.org'], $sent);
+
+    foreach ([
+      fn() => $plugin->setTransferLock('c.com', TRUE),
+      fn() => $plugin->setAutoRenew('c.com', TRUE),
+      fn() => $plugin->getAuthCode('c.com'),
+    ] as $call) {
+      try {
+        $call();
+        $this->fail('Done in the GNAME account.');
+      }
+      catch (ProviderException $e) {
+        $this->assertStringContainsString('GNAME account', $e->getMessage());
+      }
+    }
+    $this->assertCount(4, $this->history, 'Nothing sent for what the API cannot do.');
   }
 
 }

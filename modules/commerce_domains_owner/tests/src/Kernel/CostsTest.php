@@ -241,6 +241,16 @@ class CostsTest extends OwnerKernelTestBase {
     // A lease to own counts its payments in full, and says when it ends.
     $this->assertSame('$3,600.00, lease to own over 36 months to 2027-10', $rows[2][3]);
     $this->assertSame('$3,590.00', $rows[2][6]);
+    $this->assertSame([], $rows[0][7]['data'], 'No edit links without access.');
+
+    // Whoever may edit the domain gets links to its Sale and Costs tabs,
+    // back to the report.
+    $this->container->get('router.builder')->rebuild();
+    $this->setUpCurrentUser([], [], TRUE);
+    $links = array_values($report->table($ids)['#rows'])[0][7]['data']['#links'];
+    $this->assertSame(['domain_sale', 'domain_costs'], array_keys($links));
+    $this->assertSame('commerce_domains.product_tab.domain_sale', $links['domain_sale']['url']->getRouteName());
+    $this->assertArrayHasKey('destination', $links['domain_sale']['url']->getOption('query'));
 
     $totals = $report->totals();
     $this->assertSame([2026, 2025, 2024], array_keys($totals));

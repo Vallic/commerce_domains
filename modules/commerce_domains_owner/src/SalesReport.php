@@ -10,8 +10,10 @@ use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Link;
+use Drupal\Core\Routing\RedirectDestinationInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\Url;
+use Symfony\Component\Routing\Exception\RouteNotFoundException;
 
 /**
  * Lists sold domains with their profit, for the dashboard and the report.
@@ -28,6 +30,7 @@ class SalesReport {
     protected DateFormatterInterface $dateFormatter,
     protected CurrencyFormatterInterface $currencyFormatter,
     protected Costs $costs,
+    protected RedirectDestinationInterface $redirectDestination,
   ) {}
 
   /**
@@ -77,6 +80,7 @@ class SalesReport {
           ? $this->formatPlural($profit->renewals, '@paid (1 renewal)', '@paid (@count renewals)', $paid)
           : '',
         $profit->profit ? $this->money($profit->profit) : $problem,
+        ['data' => $this->operations($product)],
       ];
     }
     return [
@@ -89,10 +93,38 @@ class SalesReport {
         $this->t('Purchase price'),
         $this->t('Renewals paid'),
         $this->t('Profit'),
+        $this->t('Operations'),
       ],
       '#rows' => $rows,
       '#empty' => $this->t('No domain has sold yet.'),
     ];
+  }
+
+  /**
+   * Returns the links to change a sale, e.g. to add the commission.
+   *
+   * The domain's Sale and Costs tabs, back to this page after saving.
+   */
+  protected function operations(ProductInterface $product): array {
+    $links = [];
+    $tabs = [
+      'domain_sale' => $this->t('Edit sale'),
+      'domain_costs' => $this->t('Edit costs'),
+    ];
+    foreach ($tabs as $tab => $title) {
+      $url = Url::fromRoute('commerce_domains.product_tab.' . $tab, ['commerce_product' => $product->id()], [
+        'query' => $this->redirectDestination->getAsArray(),
+      ]);
+      try {
+        if ($url->access()) {
+          $links[$tab] = ['title' => $title, 'url' => $url];
+        }
+      }
+      catch (RouteNotFoundException) {
+        // Routes are being rebuilt.
+      }
+    }
+    return $links ? ['#type' => 'operations', '#links' => $links] : [];
   }
 
   /**

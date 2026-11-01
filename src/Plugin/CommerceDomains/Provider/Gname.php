@@ -10,10 +10,15 @@ use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\Clients\GnameClient;
 use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\DomainName;
+use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
 
 /**
- * Lists GNAME-registered domains as Buy It Now; reads registrations.
+ * Lists GNAME-registered domains as Buy It Now; manages registrations.
+ *
+ * Its API sets nameservers and DNS records, but not the transfer lock or
+ * auto-renew, and gives an auth code only for a transfer out: those are
+ * done in the GNAME account.
  *
  * A Buy It Now listing has an end date, so listings run for a year and are
  * renewed in their last month. Removing a listing takes it off sale and
@@ -25,9 +30,9 @@ use Drupal\commerce_domains\Registration;
 #[CommerceDomainsProvider(
   id: 'gname',
   label: new TranslatableMarkup('GNAME'),
-  description: new TranslatableMarkup('Lists domains registered at GNAME as Buy It Now, and reads their registrations. Needs a GNAME reseller account.'),
+  description: new TranslatableMarkup('Lists domains registered at GNAME as Buy It Now, and manages their registrations, nameservers and DNS. Needs a GNAME reseller account.'),
 )]
-final class Gname extends MarketplacePluginBase implements DnsRecordsInterface {
+final class Gname extends MarketplacePluginBase implements DnsRecordsInterface, DomainManagementInterface {
 
   use DnsRecordByRecordTrait;
   use RegistrarTrait;
@@ -36,6 +41,10 @@ final class Gname extends MarketplacePluginBase implements DnsRecordsInterface {
     'app_id' => 'GNAME_APP_ID',
     'app_key' => 'GNAME_APP_KEY',
   ];
+
+  // The nameservers of GNAME's own DNS, which domain/info also flags with
+  // isbzdns. Older domains use gname-dns.com.
+  protected const DNS_HOSTS = ['share-dns.com', 'share-dns.net', 'gname-dns.com'];
 
   // GNAME dates are Beijing time.
   protected const TIMEZONE = 'Asia/Shanghai';
@@ -158,6 +167,7 @@ final class Gname extends MarketplacePluginBase implements DnsRecordsInterface {
     return new Registration(
       name: DomainName::normalize((string) $record['ym']),
       expires: self::timestamp($record['dqsj'] ?? NULL, self::TIMEZONE),
+      autoRenew: isset($record['zdxf']) ? (string) $record['zdxf'] === '1' : NULL,
       status: is_scalar($status) ? strtolower((string) $status) : NULL,
       registered: self::timestamp($record['zcsj'] ?? NULL, self::TIMEZONE),
     );
@@ -173,13 +183,12 @@ final class Gname extends MarketplacePluginBase implements DnsRecordsInterface {
   /**
    * {@inheritdoc}
    *
-   * GNAME's DNS answers on its gname-dns.com nameservers. Its list gives
-   * no TTL, so records read have none; a record switched off there comes
-   * marked so, and stays as it is.
+   * GNAME's DNS answers on its own nameservers (share-dns.com and
+   * share-dns.net). A record switched off there comes marked so, and stays
+   * as it is.
    */
   public function getDnsRecords(string $name): ?array {
-    $nameservers = strtolower((string) ($this->client()->getDomainInfo($name)['ymdns'] ?? ''));
-    if (!str_contains($nameservers, 'gname-dns.com')) {
+    if (!$this->usesOwnDns($this->client()->getDomainInfo($name))) {
       return NULL;
     }
     $records = [];
@@ -190,11 +199,74 @@ final class Gname extends MarketplacePluginBase implements DnsRecordsInterface {
         host: DnsRecord::relativeHost((string) ($item['zjt'] ?? '@'), $name),
         value: (string) ($item['jxz'] ?? ''),
         priority: $type === 'MX' && isset($item['mx']) ? (int) $item['mx'] : NULL,
+        ttl: isset($item['ttl']) && is_numeric($item['ttl']) ? (int) $item['ttl'] : NULL,
         id: isset($item['id']) ? (string) $item['id'] : NULL,
         extra: (string) ($item['zt'] ?? '1') === '2' ? ['off' => '1'] : [],
       );
     }
     return $records;
+  }
+
+  /**
+   * Whether a domain's details show it on GNAME's own DNS.
+   */
+  protected function usesOwnDns(array $info): bool {
+    if (isset($info['isbzdns']) && (string) $info['isbzdns'] === '1') {
+      return TRUE;
+    }
+    foreach (self::splitNameservers((string) ($info['ymdns'] ?? '')) as $host) {
+      foreach (self::DNS_HOSTS as $suffix) {
+        if ($host === $suffix || str_ends_with($host, '.' . $suffix)) {
+          return TRUE;
+        }
+      }
+    }
+    return FALSE;
+  }
+
+  /**
+   * Returns the nameservers in a comma-separated list, in lowercase.
+   *
+   * @return string[]
+   *   The host names.
+   */
+  protected static function splitNameservers(string $list): array {
+    return array_values(array_filter(array_map(fn(string $host) => rtrim(strtolower(trim($host)), '.'), explode(',', $list))));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getNameservers(string $name): array {
+    return self::splitNameservers((string) ($this->client()->getDomainInfo($name)['ymdns'] ?? ''));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setNameservers(string $name, array $nameservers): void {
+    $this->client()->setNameservers($name, $nameservers);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setTransferLock(string $name, bool $locked): void {
+    throw new ProviderException('The GNAME API cannot change the transfer lock; change it in the GNAME account.');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setAutoRenew(string $name, bool $auto_renew): void {
+    throw new ProviderException('The GNAME API cannot change auto-renew; change it in the GNAME account.');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAuthCode(string $name): string {
+    throw new ProviderException('The GNAME API gives auth codes only for a transfer out; get one in the GNAME account.');
   }
 
   /**
