@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 use GuzzleHttp\Psr7\Response;
 use Drupal\commerce_domains\Clients\GoDaddyClient;
 use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\GoDaddy;
 use Drupal\commerce_domains\Registration;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -140,6 +141,7 @@ class GoDaddyTest extends ProviderTestBase {
       self::json(['recordId' => 'new1'], 201),
       self::json(['recordId' => 'a1']),
     ]);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
     $records = $plugin->getDnsRecords('a.com');
     $this->assertEquals([
       new DnsRecord('A', '@', '192.0.2.1', ttl: 600, id: 'a1'),

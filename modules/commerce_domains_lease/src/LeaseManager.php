@@ -10,6 +10,7 @@ use Drupal\commerce_domains_lease\Entity\LeaseInterface;
 use Drupal\commerce_domains_lease\Plugin\AdvancedQueue\JobType\LeaseChargeJob;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_payment\Entity\PaymentGatewayInterface;
+use Drupal\commerce_payment\Entity\PaymentInterface;
 use Drupal\commerce_payment\Entity\PaymentMethodInterface;
 use Drupal\commerce_payment\Exception\PaymentGatewayException;
 use Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\SupportsStoredPaymentMethodsInterface;
@@ -293,6 +294,7 @@ class LeaseManager {
       'payment_gateway' => $gateway->id(),
       'order_id' => $order->id(),
     ]);
+    assert($payment instanceof PaymentInterface);
     $payment->setAmount($amount);
     $payment->setState('completed');
     $payment->save();

@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\NamecheapClient;
 use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Namecheap;
 use Drupal\commerce_domains\ProviderException;
@@ -157,6 +158,7 @@ class NamecheapTest extends ProviderTestBase {
       $result('namecheap.domains.dns.getHosts', '<DomainDNSGetHostsResult Domain="b.com" IsUsingOurDNS="false" />'),
       $result('namecheap.domains.dns.setHosts', '<DomainDNSSetHostsResult Domain="a.co.uk" IsSuccess="true" />'),
     ]);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
     $records = $plugin->getDnsRecords('a.co.uk');
     $this->assertEquals([
       new DnsRecord('A', '@', '192.0.2.1', ttl: 1800, id: '12'),

@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Clients\NameSiloClient;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\NameSilo;
 use Drupal\commerce_domains\ProviderException;
@@ -255,6 +256,7 @@ class NameSiloTest extends ProviderTestBase {
       self::json(self::reply(['record_id' => 'r3'])),
       self::json(self::reply(['record_id' => 'r4'])),
     ]);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
     $records = $plugin->getDnsRecords('a.com');
     $this->assertEquals([
       new DnsRecord('A', '@', '192.0.2.1', ttl: 7207, id: 'r1'),

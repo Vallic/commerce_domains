@@ -45,6 +45,8 @@ class ProductTabsTest extends OwnerKernelTestBase {
   public function testOrderAndOperations(): void {
     $this->installConfig(['system']);
     $this->setUpCurrentUser([], [], TRUE);
+    // Views reads its route names, which a router build records.
+    $this->container->get('router.builder')->rebuild();
     $definitions = $this->container->get('plugin.manager.menu.local_task')->getDefinitions();
     $weights = array_map(fn(string $id) => $definitions[$id]['weight'], [
       'entity.entity_tasks:entity.commerce_product.edit_form',

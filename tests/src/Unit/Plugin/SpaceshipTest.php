@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 use GuzzleHttp\Psr7\Response;
 use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\PaymentLink;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\PaymentLinksInterface;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
@@ -241,6 +242,7 @@ class SpaceshipTest extends ProviderTestBase {
       new Response(204),
       new Response(204),
     ]);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
     $records = $plugin->getDnsRecords('a.com');
     $this->assertCount(4, $records, "Spaceship's product records are left out.");
     $this->assertEquals(new DnsRecord('A', '@', '192.0.2.1', ttl: 3600), $records[0]);

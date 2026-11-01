@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\GnameClient;
 use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Gname;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
@@ -208,6 +209,7 @@ class GnameTest extends ProviderTestBase {
       $ours,
       $zone,
     ]);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
     $records = $plugin->getDnsRecords('a.com');
     $this->assertEquals([
       new DnsRecord('A', '@', '192.0.2.1', id: '1'),

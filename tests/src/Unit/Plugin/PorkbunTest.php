@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\PorkbunClient;
 use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Porkbun;
 use Drupal\commerce_domains\ProviderException;
@@ -143,6 +144,7 @@ class PorkbunTest extends ProviderTestBase {
       self::json(['status' => 'SUCCESS', 'id' => '104']),
       self::json(['status' => 'SUCCESS']),
     ]);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
     $records = $plugin->getDnsRecords('a.com');
     $this->assertEquals([
       new DnsRecord('A', '@', '192.0.2.1', ttl: 600, id: '101'),

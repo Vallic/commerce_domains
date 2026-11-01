@@ -157,7 +157,7 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
     }
     $records = [];
     foreach ($this->client()->listDnsRecords($name) as $item) {
-      if (!is_array($item) || ($item['group']['type'] ?? 'custom') !== 'custom') {
+      if (($item['group']['type'] ?? 'custom') !== 'custom') {
         continue;
       }
       $type = strtoupper((string) ($item['type'] ?? ''));
