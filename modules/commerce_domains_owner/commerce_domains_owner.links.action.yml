@@ -3,3 +3,14 @@ commerce_domains_owner.sales_import:
   route_name: commerce_domains_owner.sales_import
   appears_on:
     - commerce_domains_owner.profit
+commerce_domains_owner.renewal_import:
+  title: 'Import renewals'
+  route_name: commerce_domains_owner.renewal_import
+  appears_on:
+    - commerce_domains_owner.expenses
+    - entity.commerce_domains_renewal.collection
+commerce_domains_owner.renewal_add:
+  title: 'Add a renewal'
+  route_name: entity.commerce_domains_renewal.add_form
+  appears_on:
+    - entity.commerce_domains_renewal.collection

@@ -16,14 +16,20 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  *
  * Profit is what the seller received (the sale price less the marketplace's
  * commission) minus the purchase price minus the renewals paid.
- * Renewals paid is the yearly renewal cost times the renewals while the
- * domain was held: one on each anniversary of its expiry date (or, without
- * one, of its purchase date) after the purchase, up to the sale. Without a
- * purchase date no renewals count. A domain without a renewal cost of its
- * own takes the default for its extension (Domain portfolio settings);
- * without either, renewals cost nothing. Costs in another currency than the
- * sale are converted at Commerce Exchanger's current rates when it is
- * installed.
+ *
+ * Renewals paid are the renewals recorded while the domain was held, at what
+ * they cost (see RenewalHistory), and an estimate for the years they don't
+ * cover. A domain renews on each anniversary of its expiry date (or, without
+ * one, of its purchase date) after the purchase, up to the sale; those not
+ * covered by a record count at the yearly cost, the oldest first, since
+ * records usually start when a domain reached the registrar they came from.
+ * Without a purchase date no anniversaries count.
+ *
+ * The yearly cost is the domain's renewal cost, else what its latest recorded
+ * renewal cost a year, else the default for its extension (Domain portfolio
+ * settings); without any, an estimated renewal costs nothing. Costs in another
+ * currency than the sale are converted at Commerce Exchanger's current rates
+ * when it is installed.
  */
 class Costs {
 
@@ -31,26 +37,104 @@ class Costs {
     // Commerce Exchanger is optional.
     protected ?ExchangerCalculatorInterface $exchanger = NULL,
     protected ?ConfigFactoryInterface $configFactory = NULL,
+    protected ?RenewalHistory $history = NULL,
   ) {}
 
   /**
    * Returns what a domain costs to renew for a year.
    *
-   * Its own renewal cost, else the default for its extension.
+   * Its own renewal cost, else what its latest recorded renewal cost a year,
+   * else the default for its extension.
    */
   public function renewalCost(ProductInterface $product): ?Price {
-    $own = self::price($product, 'domain_renewal_cost');
-    if ($own || !$product->hasField('domain')) {
-      return $own;
+    $cost = self::price($product, 'domain_renewal_cost') ?? $this->history?->latestCost($product);
+    if ($cost || !$product->hasField('domain')) {
+      return $cost;
     }
     return $this->defaultRenewalCost((string) $product->get('domain')->value);
   }
 
   /**
-   * Whether a domain without a renewal cost of its own takes the default.
+   * Whether a domain's yearly cost is its extension's default.
    */
   public function renewsAtDefault(ProductInterface $product): bool {
-    return self::price($product, 'domain_renewal_cost') === NULL && $this->renewalCost($product) !== NULL;
+    return self::price($product, 'domain_renewal_cost') === NULL
+      && $this->history?->latestCost($product) === NULL
+      && $this->renewalCost($product) !== NULL;
+  }
+
+  /**
+   * Returns the renewals paid while a domain was held, recorded or estimated.
+   *
+   * A renewal recorded before the purchase was someone else's, and one after
+   * the end isn't this holding's. The day of the purchase counts: an import
+   * knows only the date.
+   *
+   * @param \Drupal\commerce_product\Entity\ProductInterface $product
+   *   The domain.
+   * @param int $until
+   *   When it sold, or now for a domain still held.
+   *
+   * @return array<int, array{time: int, years: int, amount: \Drupal\commerce_price\Price|null, estimated: bool}>
+   *   Oldest first. The amount is NULL when no cost is known.
+   */
+  public function renewalPayments(ProductInterface $product, int $until): array {
+    $purchased = self::time($product, 'domain_purchase_date');
+    $yearly = $this->renewalCost($product);
+    $payments = [];
+    $covered = 0;
+    foreach ($this->history?->forProduct($product) ?? [] as $renewal) {
+      $time = $renewal->getPaid();
+      if ($time > $until || ($purchased !== NULL && $time < $purchased - 86400)) {
+        continue;
+      }
+      $years = $renewal->getYears();
+      $amount = $renewal->getAmount();
+      $covered += $years;
+      $payments[] = [
+        'time' => $time,
+        'years' => $years,
+        'amount' => $amount ?? $yearly?->multiply((string) $years),
+        'estimated' => !$amount || $renewal->isEstimated(),
+      ];
+    }
+    if ($purchased !== NULL) {
+      $dates = self::renewalDates($purchased, $until, self::time($product, 'domain_expires'));
+      foreach (array_slice($dates, 0, max(0, count($dates) - $covered)) as $date) {
+        $payments[] = ['time' => $date, 'years' => 1, 'amount' => $yearly, 'estimated' => TRUE];
+      }
+    }
+    usort($payments, fn(array $a, array $b) => $a['time'] <=> $b['time']);
+    return $payments;
+  }
+
+  /**
+   * Adds up renewal payments in one amount.
+   *
+   * @param array $payments
+   *   Payments from renewalPayments().
+   * @param string|null $currency
+   *   The currency to convert to when they are in several.
+   *
+   * @return \Drupal\commerce_price\Price|null
+   *   The sum; NULL with no amounts, or without a rate between them.
+   */
+  public function renewalsTotal(array $payments, ?string $currency = NULL): ?Price {
+    $amounts = array_values(array_filter(array_column($payments, 'amount')));
+    if (!$amounts) {
+      return NULL;
+    }
+    $currencies = array_unique(array_map(fn(Price $price) => $price->getCurrencyCode(), $amounts));
+    $target = count($currencies) === 1 ? reset($currencies) : ($currency ?? reset($currencies));
+    $total = new Price('0', $target);
+    foreach ($amounts as $amount) {
+      $converted = $this->convert($amount, $target);
+      if (!$converted) {
+        return NULL;
+      }
+      $total = $total->add($converted);
+    }
+    return $total;
   }
 
   /**
@@ -77,10 +161,13 @@ class Costs {
     $sale = self::price($product, 'domain_sale_price');
     $purchase = self::price($product, 'domain_purchase_price');
     $renewal = $this->renewalCost($product);
-    $purchased = self::time($product, 'domain_purchase_date');
     $sold = self::time($product, 'domain_sold');
-    $renewals = $purchased !== NULL && $sold !== NULL ? self::renewals($purchased, $sold, self::time($product, 'domain_expires')) : 0;
-    $renewals_paid = $renewal?->multiply((string) $renewals);
+    $payments = $sold !== NULL ? $this->renewalPayments($product, $sold) : [];
+    $renewals = array_sum(array_column($payments, 'years'));
+    $renewals_paid = $this->renewalsTotal($payments, $sale?->getCurrencyCode());
+    // Amounts in currencies with no rate between them can't be added up.
+    $unknown = !$renewals_paid && array_filter(array_column($payments, 'amount'));
+    $renewals_paid ??= $unknown ? NULL : $renewal?->multiply('0');
 
     $percent = $product->hasField('domain_sale_commission') ? (float) $product->get('domain_sale_commission')->value : 0.0;
     $commission = $sale && $percent > 0 ? new Price((string) round((float) $sale->getNumber() * $percent / 100, 2), $sale->getCurrencyCode()) : NULL;
@@ -96,6 +183,9 @@ class Costs {
     if ($cost && $renewals_paid) {
       $paid = $this->convert($renewals_paid, $currency);
       $cost = $paid ? $cost->add($paid) : NULL;
+    }
+    elseif ($unknown) {
+      $cost = NULL;
     }
     if (!$cost) {
       $problem = new TranslatableMarkup('The costs are in another currency than the sale, and there is no exchange rate for it.');

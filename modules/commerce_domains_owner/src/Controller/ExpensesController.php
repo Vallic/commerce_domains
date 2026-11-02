@@ -46,7 +46,10 @@ final class ExpensesController implements ContainerInjectionInterface {
     $settings = Url::fromRoute('commerce_domains_owner.settings')->toString();
 
     $build['intro'] = [
-      '#markup' => '<p>' . $this->t('Every domain counts, held or sold: its purchase in the year it was bought, and each renewal in the year it fell due, at its renewal cost or its extension\'s default (<a href=":settings">Domain portfolio settings</a>). Received is what sales brought after commission. Net is received less purchases and renewals, in each currency.', [':settings' => $settings]) . '</p>',
+      '#markup' => '<p>' . $this->t('Every domain counts, held or sold: its purchase in the year it was bought, and its renewals. <a href=":renewals">Renewals paid</a> count at what they cost, in the year they were paid; the years they do not cover are estimated from the renewal cost, the latest renewal paid, or the extension\'s default (<a href=":settings">Domain portfolio settings</a>). Received is what sales brought after commission. Net is received less purchases and renewals, in each currency.', [
+        ':settings' => $settings,
+        ':renewals' => Url::fromRoute('entity.commerce_domains_renewal.collection')->toString(),
+      ]) . '</p>',
     ];
     $notes = [];
     if ($by_year['unpriced']) {
@@ -65,7 +68,10 @@ final class ExpensesController implements ContainerInjectionInterface {
         (string) $year,
         $total['bought'] ?: '',
         $this->amounts($total['purchases']),
-        $total['renewals'] ?: '',
+        $total['estimated'] ? $this->t('@count (@estimated estimated)', [
+          '@count' => $total['renewals'],
+          '@estimated' => $total['estimated'],
+        ]) : ($total['renewals'] ?: ''),
         $this->amounts($total['renewal_costs']),
         $total['sold'] ?: '',
         $this->amounts($total['received']),

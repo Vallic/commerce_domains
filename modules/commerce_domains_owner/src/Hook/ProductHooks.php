@@ -7,10 +7,13 @@ namespace Drupal\commerce_domains_owner\Hook;
 use CommerceGuys\Intl\Formatter\CurrencyFormatterInterface;
 use Drupal\commerce_domains\Availability;
 use Drupal\commerce_domains_owner\Costs;
+use Drupal\commerce_domains_owner\Entity\DomainRenewal;
 use Drupal\commerce_domains_owner\Plugin\Commerce\EntityTrait\DomainCosts;
+use Drupal\commerce_domains_owner\RenewalHistory;
 use Drupal\commerce_domains_owner\Renewals;
 use Drupal\commerce_domains_owner\SaleRecorder;
 use Drupal\commerce_product\Entity\ProductInterface;
+use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Entity\ContentEntityFormInterface;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Form\FormStateInterface;
@@ -54,6 +57,8 @@ class ProductHooks {
     protected Availability $availability,
     protected Costs $costs,
     protected CurrencyFormatterInterface $currencyFormatter,
+    protected RenewalHistory $history,
+    protected TimeInterface $time,
   ) {}
 
   /**
@@ -76,6 +81,9 @@ class ProductHooks {
     }
     $form_object = $form_state->getFormObject();
     $product = $form_object instanceof ContentEntityFormInterface ? $form_object->getEntity() : NULL;
+    if ($product instanceof ProductInterface && $form_object->getOperation() === 'domain_costs') {
+      $form['renewals_paid'] = $this->renewalsPaid($product);
+    }
     if (!$product instanceof ProductInterface || $form_object->getOperation() !== 'domain_sale' || $product->get('domain_sold')->isEmpty()) {
       return;
     }
@@ -95,6 +103,50 @@ class ProductHooks {
       '#limit_validation_errors' => [],
       '#button_type' => 'danger',
       '#weight' => 20,
+    ];
+  }
+
+  /**
+   * Builds the list of a domain's renewals paid, for its Costs tab.
+   */
+  protected function renewalsPaid(ProductInterface $product): array {
+    $rows = [];
+    foreach (array_reverse($this->history->forProduct($product)) as $renewal) {
+      $amount = $renewal->getAmount();
+      $money = $amount ? $this->currencyFormatter->format($amount->getNumber(), $amount->getCurrencyCode()) : '';
+      $rows[] = [
+        date('Y-m-d', $renewal->getPaid()),
+        DomainRenewal::typeLabels()[$renewal->getType()] ?? $renewal->getType(),
+        $renewal->getYears(),
+        $renewal->isEstimated() ? $this->t('@amount (estimated)', ['@amount' => $money]) : $money,
+        $renewal->get('provider')->entity?->label() ?? '',
+      ];
+    }
+    $add = Url::fromRoute('entity.commerce_domains_renewal.add_form', [], ['query' => ['product' => $product->id()]]);
+    return [
+      '#type' => 'details',
+      '#title' => $this->t('Renewals paid'),
+      '#open' => (bool) $rows,
+      '#weight' => 90,
+      'table' => [
+        '#type' => 'table',
+        '#header' => [
+          $this->t('Paid on'),
+          $this->t('Type'),
+          $this->t('Years'),
+          $this->t('Amount'),
+          $this->t('Registrar'),
+        ],
+        '#rows' => $rows,
+        '#empty' => $this->t('None recorded: the renewals of this domain are estimated from its yearly cost.'),
+      ],
+      'add' => [
+        '#type' => 'link',
+        '#title' => $this->t('Add a renewal'),
+        '#url' => $add,
+        '#access' => $add->access(),
+      ],
+      '#cache' => ['tags' => ['commerce_domains_renewal_list']],
     ];
   }
 
@@ -133,7 +185,13 @@ class ProductHooks {
     }
     $default = $this->costs->defaultRenewalCost((string) $product->get('domain')->value);
     $settings = Url::fromRoute('commerce_domains_owner.settings')->toString();
-    if ($default) {
+    $latest = $this->history->latestCost($product);
+    if ($latest) {
+      $note = $this->t('Leave empty to use what its latest renewal cost, @amount a year.', [
+        '@amount' => $this->currencyFormatter->format($latest->getNumber(), $latest->getCurrencyCode()),
+      ]);
+    }
+    elseif ($default) {
       $amount = $this->currencyFormatter->format($default->getNumber(), $default->getCurrencyCode());
       $note = $this->t('Leave empty to use the default for its extension, @amount a year (<a href=":settings">Domain portfolio settings</a>).', [
         '@amount' => $amount,
@@ -190,12 +248,14 @@ class ProductHooks {
   /**
    * Implements hook_ENTITY_TYPE_update() for commerce_product.
    *
-   * Takes a domain off sale once its sale is entered by hand, so the
-   * marketplace syncs its save queued remove its listings. Sales recorded
-   * from an order or a marketplace leave that to them.
+   * Records the renewal a registrar sync shows. Takes a domain off sale once
+   * its sale is entered by hand, so the marketplace syncs its save queued
+   * remove its listings. Sales recorded from an order or a marketplace leave
+   * that to them.
    */
   #[Hook('commerce_product_update')]
   public function productUpdate(ProductInterface $product): void {
+    $this->history->recordFromSync($product, $this->costs->renewalCost($product), $this->time->getRequestTime());
     if ($product->isSyncing() || !$product->hasField('domain_sold') || $product->get('domain_sold')->isEmpty()) {
       return;
     }

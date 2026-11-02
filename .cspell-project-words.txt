@@ -23,6 +23,7 @@ cdcsv
 cdms
 cdmst
 cdrenew
+cdrenewals
 cdrs
 cdsales
 cdsimport

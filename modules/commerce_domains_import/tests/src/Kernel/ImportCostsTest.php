@@ -43,6 +43,7 @@ class ImportCostsTest extends ImportKernelTestBase {
     $this->installEntitySchema('profile');
     $this->installEntitySchema('commerce_order');
     $this->installEntitySchema('commerce_order_item');
+    $this->installEntitySchema('commerce_domains_renewal');
     $this->installSchema('commerce_number_pattern', ['commerce_number_pattern_sequence']);
     $this->installConfig(['system', 'commerce_order', 'commerce_domains_owner']);
     $this->container->get('module_handler')->loadInclude('commerce_domains_owner', 'install');

@@ -187,3 +187,13 @@ function commerce_domains_owner_update_11005(): void {
     $config->set('renewal_costs', [])->save();
   }
 }
+
+/**
+ * Adds the renewals paid.
+ */
+function commerce_domains_owner_update_11006(): void {
+  $manager = \Drupal::entityDefinitionUpdateManager();
+  if (!$manager->getEntityType('commerce_domains_renewal')) {
+    $manager->installEntityType(\Drupal::entityTypeManager()->getDefinition('commerce_domains_renewal'));
+  }
+}

@@ -14,10 +14,11 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
  * Adds up what the portfolio cost: purchases and renewals, by year.
  *
  * Every domain counts, held or sold: its purchase in the year it was bought,
- * and each renewal in the year it fell due, from the purchase up to the sale
- * (or today), at its renewal cost or its extension's default. Sales count
- * what was received, after the marketplace's commission. Amounts stay in
- * their currency; net is worked out for each.
+ * and its renewals from the purchase up to the sale (or today), those recorded
+ * in the year they were paid at what they cost, and an estimate for the years
+ * they don't cover (see Costs). Sales count what was received, after the
+ * marketplace's commission. Amounts stay in their currency; net is worked out
+ * for each.
  */
 class Expenses {
 
@@ -28,6 +29,7 @@ class Expenses {
     protected EntityTypeManagerInterface $entityTypeManager,
     protected DateFormatterInterface $dateFormatter,
     protected Costs $costs,
+    protected RenewalHistory $history,
   ) {}
 
   /**
@@ -36,16 +38,25 @@ class Expenses {
    * @param int $now
    *   Today, as a Unix time: renewals of domains still held count up to it.
    *
-   * @return array{years: array<int, array{bought: int, purchases: \Drupal\commerce_price\Price[], renewals: int, renewal_costs: \Drupal\commerce_price\Price[], sold: int, received: \Drupal\commerce_price\Price[]}>, unpriced: int, undated: int}
-   *   Totals keyed by year, latest first, amounts keyed by currency; and how
-   *   many domains have no purchase price, or a price but no purchase date
-   *   (whose renewals can't be counted).
+   * @return array{years: array<int, array{bought: int, purchases: \Drupal\commerce_price\Price[], renewals: int, estimated: int, renewal_costs: \Drupal\commerce_price\Price[], sold: int, received: \Drupal\commerce_price\Price[]}>, unpriced: int, undated: int}
+   *   Totals keyed by year, latest first, amounts keyed by currency, with how
+   *   many of the renewal years are estimated; and how many domains have no
+   *   purchase price, or a price but no purchase date (whose unrecorded
+   *   renewals can't be counted).
    */
   public function byYear(int $now): array {
     $years = [];
     $unpriced = 0;
     $undated = 0;
-    $row = ['bought' => 0, 'purchases' => [], 'renewals' => 0, 'renewal_costs' => [], 'sold' => 0, 'received' => []];
+    $row = [
+      'bought' => 0,
+      'purchases' => [],
+      'renewals' => 0,
+      'estimated' => 0,
+      'renewal_costs' => [],
+      'sold' => 0,
+      'received' => [],
+    ];
     $this->each(function (ProductInterface $product) use (&$years, &$unpriced, &$undated, $row, $now): void {
       $purchase = Costs::price($product, 'domain_purchase_price');
       $purchased = Costs::time($product, 'domain_purchase_date');
@@ -62,15 +73,13 @@ class Expenses {
         $years[$year]['bought']++;
         self::addTo($years[$year]['purchases'], $purchase);
       }
-      $renewal = $this->costs->renewalCost($product);
-      if ($purchased !== NULL) {
-        foreach (Costs::renewalDates($purchased, min($sold ?? $now, $now), Costs::time($product, 'domain_expires')) as $date) {
-          $year = $this->year($date);
-          $years[$year] ??= $row;
-          $years[$year]['renewals']++;
-          if ($renewal) {
-            self::addTo($years[$year]['renewal_costs'], $renewal);
-          }
+      foreach ($this->costs->renewalPayments($product, min($sold ?? $now, $now)) as $payment) {
+        $year = $this->year($payment['time']);
+        $years[$year] ??= $row;
+        $years[$year]['renewals'] += $payment['years'];
+        $years[$year]['estimated'] += $payment['estimated'] ? $payment['years'] : 0;
+        if ($payment['amount']) {
+          self::addTo($years[$year]['renewal_costs'], $payment['amount']);
         }
       }
       if ($sold !== NULL) {
@@ -131,14 +140,17 @@ class Expenses {
    */
   public function invested(ProductInterface $product, int $now): array {
     $purchase = Costs::price($product, 'domain_purchase_price');
-    $purchased = Costs::time($product, 'domain_purchase_date');
     $renewal = $this->costs->renewalCost($product);
-    $renewals = $purchased !== NULL ? Costs::renewals($purchased, $now, Costs::time($product, 'domain_expires')) : 0;
-    $paid = $renewal && $renewals ? $renewal->multiply((string) $renewals) : NULL;
+    $payments = $this->costs->renewalPayments($product, $now);
+    $renewals = array_sum(array_column($payments, 'years'));
+    $paid = $this->costs->renewalsTotal($payments, $purchase?->getCurrencyCode());
     $total = $purchase;
     if ($purchase && $paid) {
       $converted = $this->costs->convert($paid, $purchase->getCurrencyCode());
       $total = $converted ? $purchase->add($converted) : NULL;
+    }
+    elseif ($purchase && array_filter(array_column($payments, 'amount'))) {
+      $total = NULL;
     }
     return [
       'purchase' => $purchase,
@@ -179,6 +191,7 @@ class Expenses {
         }
       }
       $storage->resetCache($chunk);
+      $this->history->resetCache();
     }
   }
 

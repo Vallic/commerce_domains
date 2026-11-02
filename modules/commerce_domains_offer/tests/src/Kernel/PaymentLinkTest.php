@@ -65,6 +65,7 @@ class PaymentLinkTest extends DomainsKernelTestBase {
     $this->installEntitySchema('commerce_order');
     $this->installEntitySchema('commerce_order_item');
     $this->installEntitySchema('commerce_domains_offer');
+    $this->installEntitySchema('commerce_domains_renewal');
     $this->installSchema('commerce_number_pattern', ['commerce_number_pattern_sequence']);
     $this->installConfig([
       'system',

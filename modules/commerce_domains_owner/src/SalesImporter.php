@@ -50,6 +50,11 @@ class SalesImporter {
    * The delimiter (comma, semicolon or tab) is taken from the header row, or
    * from a "sep=" line before it, as spreadsheets write.
    *
+   * @param string $content
+   *   The file.
+   * @param array<string, string[]>|null $known
+   *   Accepted headers by the column they fill, instead of COLUMNS.
+   *
    * @return array<int, array<string, string>>
    *   The rows, keyed by the line they start on; each row's cells keyed by
    *   column (see COLUMNS), empty cells left out.
@@ -57,7 +62,7 @@ class SalesImporter {
    * @throws \InvalidArgumentException
    *   When there is no header row, or no column holds the domain.
    */
-  public static function parse(string $content): array {
+  public static function parse(string $content, ?array $known = NULL): array {
     // Spreadsheets save a byte order mark, and some old line endings.
     $content = str_replace(["\r\n", "\r"], "\n", preg_replace('/^\xEF\xBB\xBF/', '', $content) ?? $content);
     $line = 1;
@@ -85,7 +90,7 @@ class SalesImporter {
     $columns = [];
     foreach ($header as $index => $name) {
       $key = trim(preg_replace('/[^a-z0-9]+/', '_', strtolower(trim((string) $name))) ?? '', '_');
-      foreach (self::COLUMNS as $column => $names) {
+      foreach ($known ?? self::COLUMNS as $column => $names) {
         if (in_array($key, $names, TRUE) && !in_array($column, $columns, TRUE)) {
           $columns[$index] = $column;
         }

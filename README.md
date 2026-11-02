@@ -852,7 +852,34 @@ registrar where its API reports it, the way expiry dates do.
   ```sh
   drush commerce-domains:renewal-costs --dry-run
   drush cdrenew --replace
-  ``` Costs in another currency than the sale are converted at
+  ```
+
+  *Renewals paid* (under *Expenses*, and on each domain's Costs tab) holds
+  what renewals really cost: the date, the years paid for, the amount in the
+  currency charged, and the registrar. Profit and expenses count these, and
+  estimate only the anniversaries they don't cover, the oldest first. A
+  domain's yearly cost is its renewal cost, else what its latest recorded
+  renewal cost a year, else the default for its extension. A transfer counts
+  too, since it pays for a year.
+
+  *Import renewals* takes a CSV file with a header row: `domain` (required),
+  `date`, `amount` (optionally with its currency), `currency`, `years`,
+  `type`, `registrar` (a provider's ID or name) and `reference` (the order
+  number). Dynadot's order history can be uploaded as it is. A file with a
+  type column keeps only its renewals, transfers and restores, so
+  registrations, auctions and discounts are passed over. Rows imported before
+  add nothing, so a file can be imported again as it grows:
+
+  ```sh
+  drush commerce-domains:renewals-import dynadot_all.csv --dry-run
+  drush cdrenewals dynadot_all.csv
+  ```
+
+  When a registrar sync finds a domain's expiry date moved on by about a year
+  or more, it records a renewal marked estimated, at the yearly cost. Importing
+  what was charged replaces it.
+
+  Costs in another currency than the sale are converted at
   Commerce Exchanger's rates, when it is installed. A lease to own counts
   in full in the year it started, with the month its payments end; if the
   buyer stops paying, clear the sale fields and put the domain back on
