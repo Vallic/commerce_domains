@@ -76,9 +76,11 @@ class SalesReport {
         ['data' => $this->channel($product)],
         $this->soldFor($product, $profit->salePrice),
         $this->money($profit->purchasePrice),
-        $profit->renewalsPaid
-          ? $this->formatPlural($profit->renewals, '@paid (1 renewal)', '@paid (@count renewals)', $paid)
-          : '',
+        match (TRUE) {
+          $profit->renewalsPaid === NULL => '',
+          $this->costs->renewsAtDefault($product) => $this->formatPlural($profit->renewals, '@paid (1 renewal, default)', '@paid (@count renewals, default)', $paid),
+          default => $this->formatPlural($profit->renewals, '@paid (1 renewal)', '@paid (@count renewals)', $paid),
+        },
         $profit->profit ? $this->money($profit->profit) : $problem,
         ['data' => $this->operations($product)],
       ];

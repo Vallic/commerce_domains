@@ -47,6 +47,13 @@ class Costs {
   }
 
   /**
+   * Whether a domain without a renewal cost of its own takes the default.
+   */
+  public function renewsAtDefault(ProductInterface $product): bool {
+    return self::price($product, 'domain_renewal_cost') === NULL && $this->renewalCost($product) !== NULL;
+  }
+
+  /**
    * Returns the default yearly renewal cost of a domain's extension.
    *
    * The longest extension set that the domain ends with: co.uk before uk.

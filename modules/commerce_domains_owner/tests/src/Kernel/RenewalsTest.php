@@ -202,6 +202,16 @@ class RenewalsTest extends OwnerKernelTestBase {
     $this->assertSame('Off', (string) $form['domains']['#options'][$beta->id()]['auto_renew']);
     $this->assertSame('Unknown', (string) $form['domains']['#options'][$alpha->id()]['auto_renew']);
     $this->assertStringContainsString('$20.00', (string) $form['costs']['#markup']);
+    $this->assertSame('$12.00', (string) $form['domains']['#options'][$alpha->id()]['cost']);
+    $this->assertSame('', (string) $form['domains']['#options'][$gamma->id()]['cost']);
+    // A domain without a renewal cost of its own shows its extension's default.
+    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [
+      ['tld' => 'com', 'number' => '9', 'currency_code' => 'USD'],
+    ])->save();
+    $default = $form_builder->getForm(ExpiringForm::class)['domains']['#options'];
+    $this->assertSame('$9.00 (default)', (string) $default[$gamma->id()]['cost']);
+    $this->assertSame('$12.00', (string) $default[$alpha->id()]['cost']);
+    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [])->save();
     $this->assertFalse($form['actions']['keep']['#access']);
     $this->assertFalse($form['actions']['auto_renew_on']['#access']);
 

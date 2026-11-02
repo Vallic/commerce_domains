@@ -119,7 +119,11 @@ final class ExpiringForm extends FormBase {
           '@when' => Renewals::when($expires, $now),
         ]),
         'auto_renew' => $auto_renew === NULL ? $this->t('Unknown') : ($auto_renew ? $this->t('On') : $this->t('Off')),
-        'cost' => $cost ? $this->money($cost) : '',
+        'cost' => match (TRUE) {
+          $cost === NULL => '',
+          $this->costs->renewsAtDefault($product) => $this->t('@cost (default)', ['@cost' => $this->money($cost)]),
+          default => $this->money($cost),
+        },
         'decision' => Renewals::decisionLabel($product),
         'sale' => match (TRUE) {
           $this->forSale($product) => $this->t('For sale'),

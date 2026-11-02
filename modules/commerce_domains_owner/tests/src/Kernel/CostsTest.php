@@ -286,6 +286,22 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertSame(0, $totals[2026]['unknown']);
     $this->assertEquals(['USD' => new Price('450', 'USD')], $totals[2026]['profit']);
     $this->assertEquals(['USD' => new Price('1000', 'USD')], $totals[2025]['revenue']);
+
+    // Renewals at the extension's default say so; its own cost doesn't.
+    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [
+      ['tld' => 'com', 'number' => '12', 'currency_code' => 'USD'],
+    ])->save();
+    $renewed = $this->createDomain('Renewed.com', 1000, [
+      'domain_purchase_price' => new Price('10', 'USD'),
+      'domain_purchase_date' => $date('2020-03-01'),
+      'domain_expires' => $date('2024-03-01'),
+      'domain_sale_price' => new Price('500', 'USD'),
+      'domain_sold' => $date('2023-06-01'),
+    ]);
+    $paid = fn() => (string) array_values($report->table([(int) $renewed->id()])['#rows'])[0][5];
+    $this->assertSame('$36.00 (3 renewals, default)', $paid());
+    $renewed->set('domain_renewal_cost', new Price('10', 'USD'))->save();
+    $this->assertSame('$30.00 (3 renewals)', $paid());
   }
 
   /**

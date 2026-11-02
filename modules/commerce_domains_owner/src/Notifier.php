@@ -358,9 +358,11 @@ class Notifier {
       },
     ];
     $cost = $this->costs->renewalCost($product);
-    return $cost
-      ? (string) $this->t('@domain: expires @date (@when) at @registrar, @auto, renews for @cost.', $args + ['@cost' => $this->money($cost)], $options)
-      : (string) $this->t('@domain: expires @date (@when) at @registrar, @auto.', $args, $options);
+    return match (TRUE) {
+      $cost === NULL => (string) $this->t('@domain: expires @date (@when) at @registrar, @auto.', $args, $options),
+      $this->costs->renewsAtDefault($product) => (string) $this->t('@domain: expires @date (@when) at @registrar, @auto, renews for @cost (default).', $args + ['@cost' => $this->money($cost)], $options),
+      default => (string) $this->t('@domain: expires @date (@when) at @registrar, @auto, renews for @cost.', $args + ['@cost' => $this->money($cost)], $options),
+    };
   }
 
   /**

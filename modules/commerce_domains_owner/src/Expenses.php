@@ -146,7 +146,7 @@ class Expenses {
       'renewals_paid' => $paid,
       'total' => $total,
       'renewal' => $renewal,
-      'default' => $renewal !== NULL && Costs::price($product, 'domain_renewal_cost') === NULL,
+      'default' => $this->costs->renewsAtDefault($product),
     ];
   }
 

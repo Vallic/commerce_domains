@@ -234,13 +234,17 @@ class NotificationsTest extends OwnerKernelTestBase {
     ]);
     $this->createDomain('Far.com', 1000, ['domain_expires' => $this->now + 100 * $day]);
 
+    // Undecided.com has no renewal cost of its own: the .com default.
+    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [
+      ['tld' => 'com', 'number' => '9', 'currency_code' => 'USD'],
+    ])->save();
     $this->container->get('cron')->run();
     $mails = $this->ownerMails(Notifier::EXPIRING);
     $this->assertCount(1, $mails);
     $this->assertSame('3 domains expire within 60 days', (string) $mails[0]['subject']);
     $body = self::body($mails[0]);
     $this->assertStringContainsString("Decide whether to keep these:\n- Undecided.com: expires ", $body);
-    $this->assertStringContainsString('(in 10 days) at no registrar recorded, auto-renew on.', $body);
+    $this->assertStringContainsString('(in 10 days) at no registrar recorded, auto-renew on, renews for $9.00 (default).', $body);
     $this->assertStringContainsString("they don't renew automatically:\n- Manual.com: expires ", $body);
     $this->assertStringContainsString('auto-renew off, renews for $10.00.', $body);
     $this->assertStringContainsString("but the registrar renews them.\n- Charged.com: expires ", $body);
