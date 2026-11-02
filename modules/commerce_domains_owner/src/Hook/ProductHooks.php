@@ -15,7 +15,6 @@ use Drupal\commerce_domains_owner\SaleRecorder;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Entity\ContentEntityFormInterface;
-use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
@@ -81,7 +80,13 @@ class ProductHooks {
     }
     $form_object = $form_state->getFormObject();
     $product = $form_object instanceof ContentEntityFormInterface ? $form_object->getEntity() : NULL;
+    // The field stays, for what is imported, but is no longer edited: the
+    // registrar's costs and the renewals paid say it for most domains.
+    if (isset($form['domain_renewal_cost'])) {
+      $form['domain_renewal_cost']['#access'] = FALSE;
+    }
     if ($product instanceof ProductInterface && $form_object->getOperation() === 'domain_costs') {
+      $form['renewal_cost_note'] = $this->renewalCostNote($product);
       $form['renewals_paid'] = $this->renewalsPaid($product);
     }
     if (!$product instanceof ProductInterface || $form_object->getOperation() !== 'domain_sale' || $product->get('domain_sold')->isEmpty()) {
@@ -168,44 +173,32 @@ class ProductHooks {
   }
 
   /**
-   * Implements hook_field_widget_complete_form_alter().
-   *
-   * Says which default renewal cost a domain without its own takes, on the
-   * Costs tab and wherever else the field is edited.
+   * Says what a domain costs to renew a year, and where that comes from.
    */
-  #[Hook('field_widget_complete_form_alter')]
-  public function renewalCostWidgetAlter(array &$field_widget_complete_form, FormStateInterface $form_state, array $context): void {
-    $items = $context['items'] ?? NULL;
-    if (!$items instanceof FieldItemListInterface || $items->getFieldDefinition()->getName() !== 'domain_renewal_cost' || !isset($field_widget_complete_form['widget'][0])) {
-      return;
-    }
-    $product = $items->getEntity();
-    if (!$product instanceof ProductInterface || !$product->hasField('domain') || $product->get('domain')->isEmpty()) {
-      return;
-    }
-    $default = $this->costs->defaultRenewalCost((string) $product->get('domain')->value);
+  protected function renewalCostNote(ProductInterface $product): array {
+    $name = $product->hasField('domain') ? (string) $product->get('domain')->value : '';
+    $registrar = Costs::registrar($product);
+    $cost = $this->costs->renewalCost($product);
     $settings = Url::fromRoute('commerce_domains_owner.settings')->toString();
-    $latest = $this->history->latestCost($product);
-    if ($latest) {
-      $note = $this->t('Leave empty to use what its latest renewal cost, @amount a year.', [
-        '@amount' => $this->currencyFormatter->format($latest->getNumber(), $latest->getCurrencyCode()),
-      ]);
-    }
-    elseif ($default) {
-      $amount = $this->currencyFormatter->format($default->getNumber(), $default->getCurrencyCode());
-      $note = $this->t('Leave empty to use the default for its extension, @amount a year (<a href=":settings">Domain portfolio settings</a>).', [
-        '@amount' => $amount,
-        ':settings' => $settings,
-      ]);
-    }
-    else {
-      $note = $this->t('No default renewal cost is set for its extension; set one in the <a href=":settings">Domain portfolio settings</a>.', [':settings' => $settings]);
-    }
-    $element = &$field_widget_complete_form['widget'][0];
-    $element['#description'] = isset($element['#description']) && (string) $element['#description'] !== ''
-      ? ['#markup' => $element['#description'] . ' ' . $note]
-      : $note;
-    $field_widget_complete_form['#cache']['tags'][] = 'config:commerce_domains_owner.settings';
+    $args = [
+      '@amount' => $cost ? $this->currencyFormatter->format($cost->getNumber(), $cost->getCurrencyCode()) : '',
+      '@registrar' => ($product->hasField('domain_registrar') ? $product->get('domain_registrar')->entity?->label() : NULL) ?? '',
+      ':settings' => $settings,
+    ];
+    $note = match (TRUE) {
+      !$cost => $this->t('No renewal cost is known for its extension: set one in the <a href=":settings">Domain portfolio settings</a>.', $args),
+      Costs::price($product, 'domain_renewal_cost') !== NULL => $this->t('@amount a year, set on this domain.', $args),
+      $this->history->latestCost($product) !== NULL => $this->t('@amount a year, from its latest renewal.', $args),
+      $this->costs->registrarRenewalCost($name, $registrar) !== NULL => $this->t('@amount a year, the @registrar cost for its extension (<a href=":settings">Domain portfolio settings</a>).', $args),
+      default => $this->t('@amount a year, the default for its extension (<a href=":settings">Domain portfolio settings</a>).', $args),
+    };
+    return [
+      '#type' => 'item',
+      '#title' => $this->t('Renewal cost'),
+      '#markup' => $note,
+      '#weight' => 89,
+      '#cache' => ['tags' => ['config:commerce_domains_owner.settings']],
+    ];
   }
 
   /**

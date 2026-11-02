@@ -26,8 +26,9 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  * Without a purchase date no anniversaries count.
  *
  * The yearly cost is the domain's renewal cost, else what its latest recorded
- * renewal cost a year, else the default for its extension (Domain portfolio
- * settings); without any, an estimated renewal costs nothing. Costs in another
+ * renewal cost a year, else the default for its extension at its registrar,
+ * else the general default for its extension (Domain portfolio settings);
+ * without any, an estimated renewal costs nothing. Costs in another
  * currency than the sale are converted at Commerce Exchanger's current rates
  * when it is installed.
  */
@@ -51,7 +52,14 @@ class Costs {
     if ($cost || !$product->hasField('domain')) {
       return $cost;
     }
-    return $this->defaultRenewalCost((string) $product->get('domain')->value);
+    return $this->defaultRenewalCost((string) $product->get('domain')->value, self::registrar($product));
+  }
+
+  /**
+   * Returns the ID of a domain's registrar.
+   */
+  public static function registrar(ProductInterface $product): ?string {
+    return $product->hasField('domain_registrar') ? $product->get('domain_registrar')->target_id : NULL;
   }
 
   /**
@@ -140,12 +148,38 @@ class Costs {
   /**
    * Returns the default yearly renewal cost of a domain's extension.
    *
-   * The longest extension set that the domain ends with: co.uk before uk.
+   * The registrar's own for the extension, else the general one.
+   *
+   * @param string $name
+   *   The domain's name.
+   * @param string|null $registrar
+   *   The ID of its registrar, if known.
    */
-  public function defaultRenewalCost(string $name): ?Price {
+  public function defaultRenewalCost(string $name, ?string $registrar = NULL): ?Price {
+    $general = (array) $this->configFactory?->get('commerce_domains_owner.settings')->get('renewal_costs');
+    return $this->registrarRenewalCost($name, $registrar) ?? self::bestCost($general, $name);
+  }
+
+  /**
+   * Returns a registrar's own yearly renewal cost for a domain's extension.
+   */
+  public function registrarRenewalCost(string $name, ?string $registrar): ?Price {
+    if ($registrar === NULL) {
+      return NULL;
+    }
+    $costs = (array) $this->configFactory?->get('commerce_domains_owner.settings')->get('provider_renewal_costs');
+    return self::bestCost(array_filter($costs, fn(array $cost) => ($cost['provider'] ?? '') === $registrar), $name);
+  }
+
+  /**
+   * Returns the cost of the longest extension set that a domain ends with.
+   *
+   * So co.uk before uk.
+   */
+  protected static function bestCost(array $costs, string $name): ?Price {
     $name = strtolower($name);
     $best = NULL;
-    foreach ((array) $this->configFactory?->get('commerce_domains_owner.settings')->get('renewal_costs') as $cost) {
+    foreach ($costs as $cost) {
       $tld = (string) ($cost['tld'] ?? '');
       if ($tld !== '' && str_ends_with($name, '.' . $tld) && strlen($tld) > strlen((string) ($best['tld'] ?? ''))) {
         $best = $cost;

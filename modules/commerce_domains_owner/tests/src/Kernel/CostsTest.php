@@ -112,16 +112,17 @@ class CostsTest extends OwnerKernelTestBase {
     }
     $this->assertFalse($built['actions']['submit']['#access'], 'Valuation is only shown.');
 
-    // The renewal cost says which default it falls back to.
-    $render = function () use ($form_builder, $product): string {
-      $element = $form_builder->getForm($product, 'domain_costs')['domain_renewal_cost'];
-      return (string) $this->container->get('renderer')->renderInIsolation($element);
+    // The renewal cost isn't edited: the tab says what it is, and from where.
+    $note = function () use ($form_builder, $product): string {
+      $built = $form_builder->getForm($product, 'domain_costs');
+      $this->assertFalse($built['domain_renewal_cost']['#access']);
+      return (string) $built['renewal_cost_note']['#markup'];
     };
-    $this->assertStringContainsString('No default renewal cost is set', $render());
+    $this->assertStringContainsString('No renewal cost is known', $note());
     $this->config('commerce_domains_owner.settings')->set('renewal_costs', [
       ['tld' => 'com', 'number' => '10.99', 'currency_code' => 'USD'],
     ])->save();
-    $this->assertStringContainsString('the default for its extension, $10.99 a year', $render());
+    $this->assertStringContainsString('$10.99 a year, the default for its extension', $note());
     $this->assertSame('/product/' . $product->id() . '/sale', Url::fromRoute('commerce_domains.product_tab.domain_sale', ['commerce_product' => $product->id()])->toString());
 
     // Only the owner sees what domains cost, and only the manager edits it.

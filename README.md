@@ -783,7 +783,7 @@ expire, and the sale: what it sold for, when, through which marketplace,
 and for a lease to own the number of monthly payments. Each domain has
 tabs beside *Edit* for them, each with its own Save: *Registrar* (the
 registrar, expiry and registration date, with the account there below for
-registrars whose API manages domains), *Costs* (purchase, renewal cost,
+registrars whose API manages domains), *Costs* (purchase,
 auto-renew, keep or let expire), *Sale* and *Valuation* (shown only).
 Internal and Atom premium stay on Edit, which leaves the tabs' fields out;
 adding a domain still shows them. The registrar is chosen by hand for
@@ -840,7 +840,7 @@ registrar where its API reports it, the way expiry dates do.
   minus the renewals paid. Renewals paid is the yearly renewal cost times
   the renewals while the domain was held: one on each anniversary of its
   expiry date (or of its purchase date, without one) between the purchase
-  and the sale. A domain without a renewal cost of its own takes its
+  and the sale. A domain whose renewals aren't recorded takes its
   extension's default from *Default yearly renewal costs* in the Domain
   portfolio settings (one a line: `com 10.99 USD`, `co.uk 7 GBP`; the
   longest matching extension wins), which the Expiring soon page and the
@@ -854,13 +854,19 @@ registrar where its API reports it, the way expiry dates do.
   drush cdrenew --replace
   ```
 
+  Under *By registrar* on the same settings page, each registrar can have its
+  own list in the same form, for what it charges differently. A domain takes
+  its registrar's cost for its extension first, then the general one.
+
   *Renewals paid* (under *Expenses*, and on each domain's Costs tab) holds
   what renewals really cost: the date, the years paid for, the amount in the
   currency charged, and the registrar. Profit and expenses count these, and
   estimate only the anniversaries they don't cover, the oldest first. A
   domain's yearly cost is its renewal cost, else what its latest recorded
-  renewal cost a year, else the default for its extension. A transfer counts
-  too, since it pays for a year.
+  renewal cost a year, else its registrar's cost for its extension, else the
+  default. A transfer counts too, since it pays for a year. The Costs tab says
+  which applies. The renewal cost field stays for what CSV imports set, but is
+  no longer on the edit form.
 
   *Import renewals* takes a CSV file with a header row: `domain` (required),
   `date`, `amount` (optionally with its currency), `currency`, `years`,

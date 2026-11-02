@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_owner\Form;
 
+use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains_owner\Notifier;
 use Drupal\commerce_domains_owner\RenewalCostDefaults;
@@ -143,11 +145,32 @@ class SettingsForm extends ConfigFormBase {
     $form['renewal_costs'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Default yearly renewal costs'),
-      '#description' => $this->t("One extension a line, with what a year's renewal costs: <code>com 10.99 USD</code>, <code>co.uk 7 GBP</code>. A domain without a renewal cost of its own takes its extension's, for profit, the Expiring soon page and the digest."),
+      '#description' => $this->t("One extension a line, with what a year's renewal costs: <code>com 10.99 USD</code>, <code>co.uk 7 GBP</code>. A domain whose renewals aren't recorded takes its extension's, for profit, expenses, the Expiring soon page and the digest."),
       '#default_value' => implode("\n", $lines),
       '#rows' => 6,
       '#placeholder' => "com 10.99 USD\nnet 12.50 USD\nio 39 USD",
     ];
+    $registrars = $this->registrars();
+    $by_registrar = [];
+    foreach ((array) $this->config('commerce_domains_owner.settings')->get('provider_renewal_costs') as $cost) {
+      $by_registrar[$cost['provider']][] = $cost['tld'] . ' ' . $cost['number'] . ' ' . $cost['currency_code'];
+    }
+    $form['provider_renewal_costs'] = [
+      '#type' => 'details',
+      '#title' => $this->t('By registrar'),
+      '#description' => $this->t("What a registrar charges, where it differs from the costs above, in the same form. A domain takes its registrar's cost for its extension first."),
+      '#open' => (bool) $by_registrar,
+      '#tree' => TRUE,
+      '#access' => (bool) $registrars,
+    ];
+    foreach ($registrars as $id => $registrar) {
+      $form['provider_renewal_costs'][$id] = [
+        '#type' => 'textarea',
+        '#title' => $registrar->label(),
+        '#default_value' => implode("\n", $by_registrar[$id] ?? []),
+        '#rows' => 3,
+      ];
+    }
     $form['renewal_fill'] = [
       '#type' => 'details',
       '#title' => $this->t("Fill in from Porkbun's prices"),
@@ -171,28 +194,58 @@ class SettingsForm extends ConfigFormBase {
    */
   public function validateForm(array &$form, FormStateInterface $form_state): void {
     parent::validateForm($form, $form_state);
+    $form_state->set('renewal_costs', $this->parseCosts((string) $form_state->getValue('renewal_costs'), 'renewal_costs', $form_state));
+    $by_registrar = [];
+    foreach ((array) $form_state->getValue('provider_renewal_costs') as $id => $value) {
+      foreach ($this->parseCosts((string) $value, 'provider_renewal_costs][' . $id, $form_state) as $cost) {
+        $by_registrar[] = ['provider' => (string) $id] + $cost;
+      }
+    }
+    $form_state->set('provider_renewal_costs', $by_registrar);
+  }
+
+  /**
+   * Reads costs, one extension a line, and flags the lines that aren't.
+   *
+   * @return array<int, array{tld: string, number: string, currency_code: string}>
+   *   The costs, by extension.
+   */
+  protected function parseCosts(string $value, string $element, FormStateInterface $form_state): array {
     $costs = [];
     $currencies = $this->entityTypeManager->getStorage('commerce_currency');
-    foreach (preg_split('/\R/', (string) $form_state->getValue('renewal_costs')) as $number => $line) {
+    foreach (preg_split('/\R/', $value) as $number => $line) {
       $line = trim($line);
       if ($line === '') {
         continue;
       }
       $args = ['@line' => $number + 1, '%text' => $line];
       if (!preg_match('/^\.?([a-z0-9-]+(?:\.[a-z0-9-]+)*)\s+(\d+(?:[.,]\d{1,2})?)\s+([A-Za-z]{3})$/i', $line, $match)) {
-        $form_state->setErrorByName('renewal_costs', $this->t('Line @line, %text: write the extension, the amount and the currency, e.g. com 10.99 USD.', $args));
+        $form_state->setErrorByName($element, $this->t('Line @line, %text: write the extension, the amount and the currency, e.g. com 10.99 USD.', $args));
         continue;
       }
       $currency = strtoupper($match[3]);
       if (!$currencies->load($currency)) {
-        $form_state->setErrorByName('renewal_costs', $this->t('Line @line, %text: the currency is not on the site.', $args));
+        $form_state->setErrorByName($element, $this->t('Line @line, %text: the currency is not on the site.', $args));
         continue;
       }
       $tld = strtolower($match[1]);
       $costs[$tld] = ['tld' => $tld, 'number' => str_replace(',', '.', $match[2]), 'currency_code' => $currency];
     }
     ksort($costs);
-    $form_state->set('renewal_costs', array_values($costs));
+    return array_values($costs);
+  }
+
+  /**
+   * Returns the providers that hold domains.
+   *
+   * @return \Drupal\commerce_domains\Entity\ProviderInterface[]
+   *   Keyed by ID.
+   */
+  protected function registrars(): array {
+    return array_filter(
+      $this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple(),
+      fn($provider) => $provider instanceof ProviderInterface && $provider->hasCapability(RegistrarInterface::class),
+    );
   }
 
   /**
@@ -200,7 +253,10 @@ class SettingsForm extends ConfigFormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state): void {
     parent::submitForm($form, $form_state);
-    $this->config('commerce_domains_owner.settings')->set('renewal_costs', $form_state->get('renewal_costs') ?? [])->save();
+    $this->config('commerce_domains_owner.settings')
+      ->set('renewal_costs', $form_state->get('renewal_costs') ?? [])
+      ->set('provider_renewal_costs', $form_state->get('provider_renewal_costs') ?? [])
+      ->save();
   }
 
   /**

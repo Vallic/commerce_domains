@@ -197,3 +197,13 @@ function commerce_domains_owner_update_11006(): void {
     $manager->installEntityType(\Drupal::entityTypeManager()->getDefinition('commerce_domains_renewal'));
   }
 }
+
+/**
+ * Adds the registrars' own renewal costs.
+ */
+function commerce_domains_owner_update_11007(): void {
+  $config = \Drupal::configFactory()->getEditable('commerce_domains_owner.settings');
+  if ($config->get('provider_renewal_costs') === NULL) {
+    $config->set('provider_renewal_costs', [])->save();
+  }
+}

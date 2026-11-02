@@ -8,10 +8,12 @@ use Drupal\commerce_domains_owner\Costs;
 use Drupal\commerce_domains_owner\Entity\DomainRenewal;
 use Drupal\commerce_domains_owner\Entity\DomainRenewalInterface;
 use Drupal\commerce_domains_owner\Expenses;
+use Drupal\commerce_domains_owner\Form\SettingsForm;
 use Drupal\commerce_domains_owner\RenewalHistory;
 use Drupal\commerce_domains_owner\RenewalImporter;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductInterface;
+use Drupal\Core\Form\FormState;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -229,6 +231,55 @@ class RenewalHistoryTest extends OwnerKernelTestBase {
   }
 
   /**
+   * Tests the registrars' own costs, and where a domain's cost comes from.
+   */
+  public function testRegistrarCosts(): void {
+    $this->setUpCurrentUser([], [], TRUE);
+    $this->createProvider('dynadot');
+    $this->createProvider('other');
+    $form_builder = $this->container->get('form_builder');
+    $form_state = (new FormState())->setValues([
+      'renewal_costs' => "com 11.81 USD\nio 51.80 USD",
+      'provider_renewal_costs' => ['dynadot' => "com 10,88 USD\n.co.uk 7 EUR", 'other' => ''],
+    ]);
+    $form_builder->submitForm(SettingsForm::class, $form_state);
+    $this->assertSame([], $form_state->getErrors());
+    $settings = $this->config('commerce_domains_owner.settings');
+    $this->assertCount(2, $settings->get('provider_renewal_costs'));
+    $this->assertSame(['provider' => 'dynadot', 'tld' => 'co.uk', 'number' => '7', 'currency_code' => 'EUR'], $settings->get('provider_renewal_costs')[0]);
+    $built = $form_builder->getForm(SettingsForm::class);
+    $this->assertSame("co.uk 7 EUR\ncom 10.88 USD", $built['provider_renewal_costs']['dynadot']['#default_value']);
+    $form_state = (new FormState())->setValues([
+      'renewal_costs' => '',
+      'provider_renewal_costs' => ['dynadot' => 'com ten USD'],
+    ]);
+    $form_builder->submitForm(SettingsForm::class, $form_state);
+    $this->assertArrayHasKey('provider_renewal_costs][dynadot', $form_state->getErrors());
+    $this->assertCount(2, $this->config('commerce_domains_owner.settings')->get('provider_renewal_costs'), 'Nothing saved.');
+
+    $costs = $this->container->get(Costs::class);
+    $at = $this->createDomain('At.com', 1000, ['domain_registrar' => 'dynadot']);
+    $elsewhere = $this->createDomain('Elsewhere.com', 1000, ['domain_registrar' => 'other']);
+    $none = $this->createDomain('None.com');
+    $io = $this->createDomain('At.io', 1000, ['domain_registrar' => 'dynadot']);
+    $this->assertEquals(new Price('10.88', 'USD'), $costs->renewalCost($at), "The registrar's.");
+    $this->assertEquals(new Price('11.81', 'USD'), $costs->renewalCost($elsewhere), 'Nothing at that registrar: the general one.');
+    $this->assertEquals(new Price('11.81', 'USD'), $costs->renewalCost($none));
+    $this->assertEquals(new Price('51.80', 'USD'), $costs->renewalCost($io), 'Not that extension at that registrar.');
+    $this->assertTrue($costs->renewsAtDefault($at));
+
+    $this->container->get('router.builder')->rebuild();
+    $note = fn(ProductInterface $product) => (string) $this->container->get('entity.form_builder')->getForm($product, 'domain_costs')['renewal_cost_note']['#markup'];
+    $this->assertStringContainsString('$10.88 a year, the Dynadot cost', $note($at));
+    $this->assertStringContainsString('$11.81 a year, the default', $note($elsewhere));
+    $this->renewal($at, '2026-02-01', new Price('9', 'USD'));
+    $this->assertStringContainsString('$9.00 a year, from its latest renewal', $note($at));
+    $at->set('domain_renewal_cost', new Price('20', 'USD'))->save();
+    $this->assertStringContainsString('$20.00 a year, set on this domain', $note($at));
+    $this->assertEquals(new Price('20', 'USD'), $costs->renewalCost($at), 'The field still counts.');
+  }
+
+  /**
    * Tests the Costs tab and the form that adds a renewal by hand.
    */
   public function testForms(): void {
@@ -248,6 +299,37 @@ class RenewalHistoryTest extends OwnerKernelTestBase {
     foreach (['product', 'paid', 'years', 'amount', 'provider', 'type', 'estimated'] as $field) {
       $this->assertArrayHasKey($field, $form);
     }
+    $this->assertNotFalse($form['product']['#access'] ?? TRUE, 'Reached from the list: pick the domain.');
+
+    // From the domain's Costs tab: it is that domain, with nothing to pick.
+    $request = $this->container->get('request_stack')->getCurrentRequest();
+    $request->query->set('product', (string) $product->id());
+    $form = $form_builder->getForm(DomainRenewal::create(), 'add');
+    $this->assertFalse($form['product']['#access']);
+    $this->assertStringContainsString('Tab.com', (string) $form['#title']);
+    $form_state = (new FormState())->setValues([
+      'paid' => [['value' => ['date' => '2026-03-01', 'time' => '12:00:00']]],
+      'years' => [['value' => 2]],
+      'amount' => [['number' => '20', 'currency_code' => 'USD']],
+      'type' => 'renewal',
+      'op' => 'Save',
+    ]);
+    $form_object = $this->container->get('entity_type.manager')->getFormObject('commerce_domains_renewal', 'add');
+    $form_object->setEntity(DomainRenewal::create());
+    $this->container->get('form_builder')->submitForm($form_object, $form_state);
+    $this->assertSame([], $form_state->getErrors());
+    $saved = $this->container->get(RenewalHistory::class)->forProduct($product);
+    $this->assertCount(2, $saved);
+    $this->assertSame(2, $saved[1]->getYears());
+    // A programmed submission doesn't redirect: ask where it would have gone.
+    $form_state->setProgrammed(FALSE);
+    $this->assertSame('commerce_domains.product_tab.domain_costs', $form_state->getRedirect()->getRouteName());
+    $request->query->remove('product');
+
+    // Editing keeps its domain.
+    $form = $form_builder->getForm($saved[1], 'edit');
+    $this->assertFalse($form['product']['#access']);
+
     $list = $this->container->get('entity_type.manager')->getListBuilder('commerce_domains_renewal')->render();
     $this->assertStringContainsString('tab.com', (string) $this->container->get('renderer')->renderInIsolation($list));
   }
