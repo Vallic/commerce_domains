@@ -5,6 +5,8 @@ antibot
 appkey
 arial
 autorenew
+badfee
+badvia
 bcadd
 bccomp
 bcdiv
@@ -28,6 +30,7 @@ cdrs
 cdsales
 cdsimport
 daaz
+delists
 dmarc
 dnsowl
 dnx
@@ -76,7 +79,9 @@ nameclub
 namesilo
 nolease
 nontransitional
+nosale
 notatld
+notcom
 onbold
 outro
 porkbun
@@ -107,6 +112,7 @@ unstoppabledomains
 untick
 unticked
 upserting
+vallic
 vcard
 whois
 xlid
