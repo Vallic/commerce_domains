@@ -840,23 +840,22 @@ registrar where its API reports it, the way expiry dates do.
   minus the renewals paid. Renewals paid is the yearly renewal cost times
   the renewals while the domain was held: one on each anniversary of its
   expiry date (or of its purchase date, without one) between the purchase
-  and the sale. A domain whose renewals aren't recorded takes its
-  extension's default from *Default yearly renewal costs* in the Domain
-  portfolio settings (one a line: `com 10.99 USD`, `co.uk 7 GBP`; the
-  longest matching extension wins), which the Expiring soon page and the
-  digest use too. *Fill in from Porkbun's prices* there adds, for each
-  extension of your domains without a cost yet, what a year's renewal costs
-  at Porkbun in US dollars, from its public price list (no API key needed);
-  change any you pay differently. Drush does the same:
+  and the sale. A domain whose renewals aren't recorded takes the cost of its
+  extension from the *Renewal costs* tab, which the Expiring soon page and the
+  digest use too: a table with a row for each extension, its registrar (or any)
+  and what a year costs, in any currency. A domain takes its registrar's cost
+  for the longest extension it ends with, else the general one. *Import renewal
+  costs* there previews and saves a CSV file (`extension`, `renewal`,
+  `currency`, `registrar`), the account's prices from a registrar that reports
+  them (Dynadot, Porkbun), or Porkbun's public prices as the general costs,
+  which need no API key and fill only the gaps unless told to replace. Lists
+  fill the extensions of your domains. Drush does the same:
 
   ```sh
-  drush commerce-domains:renewal-costs --dry-run
-  drush cdrenew --replace
+  drush commerce-domains:renewal-costs --from=dynadot --dry-run
+  drush cdrenew --from=porkbun_public --replace
+  drush cdrenew costs.csv
   ```
-
-  Under *By registrar* on the same settings page, each registrar can have its
-  own list in the same form, for what it charges differently. A domain takes
-  its registrar's cost for its extension first, then the general one.
 
   *Renewals paid* (under *Expenses*, and on each domain's Costs tab) holds
   what renewals really cost: the date, the years paid for, the amount in the

@@ -48,6 +48,36 @@ class DynadotClientTest extends ClientTestBase {
   }
 
   /**
+   * Tests reading the account's renewal prices across pages.
+   */
+  public function testRenewalPrices(): void {
+    $row = fn(string $tld, string $renew) => [
+      'Tld' => $tld,
+      'Price' => ['Unit' => '(Price/1 year)', 'Register' => '1.00', 'Renew' => $renew],
+    ];
+    $page = fn(array $rows) => self::json([
+      'TldPriceResponse' => ['ResponseCode' => 0, 'Status' => 'success', 'Currency' => 'USD', 'TldPrice' => $rows],
+    ]);
+    $client = $this->client([
+      $page(array_map(fn(int $i) => $row(".t$i", '5.06'), range(1, 500))),
+      $page([$row('.CO.UK', '7.25'), $row('.none', '--')]),
+    ]);
+    $prices = $client->renewalPrices('USD');
+    $this->assertCount(501, $prices);
+    $this->assertSame('5.06', $prices['t1']);
+    $this->assertSame('7.25', $prices['co.uk']);
+    $this->assertArrayNotHasKey('none', $prices, 'No price, no row.');
+    $this->assertSame([
+      'key' => 'DynKey77',
+      'command' => 'tld_price',
+      'currency' => 'USD',
+      'count_per_page' => '500',
+      'page_index' => '2',
+      'sort' => 'NameAsc',
+    ], $this->query(1));
+  }
+
+  /**
    * Tests stopping when the API ignores the page parameter.
    */
   public function testRepeatedPageStopsPaging(): void {

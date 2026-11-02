@@ -105,8 +105,13 @@ class Appraiser {
       array_map(fn(string $signal) => '− ' . $signal, $appraisal->negative),
     );
     $product->set('domain_appraisal', $appraisal->value === NULL ? NULL : new Price((string) $appraisal->value, 'USD'));
-    $product->set('domain_appraisal_score', $appraisal->score);
-    $product->set('domain_tld_count', $appraisal->tldCount);
+    // An answer without these keeps what is known, e.g. from an import.
+    if ($appraisal->score !== NULL) {
+      $product->set('domain_appraisal_score', $appraisal->score);
+    }
+    if ($appraisal->tldCount !== NULL) {
+      $product->set('domain_tld_count', $appraisal->tldCount);
+    }
     $product->set('domain_appraised', $this->time->getRequestTime());
     $product->set('domain_appraisal_notes', $notes ? implode("\n", $notes) : NULL);
     // An appraisal isn't an edit: keep the changed time.

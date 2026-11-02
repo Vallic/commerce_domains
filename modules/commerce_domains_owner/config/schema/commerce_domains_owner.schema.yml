@@ -36,38 +36,3 @@ commerce_domains_owner.settings:
     appraisals_per_day:
       type: integer
       label: 'Domains appraised a day'
-    renewal_costs:
-      type: sequence
-      label: 'Default yearly renewal costs, for domains without their own'
-      sequence:
-        type: mapping
-        label: 'Renewal cost of an extension'
-        mapping:
-          tld:
-            type: string
-            label: 'Extension, e.g. com or co.uk'
-          number:
-            type: string
-            label: 'Amount'
-          currency_code:
-            type: string
-            label: 'Currency'
-    provider_renewal_costs:
-      type: sequence
-      label: "Registrars' own yearly renewal costs, before the defaults"
-      sequence:
-        type: mapping
-        label: "Renewal cost of an extension at a registrar"
-        mapping:
-          provider:
-            type: string
-            label: 'Provider ID'
-          tld:
-            type: string
-            label: 'Extension, e.g. com or co.uk'
-          number:
-            type: string
-            label: 'Amount'
-          currency_code:
-            type: string
-            label: 'Currency'

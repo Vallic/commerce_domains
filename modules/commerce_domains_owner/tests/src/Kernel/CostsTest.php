@@ -119,9 +119,9 @@ class CostsTest extends OwnerKernelTestBase {
       return (string) $built['renewal_cost_note']['#markup'];
     };
     $this->assertStringContainsString('No renewal cost is known', $note());
-    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [
-      ['tld' => 'com', 'number' => '10.99', 'currency_code' => 'USD'],
-    ])->save();
+    $this->setRenewalCosts([
+      ['com', '10.99'],
+    ]);
     $this->assertStringContainsString('$10.99 a year, the default for its extension', $note());
     $this->assertSame('/product/' . $product->id() . '/sale', Url::fromRoute('commerce_domains.product_tab.domain_sale', ['commerce_product' => $product->id()])->toString());
 
@@ -197,11 +197,11 @@ class CostsTest extends OwnerKernelTestBase {
     // Without a renewal cost, the extension's default is paid, the longest
     // extension first; without either, renewals cost nothing.
     $sold->set('domain_renewal_cost', NULL);
-    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [
-      ['tld' => 'com', 'number' => '12', 'currency_code' => 'USD'],
-      ['tld' => 'co.uk', 'number' => '7', 'currency_code' => 'USD'],
-      ['tld' => 'uk', 'number' => '5', 'currency_code' => 'USD'],
-    ])->save();
+    $this->setRenewalCosts([
+      ['com', '12'],
+      ['co.uk', '7'],
+      ['uk', '5'],
+    ]);
     $this->assertEquals(new Price('36', 'USD'), $this->costs->profit($sold)->renewalsPaid);
     $this->assertEquals(new Price('7', 'USD'), $this->costs->defaultRenewalCost('example.co.uk'));
     $this->assertEquals(new Price('5', 'USD'), $this->costs->defaultRenewalCost('example.uk'));
@@ -209,7 +209,7 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertNull($this->costs->defaultRenewalCost('notcom'), 'Only whole extensions.');
     $sold->set('domain_renewal_cost', new Price('10.50', 'USD'));
     $this->assertEquals(new Price('31.50', 'USD'), $this->costs->profit($sold)->renewalsPaid, 'Its own cost first.');
-    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [])->save();
+    $this->setRenewalCosts([]);
     $sold->set('domain_renewal_cost', NULL);
     $this->assertNull($this->costs->profit($sold)->renewalsPaid);
     $this->assertEquals(new Price('2400', 'USD'), $this->costs->profit($sold)->profit);
@@ -289,9 +289,9 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertEquals(['USD' => new Price('1000', 'USD')], $totals[2025]['revenue']);
 
     // Renewals at the extension's default say so; its own cost doesn't.
-    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [
-      ['tld' => 'com', 'number' => '12', 'currency_code' => 'USD'],
-    ])->save();
+    $this->setRenewalCosts([
+      ['com', '12'],
+    ]);
     $renewed = $this->createDomain('Renewed.com', 1000, [
       'domain_purchase_price' => new Price('10', 'USD'),
       'domain_purchase_date' => $date('2020-03-01'),

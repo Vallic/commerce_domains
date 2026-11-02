@@ -14,3 +14,13 @@ commerce_domains_owner.renewal_add:
   route_name: entity.commerce_domains_renewal.add_form
   appears_on:
     - entity.commerce_domains_renewal.collection
+commerce_domains_owner.renewal_cost_add:
+  title: 'Add a renewal cost'
+  route_name: entity.commerce_domains_renewal_cost.add_form
+  appears_on:
+    - entity.commerce_domains_renewal_cost.collection
+commerce_domains_owner.renewal_cost_import:
+  title: 'Import renewal costs'
+  route_name: commerce_domains_owner.renewal_cost_import
+  appears_on:
+    - entity.commerce_domains_renewal_cost.collection

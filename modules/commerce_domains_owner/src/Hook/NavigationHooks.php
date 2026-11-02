@@ -28,6 +28,7 @@ class NavigationHooks {
     'commerce_domains_owner.expiring',
     'commerce_domains_owner.profit',
     'commerce_domains_owner.expenses',
+    'commerce_domains_owner.renewal_costs',
   ];
 
   /**

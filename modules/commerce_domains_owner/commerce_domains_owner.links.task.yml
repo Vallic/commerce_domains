@@ -19,3 +19,8 @@ commerce_domains_owner.expenses:
   route_name: commerce_domains_owner.expenses
   base_route: commerce_domains_owner.dashboard
   weight: 7
+commerce_domains_owner.renewal_costs:
+  title: 'Renewal costs'
+  route_name: entity.commerce_domains_renewal_cost.collection
+  base_route: commerce_domains_owner.dashboard
+  weight: 8

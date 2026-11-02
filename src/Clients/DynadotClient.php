@@ -83,6 +83,44 @@ final class DynadotClient extends ApiClient {
   }
 
   /**
+   * Fetches what a year's renewal costs, at the account's price level.
+   *
+   * @param string $currency
+   *   USD, EUR or CNY.
+   *
+   * @return array<string, string>
+   *   Amounts keyed by extension, in lower case and without a leading dot.
+   */
+  public function renewalPrices(string $currency): array {
+    $prices = [];
+    $seen = [];
+    for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+      $response = $this->command('tld_price', [
+        'currency' => $currency,
+        'count_per_page' => self::PAGE_SIZE,
+        'page_index' => $page,
+        'sort' => 'NameAsc',
+      ]);
+      $batch = (array) ($response['TldPrice'] ?? []);
+      $first = $batch[0]['Tld'] ?? NULL;
+      if ($first === NULL || isset($seen[$first])) {
+        break;
+      }
+      $seen[$first] = TRUE;
+      foreach ($batch as $row) {
+        $renew = $row['Price']['Renew'] ?? NULL;
+        if (is_numeric($renew) && (float) $renew > 0 && isset($row['Tld'])) {
+          $prices[strtolower(ltrim((string) $row['Tld'], '.'))] = (string) $renew;
+        }
+      }
+      if (count($batch) < self::PAGE_SIZE) {
+        break;
+      }
+    }
+    return $prices;
+  }
+
+  /**
    * Fetches one domain's details.
    *
    * @return array|null

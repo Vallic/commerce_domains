@@ -54,15 +54,17 @@ class SalesImporter {
    *   The file.
    * @param array<string, string[]>|null $known
    *   Accepted headers by the column they fill, instead of COLUMNS.
+   * @param string $required
+   *   The column a file can't go without.
    *
    * @return array<int, array<string, string>>
    *   The rows, keyed by the line they start on; each row's cells keyed by
    *   column (see COLUMNS), empty cells left out.
    *
    * @throws \InvalidArgumentException
-   *   When there is no header row, or no column holds the domain.
+   *   When there is no header row, or no column holds what is required.
    */
-  public static function parse(string $content, ?array $known = NULL): array {
+  public static function parse(string $content, ?array $known = NULL, string $required = 'domain'): array {
     // Spreadsheets save a byte order mark, and some old line endings.
     $content = str_replace(["\r\n", "\r"], "\n", preg_replace('/^\xEF\xBB\xBF/', '', $content) ?? $content);
     $line = 1;
@@ -96,9 +98,9 @@ class SalesImporter {
         }
       }
     }
-    if (!in_array('domain', $columns, TRUE)) {
+    if (!in_array($required, $columns, TRUE)) {
       fclose($handle);
-      throw new \InvalidArgumentException((string) new TranslatableMarkup('No domain column: name the column of domain names "domain".'));
+      throw new \InvalidArgumentException((string) new TranslatableMarkup('No @column column: name the column of @column names "@column".', ['@column' => $required]));
     }
 
     $position = (int) ftell($handle);

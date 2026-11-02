@@ -14,6 +14,7 @@ use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
+use Drupal\commerce_price\Price;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -37,7 +38,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   label: new TranslatableMarkup('Dynadot'),
   description: new TranslatableMarkup('Lists domains registered at Dynadot in its marketplace through the Dynadot API.'),
 )]
-final class Dynadot extends MarketplacePluginBase implements DomainManagementInterface, DnsRecordsInterface, CsvExportInterface {
+final class Dynadot extends MarketplacePluginBase implements DomainManagementInterface, DnsRecordsInterface, CsvExportInterface, RenewalPricesInterface {
 
   use RegistrarTrait;
 
@@ -501,6 +502,14 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
    */
   protected function credentialsHelp(): string {
     return (string) $this->t("Generate it under Tools → API in the Dynadot account, and allow this server's IP there. Prices are sent in the account's currency, which must be US dollars.");
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function renewalPrices(array $tlds = []): array {
+    $prices = array_map(fn(string $number) => new Price($number, 'USD'), $this->client()->renewalPrices('USD'));
+    return $tlds ? array_intersect_key($prices, array_flip($tlds)) : $prices;
   }
 
   /**

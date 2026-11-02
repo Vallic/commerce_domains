@@ -9,8 +9,10 @@ use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RenewalPricesInterface;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
+use Drupal\commerce_price\Price;
 use Drupal\Core\State\StateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -31,7 +33,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
   id: 'test_managed_registrar',
   label: new TranslatableMarkup('Test managed registrar'),
 )]
-final class TestManagedRegistrar extends ProviderPluginBase implements DomainManagementInterface, DnsRecordsInterface {
+final class TestManagedRegistrar extends ProviderPluginBase implements DomainManagementInterface, DnsRecordsInterface, RenewalPricesInterface {
 
   protected const KEY = 'commerce_domains_test.managed';
 
@@ -51,6 +53,14 @@ final class TestManagedRegistrar extends ProviderPluginBase implements DomainMan
     $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
     $instance->state = $container->get('state');
     return $instance;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function renewalPrices(array $tlds = []): array {
+    $prices = ['com' => new Price('10.88', 'USD'), 'de' => new Price('5', 'USD'), 'io' => new Price('40', 'USD')];
+    return $tlds ? array_intersect_key($prices, array_flip($tlds)) : $prices;
   }
 
   /**

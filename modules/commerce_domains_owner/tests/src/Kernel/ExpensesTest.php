@@ -37,9 +37,9 @@ class ExpensesTest extends OwnerKernelTestBase {
   public function testExpenses(): void {
     $date = self::date(...);
     $now = $date('2026-11-01');
-    $this->config('commerce_domains_owner.settings')->set('renewal_costs', [
-      ['tld' => 'io', 'number' => '50', 'currency_code' => 'USD'],
-    ])->save();
+    $this->setRenewalCosts([
+      ['io', '50'],
+    ]);
     // Held: bought in 2024, renewed on its expiry date in 2025 and 2026.
     $held = $this->createDomain('Held.com', 1000, [
       'domain_purchase_price' => new Price('100', 'USD'),

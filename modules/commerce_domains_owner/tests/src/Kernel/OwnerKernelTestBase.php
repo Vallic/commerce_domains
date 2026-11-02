@@ -6,6 +6,7 @@ namespace Drupal\Tests\commerce_domains_owner\Kernel;
 
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Entity\ProviderInterface;
+use Drupal\commerce_domains_owner\RenewalCosts;
 use Drupal\commerce_order\Entity\Order;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_price\Price;
@@ -59,12 +60,27 @@ abstract class OwnerKernelTestBase extends DomainsKernelTestBase {
     $this->installEntitySchema('commerce_order');
     $this->installEntitySchema('commerce_order_item');
     $this->installEntitySchema('commerce_domains_renewal');
+    $this->installEntitySchema('commerce_domains_renewal_cost');
     $this->installSchema('commerce_number_pattern', ['commerce_number_pattern_sequence']);
     $this->installConfig(['system', 'commerce_order', 'commerce_domains_owner']);
     // What installing the module does: the costs trait on the domain type.
     $this->container->get('module_handler')->loadInclude('commerce_domains_owner', 'install');
     commerce_domains_owner_install(FALSE);
     $this->now = $this->container->get('datetime.time')->getRequestTime();
+  }
+
+  /**
+   * Replaces the renewal costs.
+   *
+   * @param array<int, array{0: string, 1: string, 2?: string, 3?: string}> $costs
+   *   Rows of extension, amount, currency (USD) and registrar (any).
+   */
+  protected function setRenewalCosts(array $costs): void {
+    $storage = $this->container->get('entity_type.manager')->getStorage('commerce_domains_renewal_cost');
+    $storage->delete($storage->loadMultiple());
+    foreach ($costs as $cost) {
+      $this->container->get(RenewalCosts::class)->set($cost[0], $cost[3] ?? NULL, new Price($cost[1], $cost[2] ?? 'USD'));
+    }
   }
 
   /**

@@ -207,3 +207,26 @@ function commerce_domains_owner_update_11007(): void {
     $config->set('provider_renewal_costs', [])->save();
   }
 }
+
+/**
+ * Moves the renewal costs from the settings to their own table.
+ */
+function commerce_domains_owner_update_11008(): string {
+  $manager = \Drupal::entityDefinitionUpdateManager();
+  $entity_type_manager = \Drupal::entityTypeManager();
+  if (!$manager->getEntityType('commerce_domains_renewal_cost')) {
+    $manager->installEntityType($entity_type_manager->getDefinition('commerce_domains_renewal_cost'));
+  }
+  $config = \Drupal::configFactory()->getEditable('commerce_domains_owner.settings');
+  $storage = $entity_type_manager->getStorage('commerce_domains_renewal_cost');
+  $costs = array_merge((array) $config->get('renewal_costs'), (array) $config->get('provider_renewal_costs'));
+  foreach ($costs as $cost) {
+    $storage->create([
+      'tld' => $cost['tld'],
+      'provider' => $cost['provider'] ?? NULL,
+      'cost' => ['number' => $cost['number'], 'currency_code' => $cost['currency_code']],
+    ])->save();
+  }
+  $config->clear('renewal_costs')->clear('provider_renewal_costs')->save();
+  return count($costs) . ' renewal costs moved.';
+}

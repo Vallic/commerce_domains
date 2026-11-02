@@ -25,7 +25,9 @@ services:
 
   Drupal\commerce_domains_owner\RenewalImporter: ~
 
-  Drupal\commerce_domains_owner\RenewalCostDefaults: ~
+  Drupal\commerce_domains_owner\RenewalCosts: ~
+
+  Drupal\commerce_domains_owner\RenewalCostImporter: ~
 
   Drupal\commerce_domains_owner\MarketplaceSales:
     arguments:

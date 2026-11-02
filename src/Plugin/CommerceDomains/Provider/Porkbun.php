@@ -11,6 +11,7 @@ use Drupal\commerce_domains\DnsRecord;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\ProviderException;
 use Drupal\commerce_domains\Registration;
+use Drupal\commerce_price\Price;
 
 /**
  * Reads registrations from a Porkbun account, and manages them.
@@ -23,7 +24,7 @@ use Drupal\commerce_domains\Registration;
   label: new TranslatableMarkup('Porkbun'),
   description: new TranslatableMarkup('Reads and manages registrations through the Porkbun API.'),
 )]
-final class Porkbun extends ProviderPluginBase implements DomainManagementInterface, DnsRecordsInterface {
+final class Porkbun extends ProviderPluginBase implements DomainManagementInterface, DnsRecordsInterface, RenewalPricesInterface {
 
   use DnsRecordByRecordTrait;
   use RegistrarTrait;
@@ -197,6 +198,13 @@ final class Porkbun extends ProviderPluginBase implements DomainManagementInterf
    */
   protected function credentialsHelp(): string {
     return (string) $this->t('Create the API key and secret at porkbun.com/account/api, and turn on API access for each domain; reading registrations needs only the read scope, and managing them the write scope.');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function renewalPrices(array $tlds = []): array {
+    return array_map(fn(string $number) => new Price($number, 'USD'), $this->client()->renewalPrices($tlds));
   }
 
   /**

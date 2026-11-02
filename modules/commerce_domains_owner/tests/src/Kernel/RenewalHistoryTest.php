@@ -8,7 +8,6 @@ use Drupal\commerce_domains_owner\Costs;
 use Drupal\commerce_domains_owner\Entity\DomainRenewal;
 use Drupal\commerce_domains_owner\Entity\DomainRenewalInterface;
 use Drupal\commerce_domains_owner\Expenses;
-use Drupal\commerce_domains_owner\Form\SettingsForm;
 use Drupal\commerce_domains_owner\RenewalHistory;
 use Drupal\commerce_domains_owner\RenewalImporter;
 use Drupal\commerce_price\Price;
@@ -237,25 +236,12 @@ class RenewalHistoryTest extends OwnerKernelTestBase {
     $this->setUpCurrentUser([], [], TRUE);
     $this->createProvider('dynadot');
     $this->createProvider('other');
-    $form_builder = $this->container->get('form_builder');
-    $form_state = (new FormState())->setValues([
-      'renewal_costs' => "com 11.81 USD\nio 51.80 USD",
-      'provider_renewal_costs' => ['dynadot' => "com 10,88 USD\n.co.uk 7 EUR", 'other' => ''],
+    $this->setRenewalCosts([
+      ['com', '11.81'],
+      ['io', '51.80'],
+      ['com', '10.88', 'USD', 'dynadot'],
+      ['co.uk', '7', 'EUR', 'dynadot'],
     ]);
-    $form_builder->submitForm(SettingsForm::class, $form_state);
-    $this->assertSame([], $form_state->getErrors());
-    $settings = $this->config('commerce_domains_owner.settings');
-    $this->assertCount(2, $settings->get('provider_renewal_costs'));
-    $this->assertSame(['provider' => 'dynadot', 'tld' => 'co.uk', 'number' => '7', 'currency_code' => 'EUR'], $settings->get('provider_renewal_costs')[0]);
-    $built = $form_builder->getForm(SettingsForm::class);
-    $this->assertSame("co.uk 7 EUR\ncom 10.88 USD", $built['provider_renewal_costs']['dynadot']['#default_value']);
-    $form_state = (new FormState())->setValues([
-      'renewal_costs' => '',
-      'provider_renewal_costs' => ['dynadot' => 'com ten USD'],
-    ]);
-    $form_builder->submitForm(SettingsForm::class, $form_state);
-    $this->assertArrayHasKey('provider_renewal_costs][dynadot', $form_state->getErrors());
-    $this->assertCount(2, $this->config('commerce_domains_owner.settings')->get('provider_renewal_costs'), 'Nothing saved.');
 
     $costs = $this->container->get(Costs::class);
     $at = $this->createDomain('At.com', 1000, ['domain_registrar' => 'dynadot']);

@@ -179,25 +179,25 @@ class ProductHooks {
     $name = $product->hasField('domain') ? (string) $product->get('domain')->value : '';
     $registrar = Costs::registrar($product);
     $cost = $this->costs->renewalCost($product);
-    $settings = Url::fromRoute('commerce_domains_owner.settings')->toString();
+    $costs = Url::fromRoute('entity.commerce_domains_renewal_cost.collection')->toString();
     $args = [
       '@amount' => $cost ? $this->currencyFormatter->format($cost->getNumber(), $cost->getCurrencyCode()) : '',
       '@registrar' => ($product->hasField('domain_registrar') ? $product->get('domain_registrar')->entity?->label() : NULL) ?? '',
-      ':settings' => $settings,
+      ':costs' => $costs,
     ];
     $note = match (TRUE) {
-      !$cost => $this->t('No renewal cost is known for its extension: set one in the <a href=":settings">Domain portfolio settings</a>.', $args),
+      !$cost => $this->t('No renewal cost is known for its extension: add one to the <a href=":costs">renewal costs</a>.', $args),
       Costs::price($product, 'domain_renewal_cost') !== NULL => $this->t('@amount a year, set on this domain.', $args),
       $this->history->latestCost($product) !== NULL => $this->t('@amount a year, from its latest renewal.', $args),
-      $this->costs->registrarRenewalCost($name, $registrar) !== NULL => $this->t('@amount a year, the @registrar cost for its extension (<a href=":settings">Domain portfolio settings</a>).', $args),
-      default => $this->t('@amount a year, the default for its extension (<a href=":settings">Domain portfolio settings</a>).', $args),
+      $this->costs->registrarRenewalCost($name, $registrar) !== NULL => $this->t('@amount a year, the @registrar cost for its extension (<a href=":costs">renewal costs</a>).', $args),
+      default => $this->t('@amount a year, the default for its extension (<a href=":costs">renewal costs</a>).', $args),
     };
     return [
       '#type' => 'item',
       '#title' => $this->t('Renewal cost'),
       '#markup' => $note,
       '#weight' => 89,
-      '#cache' => ['tags' => ['config:commerce_domains_owner.settings']],
+      '#cache' => ['tags' => ['commerce_domains_renewal_cost_list']],
     ];
   }
 

@@ -71,3 +71,13 @@ commerce_domains_owner.renewal_import:
     _permission: 'manage domain portfolio'
   options:
     _admin_route: TRUE
+
+commerce_domains_owner.renewal_cost_import:
+  path: '/admin/commerce/domains/renewal-costs/import'
+  defaults:
+    _form: '\Drupal\commerce_domains_owner\Form\RenewalCostImportForm'
+    _title: 'Import renewal costs'
+  requirements:
+    _permission: 'manage domain portfolio'
+  options:
+    _admin_route: TRUE
