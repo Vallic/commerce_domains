@@ -30,6 +30,7 @@ abstract class MarketplaceKernelTestBase extends DomainsKernelTestBase {
     'test_marketplace' => 'commerce_domains_test.',
     'test_atom' => 'commerce_domains_test.',
     'test_marketplace_other' => 'commerce_domains_marketplace_test.',
+    'test_partial_marketplace' => 'commerce_domains_test.partial.',
   ];
 
   /**

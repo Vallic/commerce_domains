@@ -48,6 +48,7 @@ class ProviderTest extends DomainsKernelTestBase {
       'spaceship',
       'test_atom',
       'test_marketplace',
+      'test_partial_marketplace',
       'unstoppable',
     ];
     $registrars = [
@@ -91,7 +92,7 @@ class ProviderTest extends DomainsKernelTestBase {
       'test_managed_registrar',
     ];
     $appraisers = ['atom', 'test_appraiser'];
-    $stats = ['afternic', 'atom', 'test_atom', 'test_marketplace'];
+    $stats = ['afternic', 'atom', 'test_atom', 'test_marketplace', 'test_partial_marketplace'];
     // Atom, and the test plugin like it.
     $atom_like = ['atom', 'test_atom'];
     $payment_links = ['spaceship', 'test_payment_links'];

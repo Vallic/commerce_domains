@@ -113,6 +113,15 @@ final class SyncPlan {
   public array $current = [];
 
   /**
+   * The listings last written to the marketplace, keyed by domain name.
+   *
+   * What a sync compares the fields the marketplace doesn't report with.
+   *
+   * @var array<string, array>
+   */
+  public array $sent = [];
+
+  /**
    * The listings managed domains should have, keyed by domain name.
    *
    * Domains that should not be listed are missing.

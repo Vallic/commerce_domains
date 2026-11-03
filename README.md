@@ -300,10 +300,12 @@ error, and when it was last checked and pushed; filter it by marketplace and
 status. A sold listing says when the sale was found.
 
 Every sync records what it found, dry runs included, and every push what it
-did. Syncs never read these records back: they always compare the catalog
-with the marketplace, except that a whole sync also removes listings it
-recorded for products deleted since, and a sale on record isn't acted on
-again. A domain that isn't listed and needn't be has no row. Files from the
+did. Syncs compare the catalog with the marketplace rather than these records,
+except that a whole sync also removes listings it recorded for products deleted
+since, a sale on record isn't acted on again, and fields a marketplace doesn't
+report back are compared with what was last sent: the minimum offer and lease
+terms on Dynadot, NameSilo and Unstoppable. The first sync after updating sends
+each listing on those marketplaces once, as nothing is on record yet. A domain that isn't listed and needn't be has no row. Files from the
 CSV export aren't tracked.
 
 Marketplaces that report it show the interest in each listing beside its

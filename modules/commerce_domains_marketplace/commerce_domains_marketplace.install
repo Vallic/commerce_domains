@@ -86,3 +86,16 @@ function commerce_domains_marketplace_update_11005(): void {
     }
   }
 }
+
+/**
+ * Records what was last sent, for the fields marketplaces don't report.
+ *
+ * Nothing is on record yet, so the next sync of a marketplace that doesn't
+ * report them sends each of its listings once.
+ */
+function commerce_domains_marketplace_update_11006(): void {
+  $schema = \Drupal::database()->schema();
+  if (!$schema->fieldExists(ListingRecorder::TABLE, 'sent')) {
+    $schema->addField(ListingRecorder::TABLE, 'sent', ListingRecorder::sentSchema());
+  }
+}

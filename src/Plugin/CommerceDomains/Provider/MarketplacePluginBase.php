@@ -36,6 +36,13 @@ abstract class MarketplacePluginBase extends ListingPluginBase implements Market
   /**
    * {@inheritdoc}
    */
+  public function unreportedFields(array $wanted): array {
+    return [];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function describeValue(string $field, mixed $value): string {
     return is_scalar($value) || $value === NULL ? var_export($value, TRUE) : json_encode($value);
   }

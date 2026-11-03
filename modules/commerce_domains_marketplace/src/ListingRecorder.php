@@ -14,9 +14,10 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  * Records what each sync found and did, one row per domain and marketplace.
  *
  * Syncs compare the catalog with the marketplace every time; the rows are
- * for people, on the domain overview and the listings report. Sales are the
- * exception: the record of a sale is what keeps a sync from acting on it
- * twice.
+ * for people, on the domain overview and the listings report. There are two
+ * exceptions: the record of a sale is what keeps a sync from acting on it
+ * twice, and what was last sent stands in for the fields a marketplace doesn't
+ * report back.
  */
 class ListingRecorder {
 
@@ -93,6 +94,7 @@ class ListingRecorder {
           'type' => 'text',
           'size' => 'normal',
         ],
+        'sent' => self::sentSchema(),
         'checked' => [
           'description' => 'When a sync last compared it with the marketplace.',
           'type' => 'int',
@@ -119,6 +121,17 @@ class ListingRecorder {
         'product_id' => ['product_id'],
         'status' => ['status'],
       ],
+    ];
+  }
+
+  /**
+   * Returns the column for the listing last written to the marketplace.
+   */
+  public static function sentSchema(): array {
+    return [
+      'description' => 'The listing as JSON, as it was last written to the marketplace.',
+      'type' => 'text',
+      'size' => 'normal',
     ];
   }
 
@@ -193,7 +206,7 @@ class ListingRecorder {
       }
       elseif (isset($plan->update[$name])) {
         $changes = array_map(
-          fn(string $field) => $field . ' ' . $describe($field, $current[$field] ?? NULL) . ' → ' . $describe($field, $plan->update[$name][$field]),
+          fn(string $field) => $field . ' ' . $describe($field, $current[$field] ?? $plan->sent[$name][$field] ?? NULL) . ' → ' . $describe($field, $plan->update[$name][$field] ?? NULL),
           $plan->changes[$name],
         );
         $row['status'] = self::OUTDATED;
@@ -357,6 +370,28 @@ class ListingRecorder {
   }
 
   /**
+   * Returns the listings last written to a marketplace.
+   *
+   * @param string $provider_id
+   *   The provider ID.
+   * @param string[] $names
+   *   The domains.
+   *
+   * @return array<string, array>
+   *   Listings keyed by domain; domains never written are missing.
+   */
+  public function sent(string $provider_id, array $names): array {
+    $sent = [];
+    foreach ($this->rows($provider_id, $names) as $name => $row) {
+      $listing = isset($row->sent) ? json_decode($row->sent, TRUE) : NULL;
+      if (is_array($listing)) {
+        $sent[$name] = $listing;
+      }
+    }
+    return $sent;
+  }
+
+  /**
    * Records what a push did.
    *
    * @param \Drupal\commerce_domains\Entity\ProviderInterface $provider
@@ -379,13 +414,13 @@ class ListingRecorder {
     foreach ($plan->create + $plan->update as $name => $listing) {
       $rows[$name] = isset($errors[$name])
         ? ['status' => self::FAILED, 'note' => $errors[$name], 'listing' => $listing]
-        : ['status' => self::LISTED, 'note' => NULL, 'listing' => $listing, 'pushed' => $now];
+        : ['status' => self::LISTED, 'note' => NULL, 'listing' => $listing, 'pushed' => $now, 'sent' => $listing];
     }
     if ($deleted) {
       foreach ($plan->delete as $name) {
         $rows[$name] = isset($errors[$name])
           ? ['status' => self::FAILED, 'note' => $errors[$name], 'listing' => $plan->current[$name] ?? NULL]
-          : ['status' => self::UNLISTED, 'note' => NULL, 'listing' => NULL, 'pushed' => $now];
+          : ['status' => self::UNLISTED, 'note' => NULL, 'listing' => NULL, 'pushed' => $now, 'sent' => NULL];
       }
     }
     foreach ($rows as $name => &$row) {
@@ -519,7 +554,8 @@ class ListingRecorder {
    *   The provider ID.
    * @param array<string, array> $rows
    *   Rows keyed by domain: status, note, listing and product_id, plus
-   *   pushed after a push, and sold as NULL to end the record of a sale.
+   *   pushed and sent after a push, and sold as NULL to end the record of a
+   *   sale.
    * @param bool $full
    *   Whether the rows cover the whole catalog and portfolio, so rows for
    *   anything else are stale.
@@ -573,6 +609,9 @@ class ListingRecorder {
       }
       if (isset($row['pushed'])) {
         $fields['pushed'] = $row['pushed'];
+      }
+      if (array_key_exists('sent', $row)) {
+        $fields['sent'] = $row['sent'] === NULL ? NULL : json_encode($row['sent']);
       }
       $keys = ['provider' => $provider_id, 'domain' => $name];
       $this->database->merge(self::TABLE)

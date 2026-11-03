@@ -23,8 +23,9 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  *
  * Every sync reads both sides and sends the difference, so a failed or
  * skipped run is fixed by the next one. What each check found and each push
- * did is recorded for people, but never read back, except for sales: a
- * listing that shows a sale takes the domain off sale here, once.
+ * did is recorded for people, but not read back, with two exceptions: a
+ * listing that shows a sale takes the domain off sale here, once, and fields
+ * a marketplace doesn't report are compared with what was last sent.
  */
 class MarketplaceSync {
 
@@ -71,6 +72,7 @@ class MarketplaceSync {
     $plan->full = $names === NULL;
     $items = $this->catalog->load($names, MarketplaceSettings::priceList($provider));
     $plan->current = $plugin->fetchListings($names);
+    $plan->sent = $this->recorder->sent($provider->id(), array_map('strval', array_keys($items)));
     $plan->catalog = array_map(fn($item) => $item->productId, $items);
     $plan->available = array_map(fn() => TRUE, array_filter($items, fn($item) => $item->forSale));
 
@@ -326,13 +328,42 @@ class MarketplaceSync {
     elseif ($current === NULL) {
       $plan->create[$name] = $wanted;
     }
-    elseif ($changed = $plugin->changedFields($wanted, $current)) {
-      $plan->update[$name] = $wanted;
-      $plan->changes[$name] = $changed;
-    }
     else {
-      $plan->unchanged++;
+      $changed = [
+        ...$plugin->changedFields($wanted, $current),
+        ...$this->unsentFields($plan, $plugin, $name, $wanted),
+      ];
+      if ($changed) {
+        $plan->update[$name] = $wanted;
+        $plan->changes[$name] = $changed;
+      }
+      else {
+        $plan->unchanged++;
+      }
     }
+  }
+
+  /**
+   * Returns the fields a marketplace can't report that differ from those sent.
+   *
+   * @param \Drupal\commerce_domains_marketplace\SyncPlan $plan
+   *   The plan being built.
+   * @param \Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface $plugin
+   *   The marketplace plugin.
+   * @param string $name
+   *   The domain.
+   * @param array $wanted
+   *   The listing it should have.
+   *
+   * @return string[]
+   *   The field names; all of them when nothing was recorded as sent.
+   */
+  protected function unsentFields(SyncPlan $plan, MarketplaceInterface $plugin, string $name, array $wanted): array {
+    $sent = $plan->sent[$name] ?? [];
+    return array_values(array_filter(
+      $plugin->unreportedFields($wanted),
+      fn(string $field) => !array_key_exists($field, $sent) || $sent[$field] !== $wanted[$field],
+    ));
   }
 
 }

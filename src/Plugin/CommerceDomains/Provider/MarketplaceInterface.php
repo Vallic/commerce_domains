@@ -55,6 +55,18 @@ interface MarketplaceInterface extends ProviderPluginInterface {
   public function changedFields(array $wanted, array $current): array;
 
   /**
+   * Returns the fields of a listing the provider can't report back.
+   *
+   * A sync can't compare these with the marketplace, so it compares them with
+   * what it last sent there, and sends them when they differ or it never sent
+   * them.
+   *
+   * @return string[]
+   *   The field names.
+   */
+  public function unreportedFields(array $wanted): array;
+
+  /**
    * Formats a listing value for people reviewing a sync.
    */
   public function describeValue(string $field, mixed $value): string;

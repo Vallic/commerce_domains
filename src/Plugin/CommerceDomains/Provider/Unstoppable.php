@@ -112,6 +112,13 @@ final class Unstoppable extends MarketplacePluginBase implements RegistrarInterf
   /**
    * {@inheritdoc}
    */
+  public function unreportedFields(array $wanted): array {
+    return array_keys(array_diff_key($wanted, array_flip(self::REPORTED_FIELDS)));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function describeValue(string $field, mixed $value): string {
     if (in_array($field, self::MONEY_FIELDS, TRUE) && (is_int($value) || is_float($value))) {
       return $this->formatMoney($value);

@@ -9,6 +9,10 @@ commerce_domains.provider_plugin.test_marketplace:
       type: float
       label: 'Atom premium price factor'
 
+commerce_domains.provider_plugin.test_partial_marketplace:
+  type: commerce_domains.provider_plugin.test_marketplace
+  label: 'Test partial marketplace settings'
+
 commerce_domains.provider_plugin.test_atom:
   type: commerce_domains.provider_plugin.test_marketplace
   label: 'Test Atom settings'
