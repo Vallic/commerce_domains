@@ -139,17 +139,24 @@ class SaleTermsForm extends ConfigFormBase {
       }
       $terms = $plugin->fallbackTerms();
       $rules = $plugin->saleTermRules();
+      // The longest the price rule reaches here. A marketplace's own limit can
+      // be longer, and then only a domain's own term gets there.
+      $by_price = min($rules->leaseMonths(PHP_FLOAT_MAX), $terms['lease_months']);
+      $also = array_filter([
+        $terms['lease_months'] > $by_price ? $this->t("A domain's own term can go up to @months months.", ['@months' => $terms['lease_months']]) : NULL,
+        $terms['note'] ?? NULL,
+      ]);
       $rows[] = [
         ['data' => $provider->toLink($provider->label(), 'edit-form')->toRenderable()],
         $terms['floor'] ?? $this->t('None'),
         $terms['minimum_offer'] ?? $this->t('None'),
         match (TRUE) {
           !$terms['lease_months'] => $this->t('None'),
-          !$rules->automaticLease => $this->t('Off'),
-          default => $this->t('Up to @months months', ['@months' => min($rules->leaseLimit ?? $terms['lease_months'], $terms['lease_months'])]),
+          $by_price < 2 => $this->t('Off'),
+          default => $this->t('Up to @months months', ['@months' => $by_price]),
         },
         $this->ownTerms($provider),
-        $terms['note'] ?? '',
+        implode(' ', array_map('strval', $also)),
       ];
     }
     return $rows;

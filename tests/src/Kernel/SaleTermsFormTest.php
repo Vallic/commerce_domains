@@ -98,11 +98,14 @@ class SaleTermsFormTest extends DomainsKernelTestBase {
     }
     $this->assertEqualsCanonicalizing(['Afternic', 'Dynadot'], array_keys($rows));
     $this->assertSame('80% of the price', $rows['Afternic'][1]);
-    $this->assertSame('Up to 60 months', $rows['Afternic'][3]);
+    // The price rule stops at 36 months, below Afternic's own limit.
+    $this->assertSame('Up to 36 months', $rows['Afternic'][3]);
+    $this->assertStringContainsString("A domain's own term can go up to 60 months.", $rows['Afternic'][5]);
     $this->assertSame('None', $rows['Dynadot'][1]);
     $this->assertSame('50% of the price below 10,000, 25% above', $rows['Dynadot'][2]);
     $this->assertSame('Up to 12 months', $rows['Dynadot'][3]);
     $this->assertSame('', $rows['Dynadot'][4]);
+    $this->assertStringNotContainsString('own term', $rows['Dynadot'][5]);
   }
 
   /**
@@ -228,6 +231,7 @@ class SaleTermsFormTest extends DomainsKernelTestBase {
     $row = array_values(array_filter($table, fn(array $row) => (string) $row[0]['data']['#title'] === 'Afternic'))[0];
     $this->assertSame('60% of the price', (string) $row[1]);
     $this->assertSame('Up to 6 months', (string) $row[3]);
+    $this->assertStringContainsString("A domain's own term can go up to 60 months.", $row[5]);
     $this->assertSame('floor, lease', $row[4]);
   }
 
