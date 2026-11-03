@@ -70,10 +70,10 @@ class LeaseHooks {
         $this->t('Your lease of @domain', $args, $options),
         $manual ? [
           $this->t('Thank you: your lease to own @domain is set up.', $args, $options),
-          $this->t('After the down payment of @down, @count monthly payments of @installment follow. We will ask you for each one, the first on @due. The domain is yours once @total is paid in all.', $args, $options),
+          $this->t('After the down payment of @down, @count monthly payments of @installment follow. We will ask you for each one, the first on @due. Once the down payment arrives you can use the domain: reply to this email to tell us where to point it. It is yours once @total is paid in all.', $args, $options),
         ] : [
           $this->t('Thank you: your lease to own @domain has started.', $args, $options),
-          $this->t('@paid is paid. @count monthly payments of @installment follow, charged to the card you paid with, the next on @due. The domain is yours once @total is paid in all.', $args, $options),
+          $this->t('@paid is paid. @count monthly payments of @installment follow, charged to the card you paid with, the next on @due. You can use the domain now: reply to this email to tell us where to point it. It is yours once @total is paid in all.', $args, $options),
         ],
       ],
       'paid' => [
@@ -119,9 +119,9 @@ class LeaseHooks {
         [
           $owner
             ? ($manual
-              ? $this->t('The payments of the lease of @domain have not arrived past the reminders: @paid of @total is paid. Nothing more is asked for until you record a payment on the lease page, or cancel the lease.', $args, $options)
-              : $this->t('The payments of the lease of @domain failed past the retries: @paid of @total is paid. Nothing more is charged until you charge it on the lease page, or cancel the lease.', $args, $options))
-            : $this->t('Your payments for the lease of @domain are overdue: @remaining is left to pay. Please reply to this email to settle it, or the domain may go back on sale.', $args, $options),
+              ? $this->t('The payments of the lease of @domain have not arrived past the reminders: @paid of @total is paid. Nothing more is asked for until you record a payment on the lease page, or cancel the lease. If the buyer is using the domain, that use ends unless they settle it, which is yours to do by hand.', $args, $options)
+              : $this->t('The payments of the lease of @domain failed past the retries: @paid of @total is paid. Nothing more is charged until you charge it on the lease page, or cancel the lease. If the buyer is using the domain, that use ends unless they settle it, which is yours to do by hand.', $args, $options))
+            : $this->t('Your payments for the lease of @domain are overdue: @remaining is left to pay. Please reply to this email to settle it. Otherwise your use of the domain ends, and it may go back on sale.', $args, $options),
         ],
       ],
       'completed' => [

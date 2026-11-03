@@ -373,6 +373,8 @@ class LeaseTest extends DomainsKernelTestBase {
     $placed = (int) Order::load($order->id())->getPlacedTime();
     $this->assertSame(LeaseManager::addMonths($placed, 1), $lease->getNextDue());
     $this->assertSame('Your lease of lease.com', (string) $this->getMails(['key' => 'started'])[0]['subject']);
+    $body = preg_replace('/\s+/', ' ', (string) $this->getMails(['key' => 'started'])[0]['body']);
+    $this->assertStringContainsString('You can use the domain now', $body);
     $this->assertFalse(Order::load($order->id())->isPaid(), 'Paid once the lease is.');
 
     // Nothing is due for a month.
@@ -402,6 +404,8 @@ class LeaseTest extends DomainsKernelTestBase {
     $this->assertSame([], $manager->due(), 'Nothing more is charged.');
     $mails = $this->getMails(['key' => 'defaulted', 'to' => 'owner@example.com']);
     $this->assertSame('Lease in default: lease.com', (string) $mails[0]['subject']);
+    $mails = $this->getMails(['key' => 'defaulted', 'to' => 'buyer@example.com']);
+    $this->assertStringContainsString('your use of the domain ends', preg_replace('/\s+/', ' ', (string) $mails[0]['body']));
 
     // The owner charges it by hand once the card works; the rest follows.
     $card->getBillingProfile()->set('address', ['country_code' => 'US', 'postal_code' => '10000'])->save();
@@ -723,6 +727,8 @@ class LeaseTest extends DomainsKernelTestBase {
     $this->assertSame('bank', $lease->getPaymentGateway()->id());
     $this->assertTrue($lease->getPaid()->isZero(), 'Nothing paid until the transfer arrives.');
     $this->assertStringContainsString('is set up', (string) $this->getMails(['key' => 'started'])[0]['body'], 'Without a card to charge.');
+    $body = preg_replace('/\s+/', ' ', (string) $this->getMails(['key' => 'started'])[0]['body']);
+    $this->assertStringContainsString('Once the down payment arrives you can use the domain', $body);
 
     // Until it arrives, the down payment is what is due.
     $this->assertEquals(new Price('600', 'USD'), $lease->getNextAmount());

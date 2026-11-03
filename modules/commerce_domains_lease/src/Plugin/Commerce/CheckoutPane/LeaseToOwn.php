@@ -105,7 +105,7 @@ class LeaseToOwn extends CheckoutPaneBase {
       '#type' => 'container',
       '#attributes' => ['class' => ['lease-terms']],
       '#states' => $states,
-      '#markup' => $this->t('With a lease, the domain is yours once the last payment is in. Paid by card, the monthly payments are charged to it; paid by bank transfer or the like, you are sent a request for each.'),
+      '#markup' => $this->t('With a lease, you can use the domain as soon as the down payment is in, and it is yours once the last payment is in. Paid by card, the monthly payments are charged to it; paid by bank transfer or the like, you are sent a request for each.'),
     ];
     if ($this->order->getCustomer()->isAnonymous()) {
       $back = ['query' => ['destination' => Url::fromRoute('<current>')->toString()]];

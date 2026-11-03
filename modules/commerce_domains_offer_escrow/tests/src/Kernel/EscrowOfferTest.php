@@ -191,7 +191,8 @@ class EscrowOfferTest extends DomainsKernelTestBase {
   /**
    * Tests that a deal on Escrow.com isn't canceled as an unpaid order.
    *
-   * Its order is placed from the start, and nothing is paid on it here.
+   * Its order is placed from the start, and nothing is paid on it here, so with
+   * a price agreed it looks just like an order left unpaid.
    */
   public function testUnpaidHoldLeavesEscrowAlone(): void {
     $this->installConfig(['commerce_domains_checkout']);
@@ -201,9 +202,18 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     $this->submit($this->domain('longdeal.com', new Price('2000', 'USD')), ['escrow' => 1, 'amount' => '']);
     $offers = $this->offers();
     $order = reset($offers)->getOrder();
+    $item = $order->getItems()[0];
+    $item->setUnitPrice(new Price('2000', 'USD'), TRUE)->save();
+    $order->recalculateTotalPrice();
     $order->setPlacedTime($now - 30 * 86400)->save();
     $this->assertSame('validation', $order->getState()->getId());
+    $this->assertFalse($order->isPaid());
 
+    // Its own payment is enough to keep it, and so is being paid through escrow,
+    // which is what's left once that is gone.
+    $this->assertSame(0, $unpaid->process());
+    $storage = $this->entityTypeManager->getStorage('commerce_payment');
+    $storage->delete($storage->loadMultiple());
     $this->assertSame(0, $unpaid->process());
 
     $this->entityTypeManager->getStorage('commerce_order')->resetCache();

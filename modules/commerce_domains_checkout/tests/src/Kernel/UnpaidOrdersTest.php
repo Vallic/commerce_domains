@@ -94,7 +94,9 @@ class UnpaidOrdersTest extends DomainsKernelTestBase {
    */
   protected function placedOrder(ProductInterface $product, int $days_ago, ?string $gateway = 'bank'): OrderInterface {
     $variations = $product->getVariations();
-    $item = $this->entityTypeManager->getStorage('commerce_order_item')->createFromPurchasableEntity(reset($variations));
+    /** @var \Drupal\commerce_order\OrderItemStorageInterface $items */
+    $items = $this->entityTypeManager->getStorage('commerce_order_item');
+    $item = $items->createFromPurchasableEntity(reset($variations));
     $item->save();
     $order = Order::create([
       'type' => 'default',
@@ -131,7 +133,9 @@ class UnpaidOrdersTest extends DomainsKernelTestBase {
   protected function onSale(ProductInterface $product): bool {
     $this->entityTypeManager->getStorage('commerce_product')->resetCache();
     $this->entityTypeManager->getStorage('commerce_product_variation')->resetCache();
-    $variations = $this->entityTypeManager->getStorage('commerce_product')->load($product->id())->getVariations();
+    /** @var \Drupal\commerce_product\Entity\ProductInterface $fresh */
+    $fresh = $this->entityTypeManager->getStorage('commerce_product')->load($product->id());
+    $variations = $fresh->getVariations();
     $variation = reset($variations);
     $field = $variation->hasField('in_stock') ? 'in_stock' : 'status';
     return (bool) $variation->get($field)->value;
@@ -175,8 +179,10 @@ class UnpaidOrdersTest extends DomainsKernelTestBase {
     $this->assertSame(1, $this->unpaidOrders->process());
     $this->assertSame('canceled', $this->state($order));
     $this->assertTrue($this->onSale($product));
-    $this->assertSame('Your order for held.com was canceled', (string) $this->getMails(['key' => 'unpaid_canceled', 'to' => 'buyer@example.com'])[0]['subject']);
-    $this->assertSame('Unpaid order canceled: held.com', (string) $this->getMails(['key' => 'unpaid_canceled', 'to' => 'owner@example.com'])[0]['subject']);
+    $buyer = $this->getMails(['key' => 'unpaid_canceled', 'to' => 'buyer@example.com']);
+    $this->assertSame('Your order for held.com was canceled', (string) $buyer[0]['subject']);
+    $owner = $this->getMails(['key' => 'unpaid_canceled', 'to' => 'owner@example.com']);
+    $this->assertSame('Unpaid order canceled: held.com', (string) $owner[0]['subject']);
 
     // Nothing more happens to it.
     $this->assertSame(0, $this->unpaidOrders->process());
@@ -270,6 +276,19 @@ class UnpaidOrdersTest extends DomainsKernelTestBase {
   }
 
   /**
+   * Tests that an order with nothing to pay isn't an unpaid one.
+   */
+  public function testFreeOrder(): void {
+    $product = $this->createDomain('Free.com', 0);
+    $order = $this->placedOrder($product, 30);
+
+    $this->assertSame(0, $this->unpaidOrders->process());
+
+    $this->assertSame('fulfillment', $this->state($order));
+    $this->assertFalse($this->onSale($product));
+  }
+
+  /**
    * Tests that an order that can't be canceled is left alone.
    */
   public function testOrderThatCannotBeCanceled(): void {
@@ -294,7 +313,8 @@ class UnpaidOrdersTest extends DomainsKernelTestBase {
 
     // A pending payment isn't money yet.
     $this->payment($order, 'pending');
-    $this->assertSame([], $this->getMails(['key' => 'unpaid_late_payment']));
+    $before = count($this->getMails(['key' => 'unpaid_late_payment']));
+    $this->assertSame(0, $before);
 
     $payments = Payment::loadMultiple();
     $payment = reset($payments);
@@ -340,7 +360,9 @@ class UnpaidOrdersTest extends DomainsKernelTestBase {
     $variations = $other->getVariations();
     $variation = reset($variations);
     $field = $variation->hasField('in_stock') ? 'in_stock' : 'status';
-    $item = $this->entityTypeManager->getStorage('commerce_order_item')->createFromPurchasableEntity($variation);
+    /** @var \Drupal\commerce_order\OrderItemStorageInterface $items */
+    $items = $this->entityTypeManager->getStorage('commerce_order_item');
+    $item = $items->createFromPurchasableEntity($variation);
     $item->save();
     $draft = Order::create([
       'type' => 'default',

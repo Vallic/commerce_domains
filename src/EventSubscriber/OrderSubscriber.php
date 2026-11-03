@@ -66,7 +66,7 @@ class OrderSubscriber implements EventSubscriberInterface {
   public function onCancel(WorkflowTransitionEvent $event): void {
     /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
     $order = $event->getEntity();
-    if ($event->getFromState()->getId() === 'draft' || $order->getTotalPaid()?->isPositive()) {
+    if ($event->getField()->getOriginalId() === 'draft' || $order->getTotalPaid()?->isPositive()) {
       return;
     }
     foreach ($order->getItems() as $item) {
