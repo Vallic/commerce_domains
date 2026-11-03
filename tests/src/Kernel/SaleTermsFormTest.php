@@ -215,9 +215,10 @@ class SaleTermsFormTest extends DomainsKernelTestBase {
     $this->assertSame(5500, $at('afternic', 'own.com')['floorPrice'] / 1_000_000);
     $this->assertSame(24, $at('afternic', 'own.com')['maxLeasePeriod']);
 
-    // Dynadot has none, so the general: no lease, and 20% from 5,000.
+    // Dynadot has none, so the general: no lease, and 20% from 5,000, of its
+    // price raised by its factor of 1.05.
     $this->assertFalse($at('dynadot', 'empty.com')['installment']);
-    $this->assertSame(1800, $at('dynadot', 'empty.com')['minimum_offer']);
+    $this->assertSame(1890, $at('dynadot', 'empty.com')['minimum_offer']);
 
     // This site uses the general terms, whatever the marketplaces do.
     $this->assertSame(0, SaleTerms::fromVariation($empty->getVariations()[0])->leaseMonthsAt(9000));

@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Afternic;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Atom;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Dynadot;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Fruits;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Gname;
@@ -147,6 +148,7 @@ class SaleTermsTest extends ProviderTestBase {
     $namesilo = $this->plugin(NameSilo::class, 'namesilo');
     $this->assertSame($namesilo->fallbackTerms()['lease_months'], $namesilo->buildListing($item)['payment_plan_months']);
     $spaceship = $this->plugin(Spaceship::class, 'spaceship');
+    $this->assertInstanceOf(CsvExportInterface::class, $spaceship);
     $this->assertSame($spaceship->fallbackTerms()['lease_months'], $spaceship->csvRow($item, 'listings')[3]);
   }
 
