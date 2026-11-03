@@ -21,7 +21,10 @@ final class OrderSubscriber implements EventSubscriberInterface {
    * {@inheritdoc}
    */
   public static function getSubscribedEvents(): array {
-    return ['commerce_order.place.post_transition' => 'onPlace'];
+    return [
+      'commerce_order.place.post_transition' => 'onPlace',
+      'commerce_order.cancel.post_transition' => 'onCancel',
+    ];
   }
 
   /**
@@ -31,6 +34,15 @@ final class OrderSubscriber implements EventSubscriberInterface {
     /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
     $order = $event->getEntity();
     $this->offerManager->orderPlaced($order);
+  }
+
+  /**
+   * Expires the offers its canceled order had bought.
+   */
+  public function onCancel(WorkflowTransitionEvent $event): void {
+    /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
+    $order = $event->getEntity();
+    $this->offerManager->orderCanceled($order);
   }
 
 }

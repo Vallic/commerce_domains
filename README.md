@@ -99,6 +99,14 @@ it is held at, and the marketplaces it is listed on.
   pane, whether to push the domain to the buyer's account at its registrar
   or transfer it elsewhere, and keeps the answer on the order (`Transfer`)
   and in the customer comment. The cart page goes to the open checkout.
+  An order takes its domain off sale when placed, as a bank transfer takes
+  days. An order left unpaid only holds it for a while
+  (`commerce_domains_checkout.settings:unpaid_hold_days`, 7; 0 for no limit):
+  the buyer is reminded two days before the end, then the order is canceled
+  and the domain goes back on sale. This needs an order workflow where a placed
+  order can be canceled, and leaves alone orders with money on them or paid
+  through escrow, and orders placed before it first ran. A payment that arrives
+  for a canceled order is logged and mailed to the owner to deal with by hand.
 - **Commerce Domains Handover** (submodule): hands each sold domain over to
   its buyer once the order is paid: unlocks it and emails the buyer the auth
   code, or records the push to their account, with an email at each step
@@ -722,6 +730,14 @@ paid by bank transfer, Wise or another gateway each month. Terms of 6, 12,
   however it got there: *Record received* on the lease page, *Receive* on
   the order's Payments tab, or the gateway's own notification, as Wise's.
   Each is due on the same day of the month from when the order was placed.
+- **Unclear charges**: when a card charge ends without a clear answer, as
+  after a timeout, the money may have been taken, so it is never tried again
+  by itself. Nothing more is charged, and the owner is told to check at the
+  gateway, then says on the lease page whether the gateway took it. A payment
+  already on the order counts by itself. Only one charge of a lease runs at a
+  time.
+- **Canceled orders**: canceling an order cancels its lease, and a canceled
+  order is never charged or asked for payment.
 - **Missed payments**: a failed payment is tried again every few days
   (*Try a missed payment again after*, 3), a few times (*Tries before the
   lease is in default*, 3). The buyer hears about each failure, and the

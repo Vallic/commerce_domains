@@ -12,6 +12,7 @@ use Drupal\commerce_payment\Entity\PaymentInterface;
 use Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayBase;
 use Drupal\Core\State\StateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
+use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -79,5 +80,47 @@ class TestEscrowOffer extends OffsitePaymentGatewayBase implements EscrowGateway
    * {@inheritdoc}
    */
   public function voidPayment(PaymentInterface $payment): void {}
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getTransaction(int $transaction_id): array {
+    return ['id' => $transaction_id];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isOrderTransaction(OrderInterface $order, array $transaction): bool {
+    foreach ($this->loadOrderPayments($order) as $payment) {
+      if ((string) $payment->getRemoteId() === (string) ($transaction['id'] ?? '')) {
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function loadOrderPayments(OrderInterface $order): array {
+    /** @var \Drupal\commerce_payment\PaymentStorageInterface $storage */
+    $storage = $this->entityTypeManager->getStorage('commerce_payment');
+    return $storage->loadMultipleByOrder($order);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getWebhookUrl(): ?Url {
+    return NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isValidWebhookToken(string $token): bool {
+    return FALSE;
+  }
 
 }

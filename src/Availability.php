@@ -82,4 +82,22 @@ class Availability {
     return $changed;
   }
 
+  /**
+   * Puts every variation of a domain back on sale.
+   *
+   * @return bool
+   *   Whether any variation changed.
+   */
+  public function markProductAvailable(ProductInterface $product): bool {
+    $changed = FALSE;
+    foreach ($product->getVariations() as $variation) {
+      $field = $variation->hasField('in_stock') ? 'in_stock' : 'status';
+      if (!$variation->get($field)->value) {
+        $variation->set($field, TRUE)->save();
+        $changed = TRUE;
+      }
+    }
+    return $changed;
+  }
+
 }

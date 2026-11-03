@@ -34,5 +34,5 @@ commerce_domains_offer_default:
       to: purchased
     expire:
       label: 'Expire'
-      from: [pending, countered, accepted]
+      from: [pending, countered, accepted, purchased]
       to: expired

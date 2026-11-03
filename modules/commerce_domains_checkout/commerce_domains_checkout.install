@@ -1,0 +1,18 @@
+<?php
+
+/**
+ * @file
+ * Updates for Commerce Domains Checkout.
+ */
+
+declare(strict_types=1);
+
+/**
+ * Releases domains held by orders left unpaid, after 7 days.
+ */
+function commerce_domains_checkout_update_11001(): void {
+  $settings = \Drupal::configFactory()->getEditable('commerce_domains_checkout.settings');
+  if ($settings->get('unpaid_hold_days') === NULL) {
+    $settings->set('unpaid_hold_days', 7)->save();
+  }
+}

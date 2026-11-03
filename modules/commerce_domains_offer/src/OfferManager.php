@@ -170,6 +170,24 @@ class OfferManager {
   }
 
   /**
+   * Expires the offers a canceled order had bought.
+   *
+   * The buyer hears about the order, so not about the offer as well.
+   */
+  public function orderCanceled(OrderInterface $order): void {
+    $storage = $this->entityTypeManager->getStorage('commerce_domains_offer');
+    $ids = $storage->getQuery()->accessCheck(FALSE)
+      ->condition('order', $order->id())
+      ->condition('state', 'purchased')
+      ->execute();
+    /** @var \Drupal\commerce_domains_offer\Entity\OfferInterface $offer */
+    foreach ($storage->loadMultiple($ids) as $offer) {
+      $offer->getState()->applyTransitionById('expire');
+      $offer->save();
+    }
+  }
+
+  /**
    * Expires offers left unanswered or unpaid too long.
    *
    * @return int

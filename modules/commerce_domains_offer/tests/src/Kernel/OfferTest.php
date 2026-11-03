@@ -14,6 +14,7 @@ use Drupal\commerce_domains_offer\Form\OfferForm;
 use Drupal\commerce_domains_offer\OfferManager;
 use Drupal\commerce_domains_offer\OfferPolicy;
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\commerce_order\Entity\OrderType;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\Core\Form\FormState;
@@ -164,6 +165,27 @@ class OfferTest extends DomainsKernelTestBase {
     $order->getState()->applyTransitionById('place');
     $order->save();
     $this->assertSame('purchased', Offer::load($offer->id())->getState()->getId());
+  }
+
+  /**
+   * Tests that a canceled order takes its offer with it.
+   */
+  public function testCanceledOrderExpiresOffer(): void {
+    // A workflow in which a placed order can be canceled.
+    OrderType::load('default')->setWorkflowId('order_fulfillment')->save();
+    $offer = $this->offer($this->domain('canceled.com'));
+    $this->manager->accept($offer);
+    $order = $offer->getOrder();
+    $order->getState()->applyTransitionById('place');
+    $order->save();
+    $this->assertSame('purchased', Offer::load($offer->id())->getState()->getId());
+    $mails = count($this->getMails(['to' => 'buyer@example.com']));
+
+    $order->getState()->applyTransitionById('cancel');
+    $order->save();
+
+    $this->assertSame('expired', Offer::load($offer->id())->getState()->getId());
+    $this->assertCount($mails, $this->getMails(['to' => 'buyer@example.com']), 'The buyer hears about the order instead.');
   }
 
   /**

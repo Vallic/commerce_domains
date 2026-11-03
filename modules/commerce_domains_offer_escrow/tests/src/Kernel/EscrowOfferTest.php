@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains_offer_escrow\Kernel;
 
+use Drupal\commerce_domains_checkout\UnpaidOrders;
 use Drupal\commerce_domains_offer\Entity\Offer;
 use Drupal\commerce_domains_offer\Entity\OfferInterface;
 use Drupal\commerce_domains_offer\Form\OfferForm;
@@ -57,6 +58,7 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     'commerce_domains_offer',
     'commerce_domains_offer_escrow',
     'commerce_domains_offer_escrow_test',
+    'commerce_domains_checkout',
   ];
 
   /**
@@ -184,6 +186,28 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     $this->assertNull($form_state->getResponse());
     $this->assertSame([], $this->offers());
     $this->assertSame([], $this->entityTypeManager->getStorage('commerce_order')->loadMultiple());
+  }
+
+  /**
+   * Tests that a deal on Escrow.com isn't canceled as an unpaid order.
+   *
+   * Its order is placed from the start, and nothing is paid on it here.
+   */
+  public function testUnpaidHoldLeavesEscrowAlone(): void {
+    $this->installConfig(['commerce_domains_checkout']);
+    $unpaid = $this->container->get(UnpaidOrders::class);
+    $now = $this->container->get('datetime.time')->getRequestTime();
+    $this->container->get('state')->set(UnpaidOrders::STATE_SINCE, $now - 100 * 86400);
+    $this->submit($this->domain('longdeal.com', new Price('2000', 'USD')), ['escrow' => 1, 'amount' => '']);
+    $offers = $this->offers();
+    $order = reset($offers)->getOrder();
+    $order->setPlacedTime($now - 30 * 86400)->save();
+    $this->assertSame('validation', $order->getState()->getId());
+
+    $this->assertSame(0, $unpaid->process());
+
+    $this->entityTypeManager->getStorage('commerce_order')->resetCache();
+    $this->assertSame('validation', Order::load($order->id())->getState()->getId());
   }
 
   /**

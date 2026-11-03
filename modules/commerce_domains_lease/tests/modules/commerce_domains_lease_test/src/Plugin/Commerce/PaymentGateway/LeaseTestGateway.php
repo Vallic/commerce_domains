@@ -8,9 +8,10 @@ use Drupal\commerce_payment\Attribute\CommercePaymentGateway;
 use Drupal\commerce_payment\Entity\PaymentInterface;
 use Drupal\commerce_payment\Exception\InvalidRequestException;
 use Drupal\commerce_payment\Exception\InvalidResponseException;
-use Drupal\commerce_payment\PluginForm\OnsitePaymentMethodAddForm;
 use Drupal\commerce_payment_example\Plugin\Commerce\PaymentGateway\Onsite;
+use Drupal\Core\State\StateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Takes money, or fails to report it, as the state says.
@@ -27,21 +28,33 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
   id: 'lease_test_gateway',
   label: new TranslatableMarkup('Lease test gateway'),
   display_label: new TranslatableMarkup('Lease test gateway'),
-  forms: ['add-payment-method' => OnsitePaymentMethodAddForm::class],
   payment_method_types: ['credit_card'],
 )]
 class LeaseTestGateway extends Onsite {
 
   /**
+   * The state service.
+   */
+  protected StateInterface $state;
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
+    $instance->state = $container->get('state');
+    return $instance;
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function createPayment(PaymentInterface $payment, $capture = TRUE): void {
-    $state = \Drupal::state();
-    $outcome = $state->get('commerce_domains_lease_test.outcome', 'pay');
+    $outcome = $this->state->get('commerce_domains_lease_test.outcome', 'pay');
     if ($outcome === 'refused') {
       throw new InvalidRequestException('Refused.');
     }
-    $state->set('commerce_domains_lease_test.taken', $state->get('commerce_domains_lease_test.taken', 0) + 1);
+    $this->state->set('commerce_domains_lease_test.taken', $this->state->get('commerce_domains_lease_test.taken', 0) + 1);
     if ($outcome === 'lost') {
       throw new InvalidResponseException('Network communication failed.');
     }

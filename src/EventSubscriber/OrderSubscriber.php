@@ -28,7 +28,11 @@ class OrderSubscriber implements EventSubscriberInterface {
    * {@inheritdoc}
    */
   public static function getSubscribedEvents(): array {
-    return ['commerce_order.place.post_transition' => 'onPlace'];
+    return [
+      'commerce_order.place.post_transition' => 'onPlace',
+      // After Commerce Domains Owner clears the sale, which it does at 0.
+      'commerce_order.cancel.post_transition' => ['onCancel', -100],
+    ];
   }
 
   /**
@@ -48,6 +52,28 @@ class OrderSubscriber implements EventSubscriberInterface {
         // now; any other variation would keep the domain for sale.
         $this->availability->markSold($variation);
         $this->availability->markProductSold($product);
+      }
+    }
+  }
+
+  /**
+   * Puts the domains of a canceled order back on sale.
+   *
+   * Only those it took off sale. Canceling a draft never did, a domain sold
+   * some other way stays sold, and if money was paid the domain may already
+   * be on its way to the buyer, so that is left for the owner to decide.
+   */
+  public function onCancel(WorkflowTransitionEvent $event): void {
+    /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
+    $order = $event->getEntity();
+    if ($event->getFromState()->getId() === 'draft' || $order->getTotalPaid()?->isPositive()) {
+      return;
+    }
+    foreach ($order->getItems() as $item) {
+      $variation = $item->getPurchasedEntity();
+      $product = $variation instanceof ProductVariationInterface ? $variation->getProduct() : NULL;
+      if ($product && $product->hasField('domain') && !Availability::isSold($product)) {
+        $this->availability->markProductAvailable($product);
       }
     }
   }

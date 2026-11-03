@@ -2,6 +2,18 @@ services:
   _defaults:
     autowire: true
 
+  logger.channel.commerce_domains_checkout:
+    parent: logger.channel_base
+    arguments: ['commerce_domains_checkout']
+
+  Drupal\commerce_domains_checkout\UnpaidOrders:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_checkout'
+
+  Drupal\commerce_domains_checkout\EventSubscriber\LatePaymentSubscriber:
+    tags:
+      - { name: event_subscriber }
+
   Drupal\commerce_domains_checkout\EventSubscriber\CartPageRedirect:
     arguments:
       $cartProvider: '@commerce_cart.cart_provider'

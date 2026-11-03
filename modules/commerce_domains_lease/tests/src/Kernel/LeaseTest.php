@@ -475,7 +475,8 @@ class LeaseTest extends DomainsKernelTestBase {
     $this->assertSame(0, $lease->getFailures(), 'Not a failure: nobody knows.');
     $this->assertSame([], $manager->due(), 'The queue leaves it alone.');
     $this->assertCount(1, $this->getMails(['key' => 'unconfirmed']), 'The owner only.');
-    $this->assertSame('Check a lease payment: lease.com', (string) $this->getMails(['key' => 'unconfirmed', 'to' => 'owner@example.com'])[0]['subject']);
+    $mails = $this->getMails(['key' => 'unconfirmed', 'to' => 'owner@example.com']);
+    $this->assertSame('Check a lease payment: lease.com', (string) $mails[0]['subject']);
 
     // Even asked directly, it is not charged again.
     $this->gatewayWill('pay');
