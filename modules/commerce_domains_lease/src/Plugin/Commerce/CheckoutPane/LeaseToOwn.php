@@ -11,7 +11,10 @@ use Drupal\commerce_checkout\Plugin\Commerce\CheckoutPane\CheckoutPaneBase;
 use Drupal\commerce_domains_lease\LeaseCalculator;
 use Drupal\commerce_domains_lease\LeasePlan;
 use Drupal\commerce_price\Price;
+use Drupal\Component\Render\MarkupInterface;
+use Drupal\Component\Utility\Html;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Render\Markup;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -26,6 +29,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 #[CommerceCheckoutPane(
   id: 'commerce_domains_lease',
   label: new TranslatableMarkup('Lease to own'),
+  display_label: new TranslatableMarkup('How would you like to pay?'),
   admin_description: new TranslatableMarkup('Offers a lease to own on domains whose sale terms allow one: a down payment now, the rest monthly.'),
   default_step: 'order_information',
   wrapper_element: 'fieldset',
@@ -70,27 +74,45 @@ class LeaseToOwn extends CheckoutPaneBase {
    * {@inheritdoc}
    */
   public function buildPaneForm(array $pane_form, FormStateInterface $form_state, array &$complete_form): array {
-    $options = [self::FULL => $this->t('Pay in full: @total', ['@total' => $this->money($this->order->getTotalPrice())])];
+    $options = [self::FULL => $this->option($this->t('Pay in full'), $this->money($this->order->getTotalPrice()))];
     foreach ($this->calculator->terms($this->order) as $months) {
       $plan = $this->calculator->plan($this->order, $months);
       if ($plan) {
-        $options[$months] = $this->describe($plan);
+        $options[$months] = $this->option(
+          $this->t('Lease to own over @count months', ['@count' => $plan->months]),
+          (string) $this->t('@installment a month', ['@installment' => $this->money($plan->installment)]),
+          $this->t('@down now, then @count monthly payments. @total in all.', [
+            '@down' => $this->money($plan->downPayment),
+            '@count' => $plan->months,
+            '@total' => $this->money($plan->total),
+          ]),
+        );
       }
     }
     $pane_form['choice'] = [
       '#type' => 'radios',
       '#title' => $this->t('How would you like to pay?'),
+      '#title_display' => 'invisible',
       '#options' => $options,
       '#default_value' => (string) (LeaseCalculator::chosenMonths($this->order) ?? self::FULL),
     ];
+    // What a lease involves only matters to a buyer choosing one.
+    $parents = [...$pane_form['#parents'], 'choice'];
+    $name = array_shift($parents) . '[' . implode('][', $parents) . ']';
+    $states = ['invisible' => [':input[name="' . $name . '"]' => ['value' => self::FULL]]];
+    // Containers, as an item with #markup prints no attributes to hide it by.
     $pane_form['terms'] = [
-      '#type' => 'item',
+      '#type' => 'container',
+      '#attributes' => ['class' => ['lease-terms']],
+      '#states' => $states,
       '#markup' => $this->t('With a lease, the domain is yours once the last payment is in. Paid by card, the monthly payments are charged to it; paid by bank transfer or the like, you are sent a request for each.'),
     ];
     if ($this->order->getCustomer()->isAnonymous()) {
       $back = ['query' => ['destination' => Url::fromRoute('<current>')->toString()]];
       $pane_form['account'] = [
-        '#type' => 'item',
+        '#type' => 'container',
+        '#attributes' => ['class' => ['lease-account']],
+        '#states' => $states,
         '#markup' => $this->t('A lease needs an account, which keeps track of the monthly payments: <a href=":login">log in</a> or <a href=":register">create one</a>.', [
           ':login' => Url::fromRoute('user.login', [], $back)->toString(),
           ':register' => Url::fromRoute('user.register', [], $back)->toString(),
@@ -131,6 +153,17 @@ class LeaseToOwn extends CheckoutPaneBase {
     $months = LeaseCalculator::chosenMonths($this->order);
     $plan = $months ? $this->calculator->plan($this->order, $months) : NULL;
     return $plan ? ['#plain_text' => (string) $this->describe($plan)] : [];
+  }
+
+  /**
+   * Builds the label of a choice: its name and amount, and any detail.
+   */
+  protected function option(TranslatableMarkup $name, string $amount, ?TranslatableMarkup $detail = NULL): MarkupInterface {
+    $label = '<span class="lease-option"><span class="lease-option__name">' . $name . '</span> <span class="lease-option__amount">' . Html::escape($amount) . '</span>';
+    if ($detail) {
+      $label .= ' <span class="lease-option__detail">' . $detail . '</span>';
+    }
+    return Markup::create($label . '</span>');
   }
 
   /**

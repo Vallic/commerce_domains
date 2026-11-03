@@ -271,6 +271,33 @@ class LeaseTest extends DomainsKernelTestBase {
   }
 
   /**
+   * Tests the lease shown before checkout.
+   */
+  public function testLowestPlan(): void {
+    $calculator = $this->container->get(LeaseCalculator::class);
+    $at = fn(string $name, string $amount, array $sale_terms = []) => $calculator->lowestPlan(
+      $this->createDomain($name, (int) $amount, [], $sale_terms)->getVariations()[0],
+      new Price($amount, 'USD'),
+    );
+
+    // The longest term, so the lowest payment checkout offers.
+    $plan = $at('Lowest.com', '30000');
+    $this->assertSame(24, $plan->months);
+    $this->assertEquals(3000, $plan->downPayment->getNumber());
+    $this->assertEquals(1125, $plan->installment->getNumber());
+    $this->assertEquals(7500, $at('OwnDown.com', '30000', ['sale_lease_down_payment' => 25])->downPayment->getNumber());
+
+    $this->assertNull($at('Cheap.com', '500'));
+    $this->assertNull($at('Offers.com', '30000', ['sale_buy_now' => FALSE]));
+
+    // Without a gateway to take it, checkout offers no lease.
+    PaymentGateway::load('card')->setStatus(FALSE)->save();
+    PaymentGateway::load('bank')->setStatus(FALSE)->save();
+    $this->assertNull($at('NoGateway.com', '30000'));
+    $this->assertContains('config:commerce_payment_gateway_list', $calculator->cacheability()->getCacheTags());
+  }
+
+  /**
    * Tests the checkout pane: the choice, and buyers without an account.
    */
   public function testPane(): void {
@@ -280,7 +307,11 @@ class LeaseTest extends DomainsKernelTestBase {
     $complete_form = [];
     $pane_form = $pane->buildPaneForm(['#parents' => ['lease']], new FormState(), $complete_form);
     $this->assertSame(['full', 6, 12, 24], array_keys($pane_form['choice']['#options']));
-    $this->assertSame('Lease to own: $3,000.00 now, then 12 monthly payments of $2,250.00 ($30,000.00 in all)', (string) $pane_form['choice']['#options'][12]);
+    $this->assertStringContainsString('$30,000.00', (string) $pane_form['choice']['#options']['full']);
+    $option = strip_tags((string) $pane_form['choice']['#options'][12]);
+    $this->assertSame('Lease to own over 12 months $2,250.00 a month $3,000.00 now, then 12 monthly payments. $30,000.00 in all.', $option);
+    $this->assertSame(['value' => 'full'], $pane_form['terms']['#states']['invisible'][':input[name="lease[choice]"]']);
+    $this->assertSame('How would you like to pay?', (string) $pane->getDisplayLabel());
     $this->assertArrayNotHasKey('account', $pane_form);
 
     $form_state = (new FormState())->setValue('lease', ['choice' => '12']);
@@ -288,7 +319,7 @@ class LeaseTest extends DomainsKernelTestBase {
     $this->assertSame([], $form_state->getErrors());
     $pane->submitPaneForm($pane_form, $form_state, $complete_form);
     $this->assertSame(12, LeaseCalculator::chosenMonths($order));
-    $this->assertStringContainsString('12 monthly payments', (string) $pane->buildPaneSummary()['#plain_text']);
+    $this->assertSame('Lease to own: $3,000.00 now, then 12 monthly payments of $2,250.00 ($30,000.00 in all)', (string) $pane->buildPaneSummary()['#plain_text']);
     $pane->submitPaneForm($pane_form, (new FormState())->setValue('lease', ['choice' => 'full']), $complete_form);
     $this->assertNull(LeaseCalculator::chosenMonths($order));
 

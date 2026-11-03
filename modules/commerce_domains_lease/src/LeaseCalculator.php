@@ -11,6 +11,7 @@ use Drupal\commerce_payment\Entity\PaymentGatewayInterface;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_price\RounderInterface;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 
@@ -58,14 +59,23 @@ class LeaseCalculator {
    *   The terms, shortest first; empty when the order can't be leased.
    */
   public function terms(OrderInterface $order): array {
-    $item = $this->domainItem($order);
+    $variation = $this->domainItem($order)?->getPurchasedEntity();
     $total = $order->getTotalPrice();
-    $variation = $item?->getPurchasedEntity();
-    if (!$variation instanceof ProductVariationInterface || !$total || !$total->isPositive() || !$variation->hasField('sale_lease_months')) {
+    return $variation instanceof ProductVariationInterface && $total ? $this->termsFor($variation, $total) : [];
+  }
+
+  /**
+   * Returns the terms a domain can be leased over at a price, in months.
+   *
+   * @return int[]
+   *   The terms, shortest first; empty when it can't be leased.
+   */
+  public function termsFor(ProductVariationInterface $variation, Price $price): array {
+    if (!$price->isPositive() || !$variation->hasField('sale_lease_months')) {
       return [];
     }
     $terms = SaleTerms::fromVariation($variation);
-    $longest = $terms->buyNow ? $terms->leaseMonthsAt((float) $total->getNumber()) : 0;
+    $longest = $terms->buyNow ? $terms->leaseMonthsAt((float) $price->getNumber()) : 0;
     if ($longest < 2) {
       return [];
     }
@@ -81,7 +91,14 @@ class LeaseCalculator {
    */
   public function downPaymentPercent(OrderInterface $order): int {
     $variation = $this->domainItem($order)?->getPurchasedEntity();
-    $percent = $variation instanceof ProductVariationInterface ? SaleTerms::fromVariation($variation)->leaseDownPayment : NULL;
+    return $this->downPaymentPercentFor($variation instanceof ProductVariationInterface ? $variation : NULL);
+  }
+
+  /**
+   * Returns the share of the price a domain's down payment is, in percent.
+   */
+  protected function downPaymentPercentFor(?ProductVariationInterface $variation): int {
+    $percent = $variation ? SaleTerms::fromVariation($variation)->leaseDownPayment : NULL;
     $percent ??= (int) $this->configFactory->get('commerce_domains_lease.settings')->get('default_down_payment');
     // At least something at checkout, and something left for the months.
     return max(1, min(90, $percent));
@@ -96,6 +113,27 @@ class LeaseCalculator {
       return NULL;
     }
     return self::planFor($total, $months, $this->downPaymentPercent($order), $this->rounder);
+  }
+
+  /**
+   * Returns the lease with the lowest monthly payment, to show before checkout.
+   *
+   * @return \Drupal\commerce_domains_lease\LeasePlan|null
+   *   The longest lease at the price; NULL when checkout would offer none.
+   */
+  public function lowestPlan(ProductVariationInterface $variation, Price $price): ?LeasePlan {
+    $terms = $this->gateways() ? $this->termsFor($variation, $price) : [];
+    return $terms ? self::planFor($price, end($terms), $this->downPaymentPercentFor($variation), $this->rounder) : NULL;
+  }
+
+  /**
+   * Returns what a page showing a lease depends on, besides the domain.
+   */
+  public function cacheability(): CacheableMetadata {
+    return (new CacheableMetadata())
+      ->addCacheableDependency($this->configFactory->get('commerce_domains_lease.settings'))
+      ->addCacheableDependency($this->configFactory->get('commerce_domains.settings'))
+      ->addCacheTags(['config:commerce_payment_gateway_list']);
   }
 
   /**
