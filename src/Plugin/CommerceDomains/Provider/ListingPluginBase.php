@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 
 use Drupal\commerce_domains\CatalogItem;
-use Drupal\commerce_domains\SaleTerms;
+use Drupal\commerce_domains\SaleTermRules;
 use Drupal\commerce_price\Price;
 use Drupal\Core\Form\FormStateInterface;
 
@@ -15,6 +15,31 @@ use Drupal\Core\Form\FormStateInterface;
  * Adds the price factors and the pricing rules marketplaces share.
  */
 abstract class ListingPluginBase extends ProviderPluginBase {
+
+  /**
+   * The provider's own sale terms, where they differ from the general ones.
+   *
+   * @var array<string, mixed>
+   */
+  protected array $saleTerms = [];
+
+  /**
+   * Sets the provider's own sale terms.
+   *
+   * @param array<string, mixed> $terms
+   *   See SaleTermRules::withOverrides().
+   */
+  public function setSaleTerms(array $terms): static {
+    $this->saleTerms = $terms;
+    return $this;
+  }
+
+  /**
+   * Returns the rules for domains that set no terms of their own.
+   */
+  public function saleTermRules(): SaleTermRules {
+    return SaleTermRules::general()->withOverrides($this->saleTerms);
+  }
 
   /**
    * {@inheritdoc}
@@ -103,14 +128,19 @@ abstract class ListingPluginBase extends ProviderPluginBase {
    * Returns the usual rule for a minimum offer, for fallbackTerms().
    */
   protected function usualMinimumOffer(): \Stringable {
-    return $this->t('Half the price below @break, a quarter above', ['@break' => number_format(SaleTerms::MINIMUM_OFFER_BREAK)]);
+    $rules = $this->saleTermRules();
+    return $this->t('@below% of the price below @break, @above% above', [
+      '@below' => $rules->minimumOfferPercent,
+      '@above' => $rules->minimumOfferPercentAbove,
+      '@break' => number_format($rules->minimumOfferBreak),
+    ]);
   }
 
   /**
    * Returns the usual rule for a floor, for fallbackTerms().
    */
   protected function usualFloor(): \Stringable {
-    return $this->t('@percent% of the price', ['@percent' => (int) round(SaleTerms::FLOOR_SHARE * 100)]);
+    return $this->t('@percent% of the price', ['@percent' => $this->saleTermRules()->floorPercent]);
   }
 
   /**
@@ -120,17 +150,17 @@ abstract class ListingPluginBase extends ProviderPluginBase {
    *   The term in months, 0 when the price is too low for lease-to-own.
    */
   protected function leaseMonths(float $price, int $cap = 36): int {
-    return min(SaleTerms::defaultLeaseMonths($price), $cap);
+    return min($this->saleTermRules()->leaseMonths($price), $cap);
   }
 
   /**
    * Returns the minimum offer accepted at a price.
    *
-   * Half the price below 10,000, a quarter above. Marketplaces treat Atom
-   * premium names differently, so plugins handle those themselves.
+   * By the rules here (see saleTermRules()). Marketplaces treat Atom premium
+   * names differently, so plugins handle those themselves.
    */
   protected function minimumOffer(float $price): int {
-    return (int) SaleTerms::defaultMinimumOffer($price);
+    return (int) $this->saleTermRules()->minimumOffer($price);
   }
 
   /**

@@ -11,7 +11,6 @@ use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\ListingStats;
 use Drupal\commerce_domains\ProviderException;
-use Drupal\commerce_domains\SaleTerms;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -112,8 +111,8 @@ final class Afternic extends MarketplacePluginBase implements CsvExportInterface
     $offers = $item->terms->offers;
 
     // Without offers, nothing below the price is taken, by bid or broker.
-    $min_offer = $offers ? $this->minimumOfferFor($item, $price, $item->atomPremium ? (int) SaleTerms::defaultFloorPrice($usd_price) : $this->minimumOffer($price)) : $price;
-    $floor = $offers ? $this->floorPriceFor($item, $price, (int) SaleTerms::defaultFloorPrice($usd_price)) : $price;
+    $min_offer = $offers ? $this->minimumOfferFor($item, $price, $item->atomPremium ? (int) $this->saleTermRules()->floor($usd_price) : $this->minimumOffer($price)) : $price;
+    $floor = $offers ? $this->floorPriceFor($item, $price, (int) $this->saleTermRules()->floor($usd_price)) : $price;
     // Lease payments are worked out from the buy-now price.
     $lease_months = $buy_now ? $this->leaseMonthsFor($item, $this->leaseMonths($price), self::MAX_LEASE_MONTHS) : 0;
 
@@ -308,7 +307,7 @@ final class Afternic extends MarketplacePluginBase implements CsvExportInterface
       'minimum_offer' => $this->usualMinimumOffer(),
       'lease_months' => self::MAX_LEASE_MONTHS,
       'note' => $this->t('Atom premium names: a minimum offer of @percent% of the price. Never below $@least.', [
-        '@percent' => (int) round(SaleTerms::FLOOR_SHARE * 100),
+        '@percent' => $this->saleTermRules()->floorPercent,
         '@least' => self::MIN_OFFER_FLOOR,
       ]),
     ];

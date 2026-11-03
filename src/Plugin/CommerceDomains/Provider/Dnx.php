@@ -6,7 +6,6 @@ namespace Drupal\commerce_domains\Plugin\CommerceDomains\Provider;
 
 use Drupal\commerce_domains\Attribute\CommerceDomainsProvider;
 use Drupal\commerce_domains\CatalogItem;
-use Drupal\commerce_domains\SaleTerms;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 
 /**
@@ -49,7 +48,7 @@ final class Dnx extends ListingPluginBase implements CsvExportInterface {
     }
     // Without offers, nothing below the price is taken.
     $offers = $item->terms->offers;
-    $reserve = $offers ? $this->floorPriceFor($item, $price, (int) SaleTerms::defaultFloorPrice($usd_price)) : $price;
+    $reserve = $offers ? $this->floorPriceFor($item, $price, (int) $this->saleTermRules()->floor($usd_price)) : $price;
     $minimum = $offers ? $this->minimumOfferFor($item, $price, $item->atomPremium ? $price : $this->minimumOffer($price)) : $price;
     return [$item->title, $price, $reserve, $minimum];
   }

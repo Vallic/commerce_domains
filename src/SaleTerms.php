@@ -15,12 +15,6 @@ use Drupal\commerce_product\Entity\ProductVariationInterface;
  */
 final class SaleTerms {
 
-  // The price below which the minimum offer is half, and above a quarter.
-  public const MINIMUM_OFFER_BREAK = 10000;
-
-  // The share of the price a broker may go down to.
-  public const FLOOR_SHARE = 0.8;
-
   // The longest lease worked out from a price: months below each amount.
   public const LEASE_TERMS = [2000 => 0, 8000 => 6, 20000 => 12, 50000 => 24];
 
@@ -58,32 +52,32 @@ final class SaleTerms {
   /**
    * Returns the minimum offer worked out from a price.
    *
-   * Half the price below 10,000, a quarter above: the rule for domains whose
-   * terms set no minimum, on the site and on marketplaces.
+   * The general rule for domains whose terms set no minimum, as this site uses
+   * it. Marketplaces can have their own (see SaleTermRules).
    */
   public static function defaultMinimumOffer(float $price): float {
-    return $price < self::MINIMUM_OFFER_BREAK ? $price * 0.5 : $price * 0.25;
+    return SaleTermRules::general()->minimumOffer($price);
   }
 
   /**
    * Returns the floor worked out from a price.
    */
   public static function defaultFloorPrice(float $price): float {
-    return $price * self::FLOOR_SHARE;
+    return SaleTermRules::general()->floor($price);
   }
 
   /**
-   * Whether domains without their own term get a lease by their price.
+   * Whether domains without their own term get a lease by their price here.
    */
   public static function automaticLease(): bool {
-    return !\Drupal::hasContainer() || (\Drupal::config('commerce_domains.settings')->get('automatic_lease') ?? TRUE);
+    return SaleTermRules::general()->automaticLease;
   }
 
   /**
    * Returns the lease-to-own term worked out from a price.
    *
    * Nothing below 2,000, then 6/12/24/36 months as the price grows: the rule
-   * for domains whose terms set no term, while automatic leases are on.
+   * for domains whose terms set no term, where automatic leases are on.
    *
    * @return int
    *   The term in months, 0 when the price is too low for lease-to-own.
@@ -98,20 +92,18 @@ final class SaleTerms {
   }
 
   /**
-   * Returns the longest lease at a price: the domain's own term, or the rule.
+   * Returns the longest lease here at a price: its own term, or the rule.
    *
    * @return int
    *   The term in monthly payments; 0 for none, as one payment is no lease.
    */
   public function leaseMonthsAt(float $price): int {
-    $months = $this->leaseMonths ?? self::defaultLeaseMonths($price);
+    $months = $this->leaseMonths ?? SaleTermRules::general()->leaseMonths($price);
     return $months >= 2 ? $months : 0;
   }
 
   /**
    * Reads the terms of a variation.
-   *
-   * With automatic leases off, a domain without its own term has none.
    */
   public static function fromVariation(ProductVariationInterface $variation): self {
     $flag = fn(string $field) => !$variation->hasField($field) || $variation->get($field)->isEmpty() || (bool) $variation->get($field)->value;
@@ -132,7 +124,7 @@ final class SaleTerms {
       offers: $flag('sale_offers'),
       minimumOffer: $price('sale_minimum_offer'),
       floorPrice: $price('sale_floor_price'),
-      leaseMonths: $integer('sale_lease_months') ?? (self::automaticLease() ? NULL : 0),
+      leaseMonths: $integer('sale_lease_months'),
       marketplaces: $flag('sale_marketplaces'),
       notListedOn: $variation->hasField('sale_not_listed_on') ? array_values(array_filter(array_column($variation->get('sale_not_listed_on')->getValue(), 'target_id'))) : [],
       leaseDownPayment: $integer('sale_lease_down_payment'),

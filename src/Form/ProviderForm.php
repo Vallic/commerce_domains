@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains\Form;
 
+use Drupal\commerce_domains\SaleTermRules;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingPluginBase;
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase;
@@ -151,9 +153,78 @@ class ProviderForm extends EntityForm {
       if ($credentials = $this->buildCredentials($plugin)) {
         $form['configuration'] = self::insertAfter($form['configuration'], 'credentials', ['credential_keys' => $credentials]);
       }
+      if ($plugin instanceof ListingPluginBase && ($sale_terms = $this->buildSaleTerms($plugin))) {
+        $form['sale_terms'] = $sale_terms;
+      }
     }
 
     return $form;
+  }
+
+  /**
+   * Builds the provider's own sale terms, for what the marketplace has.
+   *
+   * @return array
+   *   The form element; empty when it sells at the price only.
+   */
+  protected function buildSaleTerms(ListingPluginBase $plugin): array {
+    $available = $plugin->fallbackTerms();
+    $general = SaleTermRules::general();
+    $own = $this->entity->getSaleTerms();
+    $percent = fn(TranslatableMarkup $title, string $key, int $inherited) => [
+      '#type' => 'number',
+      '#title' => $title,
+      '#field_suffix' => '%',
+      '#min' => 1,
+      '#max' => 100,
+      '#default_value' => $own[$key] ?? NULL,
+      '#placeholder' => $inherited,
+    ];
+    $element = [];
+    if ($available['floor'] !== NULL) {
+      $element['floor_percent'] = $percent($this->t('Floor'), 'floor_percent', $general->floorPercent);
+    }
+    if ($available['minimum_offer'] !== NULL) {
+      $break = ['@break' => number_format($general->minimumOfferBreak)];
+      $element['minimum_offer_percent'] = $percent($this->t('Minimum offer below @break', $break), 'minimum_offer_percent', $general->minimumOfferPercent);
+      $element['minimum_offer_percent_above'] = $percent($this->t('Minimum offer from @break', $break), 'minimum_offer_percent_above', $general->minimumOfferPercentAbove);
+    }
+    if ($available['lease_months'] > 0) {
+      $element['automatic_lease'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Lease-to-own by price'),
+        '#options' => [
+          '' => $general->automaticLease ? $this->t('General setting (on)') : $this->t('General setting (off)'),
+          '1' => $this->t('On'),
+          '0' => $this->t('Off'),
+        ],
+        '#default_value' => isset($own['automatic_lease']) ? (string) (int) $own['automatic_lease'] : '',
+      ];
+      $element['lease_months'] = [
+        '#type' => 'number',
+        '#title' => $this->t('Longest lease by price'),
+        '#description' => $this->t('Shortens the terms worked out from the price. @provider takes up to @months months.', [
+          '@provider' => $plugin->label(),
+          '@months' => $available['lease_months'],
+        ]),
+        '#field_suffix' => $this->t('months'),
+        '#min' => 2,
+        '#max' => $available['lease_months'],
+        '#default_value' => $own['lease_months'] ?? NULL,
+      ];
+    }
+    if (!$element) {
+      return [];
+    }
+    return [
+      '#type' => 'details',
+      '#title' => $this->t('Sale terms'),
+      '#description' => $this->t("For domains that leave these empty on their variation. Leave one empty here for the general <a href=\":url\">Sale terms</a>. Listings get a change with the next full sync.", [
+        ':url' => Url::fromRoute('commerce_domains.sale_terms')->toString(),
+      ]),
+      '#open' => (bool) $own,
+      '#tree' => TRUE,
+    ] + $element;
   }
 
   /**
@@ -199,6 +270,13 @@ class ProviderForm extends EntityForm {
     }
     if ($form_state->hasValue('is_marketplace') && !$entity->listsByApi()) {
       $entity->setMarketplace((bool) $form_state->getValue('is_marketplace'));
+    }
+    if ($form_state->hasValue('sale_terms')) {
+      $terms = array_filter((array) $form_state->getValue('sale_terms'), fn(mixed $value) => $value !== '' && $value !== NULL);
+      if (isset($terms['automatic_lease'])) {
+        $terms['automatic_lease'] = (bool) $terms['automatic_lease'];
+      }
+      $entity->setSaleTerms(array_map(fn(mixed $value) => is_bool($value) ? $value : (int) $value, $terms));
     }
     // Only there with the Key module, which builds the choices.
     if ($form_state->hasValue('credential_keys')) {

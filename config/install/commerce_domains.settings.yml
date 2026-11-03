@@ -1,1 +1,5 @@
 automatic_lease: true
+floor_percent: 80
+minimum_offer_percent: 50
+minimum_offer_percent_above: 25
+minimum_offer_break: 10000

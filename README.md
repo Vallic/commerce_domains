@@ -21,11 +21,16 @@ it is held at, and the marketplaces it is listed on.
   *List on marketplaces* and *Not listed on* keep a domain for sale on the
   site but off all or some marketplaces: the next sync removes its listings
   there, and CSV files leave it out.
-  *Sale terms* (*Commerce → Configuration → Domains*) lists what empty fields
-  come to and what each enabled marketplace does with them, and the fields say
-  it at the domain's price. *Offer lease-to-own by price* there turns automatic
-  leases off: only domains with their own term can then be leased, on the site
-  and on marketplaces, which get the change with the next full sync.
+  Empty terms resolve in order: the general ones on *Sale terms* (*Commerce →
+  Configuration → Domains*), a marketplace's own under *Sale terms* on its
+  provider form, then the domain's own on its variation, each applying where
+  the next is empty. A domain's own term always wins, even over a marketplace
+  with leases off. The floor, the minimum offer and lease-to-own on or off can
+  be set at both levels; a marketplace can also shorten the longest lease, and
+  the price bands of the lease rule are the same everywhere. This site uses the
+  general terms. *Sale terms* shows what each enabled marketplace comes to, and
+  the variation's fields say it at its price. Marketplaces get a change with
+  the next full sync.
 - **Domain providers**: the companies domains are registered or listed with.
   A provider is a config entity with an optional API plugin. Without one it is
   just a registrar name; with one, the plugin's capabilities apply.

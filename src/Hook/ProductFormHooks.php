@@ -6,6 +6,7 @@ namespace Drupal\commerce_domains\Hook;
 
 use Drupal\commerce_domains\Controller\RegistrarTabController;
 use Drupal\commerce_domains\RegistrarSync;
+use Drupal\commerce_domains\SaleTermRules;
 use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductInterface;
@@ -71,24 +72,24 @@ class ProductFormHooks {
     $number = (float) $price?->getNumber();
     if ($field === 'sale_lease_months') {
       if (!SaleTerms::automaticLease()) {
-        return $this->t('If empty: no lease, as automatic leases are off.');
+        return $this->t('If empty: no lease, unless a marketplace has leases on in its own sale terms.');
       }
       if (!$price) {
         return $this->t('If empty: worked out from the price.');
       }
-      $months = SaleTerms::defaultLeaseMonths($number);
+      $months = SaleTermRules::general()->leaseMonths($number);
       return $months
-        ? $this->t('If empty: up to @months months at this price, within what each marketplace takes.', ['@months' => $months])
+        ? $this->t("If empty: up to @months months at this price, within each marketplace's own terms.", ['@months' => $months])
         : $this->t('If empty: no lease at this price.');
     }
     if ($field === 'sale_minimum_offer') {
       return $price
-        ? $this->t('If empty: @amount at this price on most marketplaces.', ['@amount' => $amount(SaleTerms::defaultMinimumOffer($number))])
+        ? $this->t("If empty: @amount at this price, unless a marketplace's own terms differ.", ['@amount' => $amount(SaleTerms::defaultMinimumOffer($number))])
         : $this->t('If empty: worked out from the price.');
     }
     if ($field === 'sale_floor_price') {
       return $price
-        ? $this->t('If empty: @amount at this price, on marketplaces that use a floor.', ['@amount' => $amount(SaleTerms::defaultFloorPrice($number))])
+        ? $this->t("If empty: @amount at this price on marketplaces with a floor, unless their own terms differ.", ['@amount' => $amount(SaleTerms::defaultFloorPrice($number))])
         : $this->t('If empty: worked out from the price.');
     }
     return NULL;

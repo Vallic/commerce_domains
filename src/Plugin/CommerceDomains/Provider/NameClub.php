@@ -49,7 +49,7 @@ final class NameClub extends ListingPluginBase implements CsvExportInterface {
       return NULL;
     }
     $offers = $item->terms->offers;
-    $rule = $item->atomPremium ? $price : (int) ($price < 10000 ? $usd_price * 0.5 : $usd_price * 0.25);
+    $rule = $item->atomPremium ? $price : (int) ($usd_price * $this->saleTermRules()->minimumOfferShare($price));
     $minimum = $offers ? $this->minimumOfferFor($item, $price, $rule) : $price;
     // Descriptions go without full stops.
     $description = self::csvText($item->description, ['.']);

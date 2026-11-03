@@ -91,4 +91,20 @@ interface ProviderInterface extends ConfigEntityInterface, EntityWithPluginColle
    */
   public function setRegistrationSync(bool $sync): static;
 
+  /**
+   * Returns the sale terms here, where they differ from the general ones.
+   *
+   * @return array<string, mixed>
+   *   See SaleTermRules::withOverrides().
+   */
+  public function getSaleTerms(): array;
+
+  /**
+   * Sets the sale terms here.
+   *
+   * @param array<string, mixed> $terms
+   *   See SaleTermRules::withOverrides().
+   */
+  public function setSaleTerms(array $terms): static;
+
 }

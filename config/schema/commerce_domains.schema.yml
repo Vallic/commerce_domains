@@ -5,6 +5,18 @@ commerce_domains.settings:
     automatic_lease:
       type: boolean
       label: 'Offer lease-to-own by price on domains without their own term'
+    floor_percent:
+      type: integer
+      label: 'Floor, as a percentage of the price'
+    minimum_offer_percent:
+      type: integer
+      label: 'Minimum offer, as a percentage of the price, below the break'
+    minimum_offer_percent_above:
+      type: integer
+      label: 'Minimum offer, as a percentage of the price, from the break up'
+    minimum_offer_break:
+      type: integer
+      label: 'The price where the minimum offer changes percentage'
 
 commerce_domains.provider.*:
   type: config_entity
@@ -34,6 +46,30 @@ commerce_domains.provider.*:
     marketplace:
       type: boolean
       label: 'Domains are listed for sale here'
+    sale_terms:
+      type: mapping
+      label: 'Sale terms here, where they differ from the general ones'
+      mapping:
+        floor_percent:
+          type: integer
+          label: 'Floor, as a percentage of the price'
+          requiredKey: false
+        minimum_offer_percent:
+          type: integer
+          label: 'Minimum offer, as a percentage of the price, below the break'
+          requiredKey: false
+        minimum_offer_percent_above:
+          type: integer
+          label: 'Minimum offer, as a percentage of the price, from the break up'
+          requiredKey: false
+        automatic_lease:
+          type: boolean
+          label: 'Offer lease-to-own by price'
+          requiredKey: false
+        lease_months:
+          type: integer
+          label: 'Longest lease worked out from the price'
+          requiredKey: false
 
 commerce_domains.provider_plugin.*:
   type: mapping

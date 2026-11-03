@@ -150,7 +150,7 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
     $buy_now = $item->terms->buyNow;
     $offers = $item->terms->offers;
     // Atom premium names get the same minimum offer as the rest here.
-    $min_offer = $offers ? $this->minimumOfferFor($item, $price, (int) ($price < 10000 ? $usd_price * 0.5 : $usd_price * 0.25)) : $price;
+    $min_offer = $offers ? $this->minimumOfferFor($item, $price, (int) ($usd_price * $this->saleTermRules()->minimumOfferShare($price))) : $price;
     $cap = min(self::MAX_INSTALLMENTS, self::installmentsBeforeExpiry($item->expires));
     $installments = $buy_now ? $this->leaseMonthsFor($item, $this->leaseMonths($usd_price, $cap), $cap) : 0;
 

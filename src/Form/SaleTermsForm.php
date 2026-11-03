@@ -13,7 +13,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Turns automatic leases on or off, and shows the rules for empty sale terms.
+ * Sets the general rules for empty sale terms, and shows what each marketplace does.
  */
 class SaleTermsForm extends ConfigFormBase {
 
@@ -52,17 +52,36 @@ class SaleTermsForm extends ConfigFormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state): array {
     $form['intro'] = [
-      '#markup' => '<p>' . $this->t("A domain's own floor, minimum offer and lease-to-own, on its variation, always come first. The rules here apply to the ones left empty.") . '</p>',
+      '#markup' => '<p>' . $this->t("Terms resolve from these general ones, to a marketplace's own on its provider form, to a domain's own on its variation. Each applies where the next leaves a term empty. Marketplaces get a change with the next full sync.") . '</p>',
     ];
+    $percent = fn(\Stringable $title, string $key) => [
+      '#type' => 'number',
+      '#title' => $title,
+      '#field_suffix' => '%',
+      '#min' => 1,
+      '#max' => 100,
+      '#required' => TRUE,
+      '#config_target' => 'commerce_domains.settings:' . $key,
+    ];
+    $form['floor_percent'] = $percent($this->t('Floor'), 'floor_percent');
+    $form['minimum_offer_break'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Minimum offer changes at this price'),
+      '#min' => 1,
+      '#required' => TRUE,
+      '#config_target' => 'commerce_domains.settings:minimum_offer_break',
+    ];
+    $form['minimum_offer_percent'] = $percent($this->t('Minimum offer below that price'), 'minimum_offer_percent');
+    $form['minimum_offer_percent_above'] = $percent($this->t('Minimum offer from that price'), 'minimum_offer_percent_above');
     $form['automatic_lease'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Offer lease-to-own by price'),
-      '#description' => $this->t('On this site and on marketplaces. When off, only domains with their own lease term can be leased. Marketplaces get the change with the next full sync.'),
+      '#description' => $this->t('On this site, and on marketplaces without a setting of their own. When off, only domains with their own lease term can be leased.'),
       '#config_target' => 'commerce_domains.settings:automatic_lease',
     ];
     $form['lease'] = [
       '#type' => 'table',
-      '#caption' => $this->t('Longest lease by price'),
+      '#caption' => $this->t('Longest lease by price, the same on every marketplace'),
       '#header' => [$this->t('Price'), $this->t('Longest lease')],
       '#rows' => $this->leaseRows(),
     ];
@@ -73,7 +92,8 @@ class SaleTermsForm extends ConfigFormBase {
         $this->t('Marketplace'),
         $this->t('Floor'),
         $this->t('Minimum offer'),
-        $this->t('Longest lease they take'),
+        $this->t('Lease by price'),
+        $this->t('Own terms'),
         $this->t('Also'),
       ],
       '#rows' => $this->marketplaceRows(),
@@ -118,15 +138,35 @@ class SaleTermsForm extends ConfigFormBase {
         continue;
       }
       $terms = $plugin->fallbackTerms();
+      $rules = $plugin->saleTermRules();
       $rows[] = [
-        $provider->label(),
+        ['data' => $provider->toLink($provider->label(), 'edit-form')->toRenderable()],
         $terms['floor'] ?? $this->t('None'),
         $terms['minimum_offer'] ?? $this->t('None'),
-        $terms['lease_months'] ? $this->formatPlural($terms['lease_months'], '1 month', '@count months') : $this->t('None'),
+        match (TRUE) {
+          !$terms['lease_months'] => $this->t('None'),
+          !$rules->automaticLease => $this->t('Off'),
+          default => $this->t('Up to @months months', ['@months' => min($rules->leaseLimit ?? $terms['lease_months'], $terms['lease_months'])]),
+        },
+        $this->ownTerms($provider),
         $terms['note'] ?? '',
       ];
     }
     return $rows;
+  }
+
+  /**
+   * Lists the terms a marketplace sets for itself.
+   */
+  protected function ownTerms(ProviderInterface $provider): string {
+    $labels = [
+      'floor_percent' => $this->t('floor'),
+      'minimum_offer_percent' => $this->t('minimum offer'),
+      'minimum_offer_percent_above' => $this->t('minimum offer'),
+      'automatic_lease' => $this->t('lease'),
+      'lease_months' => $this->t('lease'),
+    ];
+    return implode(', ', array_unique(array_map('strval', array_intersect_key($labels, $provider->getSaleTerms()))));
   }
 
 }

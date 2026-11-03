@@ -7,6 +7,7 @@
 
 declare(strict_types=1);
 
+use Drupal\commerce_domains\SaleTermRules;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\Dynadot;
 use Drupal\field\Entity\FieldConfig;
 
@@ -131,4 +132,17 @@ function commerce_domains_update_11006(): void {
   if ($config->get('automatic_lease') === NULL) {
     $config->set('automatic_lease', TRUE)->save();
   }
+}
+
+/**
+ * Adds the general rules for empty sale terms, as they have been.
+ */
+function commerce_domains_update_11007(): void {
+  $config = \Drupal::configFactory()->getEditable('commerce_domains.settings');
+  foreach (SaleTermRules::DEFAULTS as $key => $value) {
+    if ($config->get($key) === NULL) {
+      $config->set($key, $value);
+    }
+  }
+  $config->save();
 }

@@ -6,6 +6,7 @@ namespace Drupal\commerce_domains\Entity;
 
 use Drupal\commerce_domains\Form\ProviderForm;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\CsvExportInterface;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingPluginBase;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginInterface;
 use Drupal\commerce_domains\ProviderListBuilder;
@@ -64,6 +65,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
     'credential_keys',
     'registration_sync',
     'marketplace',
+    'sale_terms',
   ],
 )]
 class Provider extends ConfigEntityBase implements ProviderInterface {
@@ -118,6 +120,13 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
   protected bool $marketplace = FALSE;
 
   /**
+   * The sale terms here, where they differ from the general ones.
+   *
+   * @var array<string, mixed>
+   */
+  protected array $sale_terms = [];
+
+  /**
    * The collection holding the plugin.
    *
    * @var \Drupal\Core\Plugin\DefaultSingleLazyPluginCollection|null
@@ -133,8 +142,26 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
     }
     $plugin = $this->getPluginCollection()->get($this->plugin);
     assert($plugin instanceof ProviderPluginInterface);
+    if ($plugin instanceof ListingPluginBase) {
+      $plugin->setSaleTerms($this->sale_terms);
+    }
     // The plugin fills the credentials settings.php leaves empty from these.
     return $plugin->setCredentialKeys($this->credential_keys);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getSaleTerms(): array {
+    return $this->sale_terms;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setSaleTerms(array $terms): static {
+    $this->sale_terms = $terms;
+    return $this;
   }
 
   /**
@@ -151,6 +178,7 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
     $this->plugin = $plugin_id ?: NULL;
     $this->configuration = [];
     $this->credential_keys = [];
+    $this->sale_terms = [];
     $this->pluginCollection = NULL;
     return $this;
   }
