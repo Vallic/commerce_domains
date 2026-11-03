@@ -56,4 +56,16 @@ final class NameClub extends ListingPluginBase implements CsvExportInterface {
     return [$item->title, 'USD', $price, $offers ? 'Yes' : 'No', $minimum, $description, 'Yes'];
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function fallbackTerms(): array {
+    return [
+      'floor' => NULL,
+      'minimum_offer' => $this->usualMinimumOffer(),
+      'lease_months' => 0,
+      'note' => $this->t('Atom premium names: the full price.'),
+    ];
+  }
+
 }

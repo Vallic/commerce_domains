@@ -48,4 +48,16 @@ final class Sedo extends ListingPluginBase implements CsvExportInterface {
     return [$item->title, 'BUY_NOW', 'YES', $price, $minimum, 'EUR'];
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function fallbackTerms(): array {
+    return [
+      'floor' => NULL,
+      'minimum_offer' => $this->usualMinimumOffer(),
+      'lease_months' => 0,
+      'note' => $this->t('Atom premium names are left out.'),
+    ];
+  }
+
 }

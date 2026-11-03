@@ -11,3 +11,10 @@ entity.commerce_domains_provider.collection:
   route_name: entity.commerce_domains_provider.collection
   parent: commerce_domains.configuration
   weight: -10
+
+commerce_domains.sale_terms:
+  title: 'Sale terms'
+  description: 'What domains without their own terms get: floor, minimum offer and lease-to-own.'
+  route_name: commerce_domains.sale_terms
+  parent: commerce_domains.configuration
+  weight: -5

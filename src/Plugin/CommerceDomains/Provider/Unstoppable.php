@@ -279,4 +279,16 @@ final class Unstoppable extends MarketplacePluginBase implements RegistrarInterf
     return $listing && $listing['price'] > 0 ? [$item->title, $listing['price']] : NULL;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function fallbackTerms(): array {
+    return [
+      'floor' => NULL,
+      'minimum_offer' => $this->usualMinimumOffer(),
+      'lease_months' => 0,
+      'note' => NULL,
+    ];
+  }
+
 }

@@ -55,6 +55,9 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
   protected const SINGLE_FETCH_LIMIT = 20;
 
   // Mid-sale, or stopped by hand in SellerHub.
+  // The longest lease its file takes, in monthly payments.
+  protected const MAX_LEASE_MONTHS = 36;
+
   protected const LOCKED_STATUSES = ['saleProcessing', 'privateSale', 'leaseActive', 'sold', 'onSaleStopped'];
 
   // The locked statuses that are sales: a purchase under way, an open
@@ -467,7 +470,7 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
       return NULL;
     }
     $price = $listing['binPrice'];
-    $lease_months = $listing['binPriceEnabled'] ? $this->leaseMonthsFor($item, $this->leaseMonths($price), 36) : 0;
+    $lease_months = $listing['binPriceEnabled'] ? $this->leaseMonthsFor($item, $this->leaseMonths($price), self::MAX_LEASE_MONTHS) : 0;
     return [
       $item->title,
       $listing['minPriceEnabled'] ? $listing['minPrice'] : '',
@@ -475,6 +478,18 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
       $lease_months,
       25,
       'on',
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function fallbackTerms(): array {
+    return [
+      'floor' => NULL,
+      'minimum_offer' => $this->usualMinimumOffer(),
+      'lease_months' => self::MAX_LEASE_MONTHS,
+      'note' => $this->t('The lease goes out by CSV file only: the API has no setting for it. Atom premium names: the full price.'),
     ];
   }
 

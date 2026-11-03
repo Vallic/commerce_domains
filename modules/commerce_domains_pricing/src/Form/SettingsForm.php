@@ -15,6 +15,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\ConfigTarget;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 use Drupal\Core\StringTranslation\PluralTranslatableMarkup;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -72,6 +73,12 @@ final class SettingsForm extends ConfigFormBase {
     $store_storage = $this->entityTypeManager->getStorage('commerce_store');
     $default_currency = $store_storage->loadDefault()?->getDefaultCurrencyCode() ?? array_key_first($currencies);
 
+    $form['sale_terms'] = [
+      '#markup' => '<p>' . $this->t('These rules set prices. The floor, minimum offer and lease-to-own worked out from a price are on the <a href=":url">Sale terms</a> page.', [
+        ':url' => Url::fromRoute('commerce_domains.sale_terms')->toString(),
+      ]) . '</p>',
+      '#access' => $this->currentUser()->hasPermission('administer commerce_domains providers'),
+    ];
     $form['pricing_rules'] = [
       '#type' => 'details',
       '#title' => $this->t('Pricing rules'),

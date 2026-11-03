@@ -63,6 +63,16 @@ commerce_domains.configuration:
   requirements:
     _permission: 'access commerce administration pages'
 
+commerce_domains.sale_terms:
+  path: '/admin/commerce/domains/settings/sale-terms'
+  defaults:
+    _form: '\Drupal\commerce_domains\Form\SaleTermsForm'
+    _title: 'Sale terms'
+  requirements:
+    _permission: 'administer commerce_domains providers'
+  options:
+    _admin_route: TRUE
+
 # One per domain tab beside Edit; see ProductTabs.
 route_callbacks:
   - '\Drupal\commerce_domains\Routing\ProductTabRoutes::routes'

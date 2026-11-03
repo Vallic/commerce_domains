@@ -82,6 +82,38 @@ abstract class ListingPluginBase extends ProviderPluginBase {
   }
 
   /**
+   * Says what this marketplace does when a domain sets no terms of its own.
+   *
+   * For the Sale terms page. NULL means it has no such setting.
+   *
+   * @return array{floor: \Stringable|string|null, minimum_offer: \Stringable|string|null, lease_months: int, note: \Stringable|string|null}
+   *   The rule for the floor and the minimum offer, the longest lease it takes
+   *   in monthly payments (0 for none), and anything else that applies.
+   */
+  public function fallbackTerms(): array {
+    return [
+      'floor' => NULL,
+      'minimum_offer' => NULL,
+      'lease_months' => 0,
+      'note' => $this->t('Sells at the price only.'),
+    ];
+  }
+
+  /**
+   * Returns the usual rule for a minimum offer, for fallbackTerms().
+   */
+  protected function usualMinimumOffer(): \Stringable {
+    return $this->t('Half the price below @break, a quarter above', ['@break' => number_format(SaleTerms::MINIMUM_OFFER_BREAK)]);
+  }
+
+  /**
+   * Returns the usual rule for a floor, for fallbackTerms().
+   */
+  protected function usualFloor(): \Stringable {
+    return $this->t('@percent% of the price', ['@percent' => (int) round(SaleTerms::FLOOR_SHARE * 100)]);
+  }
+
+  /**
    * Returns the lease-to-own term offered at a price, within a cap.
    *
    * @return int

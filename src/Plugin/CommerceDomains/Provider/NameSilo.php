@@ -355,4 +355,16 @@ final class NameSilo extends MarketplacePluginBase implements DomainManagementIn
     return $this->client ??= new NameSiloClient($this->httpClient, (string) $this->configuration['api_key']);
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function fallbackTerms(): array {
+    return [
+      'floor' => NULL,
+      'minimum_offer' => $this->usualMinimumOffer(),
+      'lease_months' => self::MAX_PAYMENT_MONTHS,
+      'note' => NULL,
+    ];
+  }
+
 }

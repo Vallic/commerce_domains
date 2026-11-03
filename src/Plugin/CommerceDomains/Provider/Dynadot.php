@@ -606,4 +606,16 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
     ];
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function fallbackTerms(): array {
+    return [
+      'floor' => NULL,
+      'minimum_offer' => $this->usualMinimumOffer(),
+      'lease_months' => self::MAX_INSTALLMENTS,
+      'note' => $this->t('The lease ends at least a month before the domain expires.'),
+    ];
+  }
+
 }

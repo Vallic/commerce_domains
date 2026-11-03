@@ -122,3 +122,13 @@ function commerce_domains_update_11005(): void {
     \Drupal::service('commerce.configurable_field_manager')->createField($field);
   }
 }
+
+/**
+ * Adds the setting for automatic leases, on as they have been.
+ */
+function commerce_domains_update_11006(): void {
+  $config = \Drupal::configFactory()->getEditable('commerce_domains.settings');
+  if ($config->get('automatic_lease') === NULL) {
+    $config->set('automatic_lease', TRUE)->save();
+  }
+}

@@ -135,4 +135,19 @@ class SaleTermsTest extends ProviderTestBase {
     }
   }
 
+  /**
+   * Tests that the longest lease a marketplace says it takes is what it does.
+   */
+  public function testFallbackLeaseCaps(): void {
+    $item = self::item('a.com', 9000, ['terms' => new SaleTerms(leaseMonths: 120)]);
+    $afternic = $this->plugin(Afternic::class, 'afternic');
+    $this->assertSame($afternic->fallbackTerms()['lease_months'], $afternic->buildListing($item)['maxLeasePeriod']);
+    $dynadot = $this->plugin(Dynadot::class, 'dynadot');
+    $this->assertSame($dynadot->fallbackTerms()['lease_months'], $dynadot->buildListing($item)['maximum_installments']);
+    $namesilo = $this->plugin(NameSilo::class, 'namesilo');
+    $this->assertSame($namesilo->fallbackTerms()['lease_months'], $namesilo->buildListing($item)['payment_plan_months']);
+    $spaceship = $this->plugin(Spaceship::class, 'spaceship');
+    $this->assertSame($spaceship->fallbackTerms()['lease_months'], $spaceship->csvRow($item, 'listings')[3]);
+  }
+
 }

@@ -48,4 +48,16 @@ final class Daaz extends ListingPluginBase implements CsvExportInterface {
     return [$item->title, $price, $minimum, 'USD'];
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function fallbackTerms(): array {
+    return [
+      'floor' => NULL,
+      'minimum_offer' => $this->usualMinimumOffer(),
+      'lease_months' => 0,
+      'note' => $this->t('Atom premium names: the full price.'),
+    ];
+  }
+
 }
