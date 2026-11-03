@@ -81,6 +81,7 @@ final class LeaseAdminForm extends FormBase {
         : [$this->t('Card'), $lease->getPaymentMethod()?->label() ?? $this->t('None saved')],
       [$this->t('Failed attempts'), $lease->getFailures()],
       [$this->t('Last failure'), (string) $lease->get('last_error')->value],
+      [$this->t('Unconfirmed charge since'), $date($lease->getChargeStarted())],
       [$this->t('Started'), $date((int) $lease->get('created')->value)],
     ];
     $form['details'] = [
@@ -89,12 +90,30 @@ final class LeaseAdminForm extends FormBase {
     ];
 
     $chargeable = $lease->isOpen() || $lease->getState() === LeaseInterface::DEFAULTED;
+    $unconfirmed = $lease->getChargeStarted() !== NULL;
+    // From the page that was shown, so a second click of the button doesn't
+    // charge the payment after the one meant.
+    $form['payments_made'] = ['#type' => 'hidden', '#value' => $lease->getPaymentsMade()];
     $form['actions'] = ['#type' => 'actions'];
     $form['actions']['charge'] = [
       '#type' => 'submit',
       '#value' => $this->t('Charge @amount now', ['@amount' => $this->money($lease->getNextAmount())]),
       '#submit' => ['::charge'],
-      '#access' => $chargeable && !$lease->isManual() && $lease->getRemaining()->isPositive(),
+      '#access' => $chargeable && !$unconfirmed && !$lease->isManual() && $lease->getRemaining()->isPositive(),
+    ];
+    // Only the gateway knows: check there first.
+    $form['actions']['charge_taken'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('The gateway took @amount', ['@amount' => $this->money($lease->getNextAmount())]),
+      '#submit' => ['::chargeTaken'],
+      '#access' => $chargeable && $unconfirmed,
+      '#button_type' => 'primary',
+    ];
+    $form['actions']['charge_not_taken'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('The gateway did not take it'),
+      '#submit' => ['::chargeNotTaken'],
+      '#access' => $chargeable && $unconfirmed,
     ];
     // Paid by hand: the owner records what arrived. A payment received on
     // the order's Payments tab, or reported by the gateway, counts too.
@@ -125,11 +144,36 @@ final class LeaseAdminForm extends FormBase {
    */
   public function charge(array &$form, FormStateInterface $form_state): void {
     $lease = $this->lease($form_state);
-    if ($lease && $this->leaseManager->charge($lease)) {
+    if ($lease && $this->leaseManager->charge($lease, (int) $form_state->getValue('payments_made'))) {
       $this->messenger()->addStatus($this->t('The payment was charged.'));
+      return;
+    }
+    $lease = $this->lease($form_state);
+    if ($lease && $lease->getPaymentsMade() !== (int) $form_state->getValue('payments_made')) {
+      $this->messenger()->addWarning($this->t('Nothing was charged: this payment has already been made.'));
     }
     else {
       $this->messenger()->addError($this->t('The payment failed: @error', ['@error' => (string) $lease?->get('last_error')->value]));
+    }
+  }
+
+  /**
+   * Records an unclear charge as taken.
+   */
+  public function chargeTaken(array &$form, FormStateInterface $form_state): void {
+    if ($lease = $this->lease($form_state)) {
+      $this->leaseManager->settleCharge($lease, TRUE);
+      $this->messenger()->addStatus($this->t('The payment is recorded.'));
+    }
+  }
+
+  /**
+   * Lets an unclear charge that wasn't taken be charged again.
+   */
+  public function chargeNotTaken(array &$form, FormStateInterface $form_state): void {
+    if ($lease = $this->lease($form_state)) {
+      $this->leaseManager->settleCharge($lease, FALSE);
+      $this->messenger()->addStatus($this->t('The payment is due again, and will be charged on the next run.'));
     }
   }
 

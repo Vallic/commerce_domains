@@ -107,6 +107,13 @@ class LeaseHooks {
             : $this->t('We could not charge @next to your card for the lease of @domain. We will try again on @due; if your card changed, or your bank asks you to approve the payment, please reply to this email.', $args, $options),
         ],
       ],
+      'unconfirmed' => [
+        $this->t('Check a lease payment: @domain', $args, $options),
+        [
+          $this->t('It is not known whether charging @next for the lease of @domain went through: @error', $args, $options),
+          $this->t('Nothing more is charged until you check the payment at the gateway, then say what happened on the lease page.', $args, $options),
+        ],
+      ],
       'defaulted' => [
         $owner ? $this->t('Lease in default: @domain', $args, $options) : $this->t('Your lease of @domain is overdue', $args, $options),
         [

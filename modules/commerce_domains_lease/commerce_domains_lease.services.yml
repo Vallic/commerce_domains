@@ -11,6 +11,7 @@ services:
   Drupal\commerce_domains_lease\LeaseManager:
     arguments:
       $logger: '@logger.channel.commerce_domains_lease'
+      $lock: '@lock'
 
   Drupal\commerce_domains_lease\EventSubscriber\CheckoutSubscriber:
     tags:

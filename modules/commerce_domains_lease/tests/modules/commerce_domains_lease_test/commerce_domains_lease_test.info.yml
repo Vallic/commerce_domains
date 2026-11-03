@@ -1,0 +1,7 @@
+name: 'Commerce Domains Lease test'
+type: module
+description: 'A payment gateway whose outcome tests can choose.'
+package: Testing
+hidden: true
+dependencies:
+  - commerce:commerce_payment_example

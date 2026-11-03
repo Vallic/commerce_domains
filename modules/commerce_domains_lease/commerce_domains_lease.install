@@ -28,3 +28,12 @@ function commerce_domains_lease_update_11001(): void {
     $settings->set('manual_gateway_plugins', ['manual', 'wise_quick_pay'])->save();
   }
 }
+
+/**
+ * Remembers a charge in progress, so an unclear one isn't charged twice.
+ */
+function commerce_domains_lease_update_11002(): void {
+  \Drupal::entityDefinitionUpdateManager()->installFieldStorageDefinition('charge_started', 'commerce_domains_lease', 'commerce_domains_lease', BaseFieldDefinition::create('timestamp')
+    ->setLabel(new TranslatableMarkup('Charge started'))
+    ->setDescription(new TranslatableMarkup('When a charge began that has not reported back yet; empty otherwise.')));
+}

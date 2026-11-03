@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_lease\EventSubscriber;
 
+use Drupal\commerce_domains_lease\Entity\LeaseInterface;
 use Drupal\commerce_domains_lease\LeaseCalculator;
 use Drupal\commerce_domains_lease\LeaseManager;
 use Drupal\commerce_order\Entity\OrderInterface;
@@ -43,6 +44,7 @@ final class CheckoutSubscriber implements EventSubscriberInterface {
       // By name: Commerce Stripe is optional.
       'commerce_stripe.payment_intent.create' => 'onStripeIntent',
       'commerce_order.place.post_transition' => 'onPlace',
+      'commerce_order.cancel.post_transition' => 'onCancel',
       PaymentEvents::PAYMENT_PRESAVE => 'onPaymentPresave',
       PaymentEvents::PAYMENT_INSERT => 'onPaymentSaved',
       PaymentEvents::PAYMENT_UPDATE => 'onPaymentSaved',
@@ -149,6 +151,20 @@ final class CheckoutSubscriber implements EventSubscriberInterface {
     $plan = $months ? $this->calculator->plan($order, $months) : NULL;
     if ($plan) {
       $event->setBalance($plan->downPayment);
+    }
+  }
+
+  /**
+   * Stops the lease of a canceled order, so nothing more is charged.
+   */
+  public function onCancel(WorkflowTransitionEvent $event): void {
+    $order = $event->getEntity();
+    if (!$order instanceof OrderInterface) {
+      return;
+    }
+    $lease = $this->leaseManager->forOrder($order);
+    if ($lease && !in_array($lease->getState(), [LeaseInterface::COMPLETED, LeaseInterface::CANCELED], TRUE)) {
+      $this->leaseManager->cancel($lease);
     }
   }
 

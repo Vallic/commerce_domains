@@ -12,13 +12,15 @@ use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_payment\Entity\PaymentGatewayInterface;
 use Drupal\commerce_payment\Entity\PaymentInterface;
 use Drupal\commerce_payment\Entity\PaymentMethodInterface;
-use Drupal\commerce_payment\Exception\PaymentGatewayException;
+use Drupal\commerce_payment\Exception\DeclineException;
+use Drupal\commerce_payment\Exception\InvalidRequestException;
 use Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\SupportsStoredPaymentMethodsInterface;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Lock\LockBackendInterface;
 use Drupal\Core\Mail\MailManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -31,11 +33,18 @@ use Psr\Log\LoggerInterface;
  * that the lease is in default and nothing more is charged until the owner
  * charges it by hand. The buyer hears about every payment and failure, the
  * owner about failures, defaults and completed leases.
+ *
+ * A payment whose outcome is unclear, as after a timeout, is never retried: the
+ * money may have been taken. The lease stops and the owner is told to check at
+ * the gateway, and settles it on the lease page.
  */
 class LeaseManager {
 
   // The queue of lease payments.
   public const QUEUE = 'commerce_domains_lease';
+
+  // How long a charge can hold its lock, longer than a gateway call takes.
+  protected const CHARGE_LOCK_SECONDS = 180.0;
 
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
@@ -44,6 +53,7 @@ class LeaseManager {
     protected MailManagerInterface $mailManager,
     protected TimeInterface $time,
     protected LoggerInterface $logger,
+    protected LockBackendInterface $lock,
   ) {}
 
   /**
@@ -142,16 +152,56 @@ class LeaseManager {
   /**
    * Charges the next payment of a lease, or asks for it on a manual lease.
    *
+   * Only one charge of a lease runs at a time, and a lease is reloaded once it
+   * is this one's turn, so a queue job and the Charge button can't both take
+   * the same payment.
+   *
+   * @param \Drupal\commerce_domains_lease\Entity\LeaseInterface $lease
+   *   The lease.
+   * @param int|null $payments_made
+   *   How many payments the caller saw made, by default the number on $lease.
+   *   If that has changed by the time this runs, the payment the caller meant
+   *   has been taken, and nothing is charged.
+   *
    * @return bool
    *   Whether it was paid.
    */
-  public function charge(LeaseInterface $lease): bool {
+  public function charge(LeaseInterface $lease, ?int $payments_made = NULL): bool {
+    $payments_made ??= $lease->getPaymentsMade();
+    $lock = $this->lockName($lease);
+    if (!$this->lock->acquire($lock, self::CHARGE_LOCK_SECONDS)) {
+      return FALSE;
+    }
+    try {
+      $fresh = $this->entityTypeManager->getStorage('commerce_domains_lease')->loadUnchanged($lease->id());
+      if (!$fresh instanceof LeaseInterface || $fresh->getPaymentsMade() !== $payments_made) {
+        return FALSE;
+      }
+      return $this->chargeLocked($fresh);
+    }
+    finally {
+      $this->lock->release($lock);
+    }
+  }
+
+  /**
+   * Charges the next payment of a lease, holding its lock.
+   */
+  protected function chargeLocked(LeaseInterface $lease): bool {
     if (!$lease->isOpen() && $lease->getState() !== LeaseInterface::DEFAULTED) {
+      return FALSE;
+    }
+    if ($this->stopIfOrderCanceled($lease)) {
       return FALSE;
     }
     if ($lease->isManual()) {
       $this->request($lease);
       return FALSE;
+    }
+    // An earlier charge never reported back. Charging again could take the
+    // money twice, so it is settled first.
+    if ($lease->getChargeStarted() !== NULL) {
+      return $this->recoverCharge($lease);
     }
     $order = $lease->getOrder();
     $method = $lease->getPaymentMethod();
@@ -180,19 +230,47 @@ class LeaseManager {
     if ($order->getData('stripe_intent')) {
       $order->unsetData('stripe_intent')->save();
     }
+    // Saved before the gateway is called: if this process dies between the
+    // charge and recording it, the next try finds this instead of charging.
+    $lease->set('charge_started', $this->time->getRequestTime())->save();
     try {
       $plugin->createPayment($payment, TRUE);
     }
-    catch (PaymentGatewayException $e) {
+    // The gateway said no, so no money moved and it is safe to try again.
+    catch (DeclineException | InvalidRequestException $e) {
+      $lease->set('charge_started', NULL);
       $this->failed($lease, $e->getMessage());
       return FALSE;
     }
+    // Anything else, such as a timeout, says nothing about the money.
+    catch (\Throwable $e) {
+      if (!$payment->isNew() && $payment->getState()->getId() === 'completed') {
+        $this->logger->warning('Lease @lease (@domain): the gateway reported an error after the payment was recorded, so it counts as paid: @error', [
+          '@lease' => $lease->id(),
+          '@domain' => $lease->getDomain(),
+          '@error' => $e->getMessage(),
+        ]);
+        $this->recordCharge($lease, $amount);
+        return TRUE;
+      }
+      $this->hold($lease, $e->getMessage());
+      return FALSE;
+    }
 
+    $this->recordCharge($lease, $amount);
+    return TRUE;
+  }
+
+  /**
+   * Counts a charge on the lease.
+   */
+  protected function recordCharge(LeaseInterface $lease, Price $amount): void {
     $paid = $lease->getPaid()->add($amount);
     $lease->set('paid', $paid)
       ->set('payments_made', $lease->getPaymentsMade() + 1)
       ->set('failures', 0)
       ->set('last_error', NULL)
+      ->set('charge_started', NULL)
       ->set('state', LeaseInterface::ACTIVE)
       // From when it was due, so a late payment keeps the day of the month.
       ->set('next_due', self::addMonths($lease->getNextDue() ?? $this->time->getRequestTime(), 1));
@@ -203,7 +281,116 @@ class LeaseManager {
       $lease->save();
       $this->mail('paid', $lease, ['amount' => $amount]);
     }
+  }
+
+  /**
+   * Settles a charge that never reported back, without charging again.
+   *
+   * A payment on the order that the lease hasn't counted is that charge: the
+   * money arrived and only the lease's record of it was lost. Otherwise nobody
+   * here can know, and the owner has to look at the gateway.
+   *
+   * @return bool
+   *   Whether it turned out to be paid.
+   */
+  protected function recoverCharge(LeaseInterface $lease): bool {
+    $amount = $lease->getNextAmount();
+    if ($this->hasUncountedPayment($lease, $amount)) {
+      $this->recordCharge($lease, $amount);
+      return TRUE;
+    }
+    $this->hold($lease, 'An earlier charge did not finish.');
+    return FALSE;
+  }
+
+  /**
+   * Whether the lease's order has a payment of the amount the lease hasn't got.
+   */
+  protected function hasUncountedPayment(LeaseInterface $lease, Price $amount): bool {
+    $order = $lease->getOrder();
+    $on_order = $order ? $this->paidOn($order) : NULL;
+    return $on_order && $on_order->subtract($lease->getPaid())->greaterThanOrEqual($amount);
+  }
+
+  /**
+   * Stops charging a lease until the owner has checked an unclear charge.
+   */
+  protected function hold(LeaseInterface $lease, string $error): void {
+    $this->logger->error('Lease @lease (@domain): it is not known whether a charge of @amount went through, so nothing more is charged until it is checked: @error', [
+      '@lease' => $lease->id(),
+      '@domain' => $lease->getDomain(),
+      '@amount' => (string) $lease->getNextAmount(),
+      '@error' => $error,
+    ]);
+    $lease->set('state', LeaseInterface::OVERDUE)
+      ->set('next_due', NULL)
+      ->set('last_error', $error)
+      ->save();
+    $this->mail('unconfirmed', $lease, owner: TRUE, buyer: FALSE);
+  }
+
+  /**
+   * Settles an unclear charge, once the owner has checked at the gateway.
+   *
+   * @param \Drupal\commerce_domains_lease\Entity\LeaseInterface $lease
+   *   The lease.
+   * @param bool $taken
+   *   TRUE if the money was taken, which records the payment. FALSE if it
+   *   wasn't, which lets the next run charge it again.
+   */
+  public function settleCharge(LeaseInterface $lease, bool $taken): void {
+    $lock = $this->lockName($lease);
+    if (!$this->lock->acquire($lock, self::CHARGE_LOCK_SECONDS)) {
+      return;
+    }
+    try {
+      $lease = $this->entityTypeManager->getStorage('commerce_domains_lease')->loadUnchanged($lease->id());
+      if (!$lease instanceof LeaseInterface || $lease->getChargeStarted() === NULL) {
+        return;
+      }
+      if (!$taken) {
+        $lease->set('charge_started', NULL)
+          ->set('last_error', NULL)
+          ->set('next_due', $this->time->getRequestTime())
+          ->save();
+        return;
+      }
+      $amount = $lease->getNextAmount();
+      if (!$this->hasUncountedPayment($lease, $amount)) {
+        $this->entityTypeManager->getStorage('commerce_payment')->create([
+          'state' => 'completed',
+          'amount' => $amount,
+          'payment_gateway' => $lease->getPaymentMethod()?->getPaymentGatewayId() ?? $lease->getPaymentGateway()?->id(),
+          'payment_method' => $lease->getPaymentMethod()?->id(),
+          'order_id' => $lease->getOrder()?->id(),
+        ])->save();
+      }
+      $this->recordCharge($lease, $amount);
+    }
+    finally {
+      $this->lock->release($lock);
+    }
+  }
+
+  /**
+   * Cancels a lease whose order was canceled.
+   *
+   * @return bool
+   *   Whether the order was canceled.
+   */
+  protected function stopIfOrderCanceled(LeaseInterface $lease): bool {
+    if ($lease->getOrder()?->getState()->getId() !== 'canceled') {
+      return FALSE;
+    }
+    $this->cancel($lease);
     return TRUE;
+  }
+
+  /**
+   * Returns the name of the lock on charging a lease.
+   */
+  protected function lockName(LeaseInterface $lease): string {
+    return self::QUEUE . ':charge:' . $lease->id();
   }
 
   /**
@@ -214,7 +401,7 @@ class LeaseManager {
    * reminded, and past the tries the lease is in default, as with a card.
    */
   public function request(LeaseInterface $lease): void {
-    if (!$lease->isOpen() || !$lease->getRemaining()->isPositive()) {
+    if (!$lease->isOpen() || !$lease->getRemaining()->isPositive() || $this->stopIfOrderCanceled($lease)) {
       return;
     }
     if ($lease->getRequested() !== NULL) {
@@ -359,12 +546,12 @@ class LeaseManager {
   /**
    * Mails the buyer about a lease, and the owner when asked.
    */
-  protected function mail(string $key, LeaseInterface $lease, array $params = [], bool $owner = FALSE): void {
+  protected function mail(string $key, LeaseInterface $lease, array $params = [], bool $owner = FALSE, bool $buyer = TRUE): void {
     $params += ['lease' => $lease];
-    $buyer = $lease->getOrder()?->getEmail() ?: $lease->getOwner()->getEmail();
+    $buyer_mail = $lease->getOrder()?->getEmail() ?: $lease->getOwner()->getEmail();
     $langcode = $lease->getOwner()->getPreferredLangcode();
-    if ($buyer) {
-      $this->mailManager->mail('commerce_domains_lease', $key, $buyer, $langcode, $params + ['to' => 'buyer']);
+    if ($buyer && $buyer_mail) {
+      $this->mailManager->mail('commerce_domains_lease', $key, $buyer_mail, $langcode, $params + ['to' => 'buyer']);
     }
     $owner_mail = (string) $this->configFactory->get('commerce_domains_lease.settings')->get('notify_mail')
       ?: (string) $this->configFactory->get('system.site')->get('mail');

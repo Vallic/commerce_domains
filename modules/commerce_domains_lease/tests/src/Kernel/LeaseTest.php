@@ -15,6 +15,7 @@ use Drupal\commerce_domains_lease\Plugin\AdvancedQueue\JobType\LeaseChargeJob;
 use Drupal\commerce_domains_lease\Plugin\Commerce\CheckoutPane\LeaseToOwn;
 use Drupal\commerce_order\Entity\Order;
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\commerce_order\Entity\OrderType;
 use Drupal\commerce_payment\Entity\Payment;
 use Drupal\commerce_payment\Entity\PaymentGateway;
 use Drupal\commerce_payment\Entity\PaymentMethod;
@@ -22,6 +23,7 @@ use Drupal\commerce_payment\Event\FilterPaymentGatewaysEvent;
 use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductInterface;
 use Drupal\Core\Form\FormState;
+use Drupal\Core\Lock\LockBackendInterface;
 use Drupal\Core\Test\AssertMailTrait;
 use Drupal\profile\Entity\Profile;
 use Drupal\Tests\commerce_domains\Kernel\DomainsKernelTestBase;
@@ -65,6 +67,7 @@ class LeaseTest extends DomainsKernelTestBase {
     'advancedqueue',
     'commerce_domains_checkout',
     'commerce_domains_lease',
+    'commerce_domains_lease_test',
   ];
 
   /**
@@ -413,6 +416,280 @@ class LeaseTest extends DomainsKernelTestBase {
     $this->container->get('commerce_payment.order_updater')->destruct();
     $this->assertTrue(Order::load($order->id())->isPaid());
     $this->assertCount(2, $this->getMails(['key' => 'completed']));
+  }
+
+  /**
+   * Places a lease on a card whose gateway does as the test says.
+   *
+   * @return \Drupal\commerce_order\Entity\OrderInterface
+   *   The order. Its first monthly payment is due now.
+   */
+  protected function leaseOnTestGateway(): OrderInterface {
+    PaymentGateway::load('card')->setPluginId('lease_test_gateway')->save();
+    $this->config('commerce_domains_lease.settings')->set('gateway_plugins', ['lease_test_gateway'])->save();
+    $order = $this->order($this->createDomain('Lease.com', 6000), 6);
+    $this->checkout($order, $this->card());
+    $this->lease($order)->set('next_due', $this->container->get('datetime.time')->getRequestTime() - 1)->save();
+    return $order;
+  }
+
+  /**
+   * Sets what the test gateway does next.
+   */
+  protected function gatewayWill(string $outcome): void {
+    $this->container->get('state')->set('commerce_domains_lease_test.outcome', $outcome);
+  }
+
+  /**
+   * Returns how many times the test gateway has taken money.
+   */
+  protected function timesTaken(): int {
+    return (int) $this->container->get('state')->get('commerce_domains_lease_test.taken', 0);
+  }
+
+  /**
+   * Returns the order's monthly payments, leaving out the down payment.
+   *
+   * @return \Drupal\commerce_payment\Entity\PaymentInterface[]
+   *   The payments.
+   */
+  protected function monthlyPayments(): array {
+    return array_filter(Payment::loadMultiple(), fn($payment) => $payment->getAmount()->equals(new Price('900', 'USD')));
+  }
+
+  /**
+   * Tests that a timeout never leads to a second charge.
+   */
+  public function testUnclearChargeIsNotRepeated(): void {
+    $order = $this->leaseOnTestGateway();
+    $manager = $this->container->get(LeaseManager::class);
+
+    // The gateway took the money, but the answer never arrived.
+    $this->gatewayWill('lost');
+    $this->assertFalse($manager->charge($this->lease($order)));
+    $this->assertSame(1, $this->timesTaken());
+    $lease = $this->lease($order);
+    $this->assertNotNull($lease->getChargeStarted());
+    $this->assertSame(0, $lease->getPaymentsMade());
+    $this->assertNull($lease->getNextDue());
+    $this->assertSame(0, $lease->getFailures(), 'Not a failure: nobody knows.');
+    $this->assertSame([], $manager->due(), 'The queue leaves it alone.');
+    $this->assertCount(1, $this->getMails(['key' => 'unconfirmed']), 'The owner only.');
+    $this->assertSame('Check a lease payment: lease.com', (string) $this->getMails(['key' => 'unconfirmed', 'to' => 'owner@example.com'])[0]['subject']);
+
+    // Even asked directly, it is not charged again.
+    $this->gatewayWill('pay');
+    $this->assertFalse($manager->charge($lease));
+    $this->assertSame(1, $this->timesTaken());
+
+    // The lease page asks what happened, and offers no charging.
+    $form = $this->container->get('form_builder')->getForm(LeaseAdminForm::class, $this->lease($order));
+    $this->assertFalse($form['actions']['charge']['#access']);
+    $this->assertTrue($form['actions']['charge_taken']['#access']);
+    $this->assertTrue($form['actions']['charge_not_taken']['#access']);
+
+    // The owner found it at the gateway: recorded, and nothing more taken.
+    $manager->settleCharge($this->lease($order), TRUE);
+    $this->assertSame(1, $this->timesTaken());
+    $lease = $this->lease($order);
+    $this->assertNull($lease->getChargeStarted());
+    $this->assertSame(1, $lease->getPaymentsMade());
+    $this->assertEquals(new Price('1500', 'USD'), $lease->getPaid());
+    $this->assertSame(LeaseInterface::ACTIVE, $lease->getState());
+    $this->assertNotNull($lease->getNextDue());
+    $this->assertCount(1, $this->monthlyPayments());
+    $this->assertEquals(new Price('1500', 'USD'), $manager->paidOn($order));
+  }
+
+  /**
+   * Tests an unclear charge the owner found was not taken.
+   */
+  public function testUnclearChargeNotTaken(): void {
+    $order = $this->leaseOnTestGateway();
+    $manager = $this->container->get(LeaseManager::class);
+    $this->gatewayWill('lost');
+    $manager->charge($this->lease($order));
+
+    $this->gatewayWill('pay');
+    $manager->settleCharge($this->lease($order), FALSE);
+    $lease = $this->lease($order);
+    $this->assertNull($lease->getChargeStarted());
+    $this->assertSame(0, $lease->getPaymentsMade());
+    $this->assertCount(1, $manager->due(), 'Due again.');
+
+    $this->assertTrue($manager->charge($lease));
+    $this->assertSame(2, $this->timesTaken());
+    $this->assertSame(1, $this->lease($order)->getPaymentsMade());
+  }
+
+  /**
+   * Tests that a process dying mid-charge is settled without charging again.
+   */
+  public function testChargeInterrupted(): void {
+    $order = $this->leaseOnTestGateway();
+    $manager = $this->container->get(LeaseManager::class);
+    $now = $this->container->get('datetime.time')->getRequestTime();
+
+    // Died after the payment was recorded, before the lease was: it counts.
+    $lease = $this->lease($order);
+    $lease->set('charge_started', $now)->save();
+    Payment::create([
+      'state' => 'completed',
+      'amount' => new Price('900', 'USD'),
+      'payment_gateway' => 'card',
+      'order_id' => $order->id(),
+    ])->save();
+    $this->assertTrue($manager->charge($this->lease($order)));
+    $this->assertSame(0, $this->timesTaken(), 'Nothing charged.');
+    $lease = $this->lease($order);
+    $this->assertSame(1, $lease->getPaymentsMade());
+    $this->assertNull($lease->getChargeStarted());
+
+    // Died with nothing recorded: only the gateway knows.
+    $lease->set('charge_started', $now)->set('next_due', $now - 1)->save();
+    $this->assertFalse($manager->charge($this->lease($order)));
+    $this->assertSame(0, $this->timesTaken());
+    $lease = $this->lease($order);
+    $this->assertSame(1, $lease->getPaymentsMade());
+    $this->assertNull($lease->getNextDue());
+    $this->assertCount(1, $this->getMails(['key' => 'unconfirmed', 'to' => 'owner@example.com']));
+  }
+
+  /**
+   * Tests a gateway error after the payment was recorded.
+   */
+  public function testErrorAfterPaymentRecorded(): void {
+    $order = $this->leaseOnTestGateway();
+    $this->gatewayWill('late_error');
+
+    $this->assertTrue($this->container->get(LeaseManager::class)->charge($this->lease($order)));
+
+    $lease = $this->lease($order);
+    $this->assertSame(1, $this->timesTaken());
+    $this->assertSame(1, $lease->getPaymentsMade());
+    $this->assertSame(0, $lease->getFailures());
+    $this->assertNull($lease->getChargeStarted());
+    $this->assertCount(1, $this->monthlyPayments());
+  }
+
+  /**
+   * Tests that a gateway that refused is retried as a failure.
+   */
+  public function testRefusedChargeIsRetried(): void {
+    $order = $this->leaseOnTestGateway();
+    $this->gatewayWill('refused');
+
+    $this->assertFalse($this->container->get(LeaseManager::class)->charge($this->lease($order)));
+
+    $lease = $this->lease($order);
+    $this->assertNull($lease->getChargeStarted());
+    $this->assertSame(1, $lease->getFailures());
+    $this->assertSame(LeaseInterface::OVERDUE, $lease->getState());
+    $this->assertNotNull($lease->getNextDue());
+    $this->assertSame(0, $this->timesTaken());
+  }
+
+  /**
+   * Tests that a second attempt at the same payment charges nothing.
+   */
+  public function testSamePaymentIsNotChargedTwice(): void {
+    $order = $this->leaseOnTestGateway();
+    $manager = $this->container->get(LeaseManager::class);
+
+    // Two requests load the lease; the first charges it.
+    $first = $this->lease($order);
+    $second = $this->lease($order);
+    $this->assertTrue($manager->charge($first));
+    $this->assertFalse($manager->charge($second));
+    $this->assertSame(1, $this->timesTaken());
+
+    // A second click, from the page showing no payments made.
+    $this->assertFalse($manager->charge($this->lease($order), 0));
+    $this->assertSame(1, $this->timesTaken());
+    $this->assertSame(1, $this->lease($order)->getPaymentsMade());
+
+    // Asked for the payment it knows about, it charges the next one.
+    $this->assertTrue($manager->charge($this->lease($order), 1));
+    $this->assertSame(2, $this->timesTaken());
+  }
+
+  /**
+   * Tests that a lease being charged elsewhere isn't charged here.
+   */
+  public function testChargeWaitsForLock(): void {
+    $order = $this->leaseOnTestGateway();
+    $lock = $this->createMock(LockBackendInterface::class);
+    $lock->method('acquire')->willReturn(FALSE);
+    $lock->expects($this->never())->method('release');
+    $manager = new LeaseManager(
+      $this->entityTypeManager,
+      $this->container->get(LeaseCalculator::class),
+      $this->container->get('config.factory'),
+      $this->container->get('plugin.manager.mail'),
+      $this->container->get('datetime.time'),
+      $this->container->get('logger.channel.commerce_domains_lease'),
+      $lock,
+    );
+
+    $this->assertFalse($manager->charge($this->lease($order)));
+
+    $this->assertSame(0, $this->timesTaken());
+    $this->assertSame(0, $this->lease($order)->getPaymentsMade());
+  }
+
+  /**
+   * Tests that canceling an order stops its lease.
+   */
+  public function testCanceledOrderStopsLease(): void {
+    // A workflow in which a placed order can be canceled.
+    OrderType::load('default')->setWorkflowId('order_fulfillment')->save();
+    $order = $this->leaseOnTestGateway();
+    $manager = $this->container->get(LeaseManager::class);
+    $this->assertCount(1, $manager->due());
+
+    $order = Order::load($order->id());
+    $order->getState()->applyTransitionById('cancel');
+    $order->save();
+
+    $lease = $this->lease($order);
+    $this->assertSame(LeaseInterface::CANCELED, $lease->getState());
+    $this->assertSame([], $manager->due());
+    $this->assertFalse($manager->charge($lease));
+    $this->assertSame(0, $this->timesTaken());
+  }
+
+  /**
+   * Tests that a canceled order is never charged, however it got canceled.
+   */
+  public function testChargeRefusesCanceledOrder(): void {
+    $order = $this->leaseOnTestGateway();
+    // Not through the workflow, so nothing has told the lease.
+    $order = Order::load($order->id());
+    $order->set('state', 'canceled')->save();
+    $this->assertSame(LeaseInterface::ACTIVE, $this->lease($order)->getState());
+
+    $this->assertFalse($this->container->get(LeaseManager::class)->charge($this->lease($order)));
+
+    $this->assertSame(0, $this->timesTaken());
+    $this->assertSame(LeaseInterface::CANCELED, $this->lease($order)->getState());
+  }
+
+  /**
+   * Tests that a buyer isn't asked to pay for a canceled order.
+   */
+  public function testRequestRefusesCanceledOrder(): void {
+    $order = $this->order($this->createDomain('Bank.com', 6000), 6);
+    $order->set('payment_gateway', 'bank');
+    $order->getState()->applyTransitionById('place');
+    $order->save();
+    $order->set('state', 'canceled')->save();
+    $lease = $this->lease($order);
+    $this->assertTrue($lease->isManual());
+
+    $this->container->get(LeaseManager::class)->request($lease);
+
+    $this->assertSame([], $this->getMails(['key' => 'request']));
+    $this->assertSame(LeaseInterface::CANCELED, $this->lease($order)->getState());
   }
 
   /**

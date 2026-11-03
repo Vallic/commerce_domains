@@ -125,6 +125,15 @@ interface LeaseInterface extends ContentEntityInterface, EntityChangedInterface,
   public function getFailures(): int;
 
   /**
+   * Returns when a charge began that hasn't reported back, if one has.
+   *
+   * @return int|null
+   *   A timestamp. While it is set, it isn't known whether the money was taken,
+   *   and the lease is not charged.
+   */
+  public function getChargeStarted(): ?int;
+
+  /**
    * Returns the state: ACTIVE, OVERDUE, DEFAULTED, COMPLETED or CANCELED.
    */
   public function getState(): string;

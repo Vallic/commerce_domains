@@ -179,6 +179,14 @@ class Lease extends ContentEntityBase implements LeaseInterface {
   /**
    * {@inheritdoc}
    */
+  public function getChargeStarted(): ?int {
+    $value = $this->get('charge_started')->value;
+    return $value === NULL ? NULL : (int) $value;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getFailures(): int {
     return (int) $this->get('failures')->value;
   }
@@ -281,6 +289,10 @@ class Lease extends ContentEntityBase implements LeaseInterface {
     $fields['requested'] = BaseFieldDefinition::create('timestamp')
       ->setLabel(new TranslatableMarkup('Payment requested'))
       ->setDescription(new TranslatableMarkup('When the buyer was asked for the payment due, on a lease without a saved card; empty until then.'));
+
+    $fields['charge_started'] = BaseFieldDefinition::create('timestamp')
+      ->setLabel(new TranslatableMarkup('Charge started'))
+      ->setDescription(new TranslatableMarkup('When a charge began that has not reported back yet; empty otherwise.'));
 
     $fields['failures'] = BaseFieldDefinition::create('integer')
       ->setLabel(new TranslatableMarkup('Failed attempts'))
