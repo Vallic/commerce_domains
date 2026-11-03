@@ -13,7 +13,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Sets the general rules for empty sale terms, and shows what each marketplace does.
+ * Sets the general sale terms, and shows what each marketplace does.
  */
 class SaleTermsForm extends ConfigFormBase {
 

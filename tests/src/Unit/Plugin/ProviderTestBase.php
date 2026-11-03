@@ -7,6 +7,7 @@ namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 use Drupal\commerce_domains\CatalogItem;
 use Drupal\commerce_domains\DomainName;
 use Drupal\commerce_domains\DomainNameParser;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingPluginBase;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ProviderPluginBase;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
@@ -37,9 +38,10 @@ abstract class ProviderTestBase extends ClientTestBase {
    * @param array $responses
    *   The HTTP responses the plugin's API calls get.
    */
-  protected function plugin(string $class, string $id, array $configuration = [], array $responses = []): MarketplaceInterface&ProviderPluginBase {
+  protected function plugin(string $class, string $id, array $configuration = [], array $responses = []): MarketplaceInterface&ListingPluginBase {
     $plugin = $this->create($class, $id, $configuration, $responses);
     $this->assertInstanceOf(MarketplaceInterface::class, $plugin);
+    $this->assertInstanceOf(ListingPluginBase::class, $plugin);
     return $plugin;
   }
 

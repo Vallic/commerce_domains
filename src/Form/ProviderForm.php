@@ -219,7 +219,7 @@ class ProviderForm extends EntityForm {
     return [
       '#type' => 'details',
       '#title' => $this->t('Sale terms'),
-      '#description' => $this->t("For domains that leave these empty on their variation. Leave one empty here for the general <a href=\":url\">Sale terms</a>. Listings get a change with the next full sync.", [
+      '#description' => $this->t('For domains that leave these empty on their variation. Leave one empty here for the general <a href=":url">Sale terms</a>. Listings get a change with the next full sync.', [
         ':url' => Url::fromRoute('commerce_domains.sale_terms')->toString(),
       ]),
       '#open' => (bool) $own,

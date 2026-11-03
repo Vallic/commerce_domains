@@ -9,6 +9,8 @@ use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Form\SaleTermsForm;
 use Drupal\commerce_domains\Hook\ProductFormHooks;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingPluginBase;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\MarketplaceInterface;
 use Drupal\commerce_domains\SaleTermRules;
 use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_price\Price;
@@ -182,8 +184,15 @@ class SaleTermsFormTest extends DomainsKernelTestBase {
     $this->assertSame([], $form_state->getErrors());
     $saved = Provider::load('afternic');
     $this->assertSame(['floor_percent' => 60, 'automatic_lease' => TRUE, 'lease_months' => 6], $saved->getSaleTerms());
-    $rules = $saved->getPlugin()->saleTermRules();
-    $this->assertSame([60, 40, TRUE, 6], [$rules->floorPercent, $rules->minimumOfferPercent, $rules->automaticLease, $rules->leaseLimit]);
+    $plugin = $saved->getPlugin();
+    $this->assertInstanceOf(ListingPluginBase::class, $plugin);
+    $rules = $plugin->saleTermRules();
+    $this->assertSame([60, 40, TRUE, 6], [
+      $rules->floorPercent,
+      $rules->minimumOfferPercent,
+      $rules->automaticLease,
+      $rules->leaseLimit,
+    ]);
 
     $empty = $this->createDomain('empty.com', 9000);
     $own = $this->createDomain('own.com', 9000, [], [
@@ -192,13 +201,18 @@ class SaleTermsFormTest extends DomainsKernelTestBase {
     ]);
     $catalog = $this->container->get(Catalog::class);
     $items = $catalog->load(['empty.com', 'own.com']);
-    $at = fn(string $id, string $name) => Provider::load($id)->getPlugin()->buildListing($items[$name]);
+    $at = function (string $id, string $name) use ($items): array {
+      $plugin = Provider::load($id)->getPlugin();
+      $this->assertInstanceOf(MarketplaceInterface::class, $plugin);
+      return $plugin->buildListing($items[$name]);
+    };
 
     // Afternic has its own: a 60% floor, and leases on though they are off in
-    // general, shortened to 6 months. The domain's own come first.
-    $this->assertSame(5400, $at('afternic', 'empty.com')['floorPrice'] / 1_000_000);
+    // general, shortened to 6 months. The domain's own come first. Its price
+    // factor of 1.1 raises both floors, so 60% of 9,900 and 5,000 raised.
+    $this->assertSame(5940, $at('afternic', 'empty.com')['floorPrice'] / 1_000_000);
     $this->assertSame(6, $at('afternic', 'empty.com')['maxLeasePeriod']);
-    $this->assertSame(5000, $at('afternic', 'own.com')['floorPrice'] / 1_000_000);
+    $this->assertSame(5500, $at('afternic', 'own.com')['floorPrice'] / 1_000_000);
     $this->assertSame(24, $at('afternic', 'own.com')['maxLeasePeriod']);
 
     // Dynadot has none, so the general: no lease, and 20% from 5,000.
