@@ -12,9 +12,11 @@ use Drupal\commerce_domains_offer\OfferManager;
 use Drupal\commerce_domains_offer_escrow\EscrowOfferStarter;
 use Drupal\commerce_domains_offer_escrow\EventSubscriber\EscrowOfferSubscriber;
 use Drupal\commerce_domains_offer_escrow\Hook\EscrowOfferHooks;
+use Drupal\commerce_escrow\EscrowOfferOrders;
 use Drupal\commerce_escrow\Event\EscrowEvents;
 use Drupal\commerce_escrow\Event\EscrowWebhookEvent;
 use Drupal\commerce_order\Entity\Order;
+use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_order\Entity\OrderType;
 use Drupal\commerce_payment\Entity\PaymentGateway;
 use Drupal\commerce_price\Price;
@@ -26,6 +28,7 @@ use Drupal\Core\Routing\TrustedRedirectResponse;
 use Drupal\Core\Session\AnonymousUserSession;
 use Drupal\Core\Test\AssertMailTrait;
 use Drupal\Tests\commerce_domains\Kernel\DomainsKernelTestBase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -122,6 +125,36 @@ class EscrowOfferTest extends DomainsKernelTestBase {
   }
 
   /**
+   * Returns a buyer's newest order.
+   */
+  protected function draft(string $mail = 'ana@example.com'): OrderInterface {
+    $storage = $this->entityTypeManager->getStorage('commerce_order');
+    $storage->resetCache();
+    $orders = $storage->loadByProperties(['mail' => $mail]);
+    ksort($orders);
+    return end($orders);
+  }
+
+  /**
+   * Sends the webhook event of an order.
+   */
+  protected function webhook(OrderInterface $order, string $event): void {
+    $this->container->get('event_dispatcher')->dispatch(new EscrowWebhookEvent($order, ['event' => $event]), EscrowEvents::ESCROW_WEBHOOK);
+  }
+
+  /**
+   * Has a buyer make the offer on Escrow.com: the first webhook arrives.
+   */
+  protected function makeOffer(string $mail = 'ana@example.com'): OfferInterface {
+    $order = $this->draft($mail);
+    $this->container->get('commerce_escrow.offer_orders')->place($order);
+    $this->webhook($order, 'create');
+    $offer = $this->starter->offerFor($order);
+    $this->assertInstanceOf(OfferInterface::class, $offer);
+    return $offer;
+  }
+
+  /**
    * Returns the offers a buyer made.
    *
    * @return \Drupal\commerce_domains_offer\Entity\OfferInterface[]
@@ -148,25 +181,45 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     $this->assertInstanceOf(TrustedRedirectResponse::class, $response);
     $this->assertSame('https://escrow.test/offer?auction=5&email=ana%40example.com', $response->getTargetUrl());
 
-    $offers = $this->offers();
-    $this->assertCount(1, $offers);
-    $offer = reset($offers);
-    $this->assertSame(EscrowOfferStarter::SOURCE, $offer->getSource());
-    $this->assertSame('pending', $offer->getState()->getId());
-    $this->assertNull($offer->getAmount());
-    $order = $offer->getOrder();
+    // Until the buyer makes the offer there is only a locked draft order: no
+    // offer, nothing for the seller, and the domain stays for sale.
+    $this->assertSame([], $this->offers());
+    $this->assertCount(0, $this->getMails(['key' => 'new_offer']));
+    $order = $this->draft();
     $this->assertSame('escrow_offer_test', $order->get('payment_gateway')->target_id);
-    $this->assertSame('validation', $order->getState()->getId());
-    $this->assertNotEmpty($order->getOrderNumber());
-    $this->assertNotEmpty($order->getPlacedTime());
+    $this->assertSame('draft', $order->getState()->getId());
+    $this->assertTrue($order->isLocked());
+    $this->assertFalse((bool) $order->get('cart')->value);
+    $this->assertEmpty($order->getOrderNumber());
+    $this->assertEmpty($order->getPlacedTime());
+    $this->assertTrue((bool) ProductVariation::load($variation->id())->get('in_stock')->value);
     $this->assertEquals(new Price('2000', 'USD'), $order->getItems()[0]->getUnitPrice());
     /** @var \Drupal\commerce_payment\PaymentStorageInterface $payment_storage */
     $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
     $payments = $payment_storage->loadMultipleByOrder($order);
     $this->assertSame(['77'], array_values(array_map(fn($payment) => $payment->getRemoteId(), $payments)));
 
+    // The first webhook means the offer is made.
+    $offer = $this->makeOffer();
+    $this->assertSame(EscrowOfferStarter::SOURCE, $offer->getSource());
+    $this->assertSame('pending', $offer->getState()->getId());
+    $this->assertNull($offer->getAmount());
+    $this->assertSame('Ana', $offer->get('name')->value);
+    $order = $offer->getOrder();
+    $this->assertSame('validation', $order->getState()->getId());
+    $this->assertFalse($order->isLocked());
+    $this->assertNotEmpty($order->getOrderNumber());
+    $this->assertNotEmpty($order->getPlacedTime());
+    $this->assertNull($order->getData(EscrowOfferOrders::DATA_KEY), 'The offer holds the buyer now.');
+    $this->assertTrue((bool) ProductVariation::load($variation->id())->get('in_stock')->value, 'An offer does not sell the domain.');
+
     // Escrow.com writes to the buyer; the seller hears of the offer.
     $this->assertCount(0, $this->getMails(['key' => 'received']));
+    $this->assertCount(1, $this->getMails(['key' => 'new_offer']));
+
+    // A second webhook doesn't make it a second offer.
+    $this->webhook($order, 'create');
+    $this->assertCount(1, $this->offers());
     $this->assertCount(1, $this->getMails(['key' => 'new_offer']));
 
     // Without Escrow.com, it is an offer on the site as before. A
@@ -218,8 +271,7 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     $now = $this->container->get('datetime.time')->getRequestTime();
     $this->container->get('state')->set(UnpaidOrders::STATE_SINCE, $now - 100 * 86400);
     $this->submit($this->domain('longdeal.com', new Price('2000', 'USD')), ['escrow' => 1, 'amount' => '']);
-    $offers = $this->offers();
-    $order = reset($offers)->getOrder();
+    $order = $this->makeOffer()->getOrder();
     $item = $order->getItems()[0];
     $item->setUnitPrice(new Price('2000', 'USD'), TRUE)->save();
     $order->recalculateTotalPrice();
@@ -227,8 +279,8 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     $this->assertSame('validation', $order->getState()->getId());
     $this->assertFalse($order->isPaid());
 
-    // Its own payment is enough to keep it, and so is being paid through escrow,
-    // which is what's left once that is gone.
+    // Its own payment is enough to keep it, and so is being paid through
+    // escrow, which is what's left once that is gone.
     $this->assertSame(0, $unpaid->process());
     $storage = $this->entityTypeManager->getStorage('commerce_payment');
     $storage->delete($storage->loadMultiple());
@@ -239,12 +291,51 @@ class EscrowOfferTest extends DomainsKernelTestBase {
   }
 
   /**
+   * Tests that a payment takes the domain off sale without offer_accepted.
+   *
+   * @param string $event
+   *   The first webhook that shows both sides have settled.
+   */
+  #[DataProvider('settledEvents')]
+  public function testSoldWithoutOfferAccepted(string $event): void {
+    $variation = $this->domain('settled.com', new Price('2000', 'USD'));
+    $this->starter->start($variation, ['mail' => 'ana@example.com'], new AnonymousUserSession(), $this->store);
+    $offer = $this->makeOffer();
+    $this->assertTrue((bool) ProductVariation::load($variation->id())->get('in_stock')->value);
+
+    $this->webhook($offer->getOrder(), $event);
+    $this->assertFalse((bool) ProductVariation::load($variation->id())->get('in_stock')->value);
+    $this->assertSame('accepted', Offer::load($offer->id())->getState()->getId());
+  }
+
+  /**
+   * Returns the webhooks that show both sides have settled.
+   */
+  public static function settledEvents(): array {
+    return [['offer_accepted'], ['payment_sent'], ['payment_received'], ['payment_approved']];
+  }
+
+  /**
+   * Tests that other webhooks leave the domain for sale.
+   */
+  public function testStaysForSaleWhileNegotiating(): void {
+    $variation = $this->domain('talking.com', new Price('2000', 'USD'));
+    $this->starter->start($variation, ['mail' => 'ana@example.com'], new AnonymousUserSession(), $this->store);
+    $offer = $this->makeOffer();
+    foreach (['create', 'agree', 'party_verification_submitted'] as $event) {
+      $this->webhook($offer->getOrder(), $event);
+    }
+    $this->assertTrue((bool) ProductVariation::load($variation->id())->get('in_stock')->value);
+    $this->assertSame('pending', Offer::load($offer->id())->getState()->getId());
+  }
+
+  /**
    * Tests that the offer follows Escrow.com.
    */
   public function testFollowsEscrow(): void {
     $variation = $this->domain('follow.com', new Price('2000', 'USD'));
     $this->starter->start($variation, ['mail' => 'ana@example.com'], new AnonymousUserSession(), $this->store);
-    $offer = current($this->offers());
+    $offer = $this->makeOffer();
     $order = $offer->getOrder();
 
     // Only the Escrow Offer gateway's conditions match the order.
@@ -283,7 +374,7 @@ class EscrowOfferTest extends DomainsKernelTestBase {
 
     // A cancelled negotiation declines its offer.
     $this->starter->start($this->domain('cancel.com', new Price('3000', 'USD')), ['mail' => 'bo@example.com'], new AnonymousUserSession(), $this->store);
-    $cancelled = current($this->offers('bo@example.com'));
+    $cancelled = $this->makeOffer('bo@example.com');
     $this->container->get('event_dispatcher')->dispatch(new EscrowWebhookEvent($cancelled->getOrder(), ['event' => 'cancel']), EscrowEvents::ESCROW_WEBHOOK);
     $this->assertSame('declined', Offer::load($cancelled->id())->getState()->getId());
     $this->assertCount(0, $this->getMails(['key' => 'declined']));
@@ -318,6 +409,7 @@ class EscrowOfferTest extends DomainsKernelTestBase {
 
     $variation = $this->domain('quiet.com', new Price('2000', 'USD'));
     $this->starter->start($variation, ['mail' => 'ana@example.com'], new AnonymousUserSession(), $this->store);
+    $this->makeOffer();
     $this->container->get('database')->update('commerce_domains_offer')->fields(['changed' => 1])->execute();
     $this->entityTypeManager->getStorage('commerce_domains_offer')->resetCache();
     $this->assertSame(0, $this->container->get(OfferManager::class)->expireStale(), 'Escrow.com decides when its offers end.');

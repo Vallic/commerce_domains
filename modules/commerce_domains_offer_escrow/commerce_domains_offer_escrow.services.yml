@@ -9,6 +9,7 @@ services:
   Drupal\commerce_domains_offer_escrow\EscrowOfferStarter:
     arguments:
       $logger: '@logger.channel.commerce_domains_offer_escrow'
+      $offerOrders: '@commerce_escrow.offer_orders'
 
   Drupal\commerce_domains_offer_escrow\EventSubscriber\EscrowOfferSubscriber:
     tags:

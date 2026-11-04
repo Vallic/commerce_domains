@@ -21,6 +21,9 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
  */
 final class EscrowOfferSubscriber implements EventSubscriberInterface {
 
+  // The webhooks that mean both sides have settled on a price.
+  protected const SETTLED_EVENTS = ['offer_accepted', 'payment_sent', 'payment_received', 'payment_approved'];
+
   public function __construct(
     protected EscrowOfferStarter $starter,
     protected Availability $availability,
@@ -49,16 +52,7 @@ final class EscrowOfferSubscriber implements EventSubscriberInterface {
     }
     /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
     $order = $event->getEntity();
-    foreach ($order->getItems() as $item) {
-      $variation = $item->getPurchasedEntity();
-      $product = $variation instanceof ProductVariationInterface ? $variation->getProduct() : NULL;
-      if ($product && $product->hasField('domain')) {
-        // As when an order is placed: the variation bought, and any other
-        // variation that would keep the domain for sale.
-        $this->availability->markSold($variation);
-        $this->availability->markProductSold($product);
-      }
-    }
+    $this->takeOffSale($order);
   }
 
   /**
@@ -72,29 +66,59 @@ final class EscrowOfferSubscriber implements EventSubscriberInterface {
       if ($this->apply($offer, 'purchase')) {
         $offer->save();
       }
+      /** @var \Drupal\commerce_order\Entity\OrderInterface $order */
+      $order = $event->getEntity();
+      $this->takeOffSale($order);
     }
   }
 
   /**
-   * Records the agreed amount, or declines a cancelled negotiation.
+   * Follows a webhook on the offer of its order.
+   *
+   * The first webhook means the buyer has made the offer, so it records it. By
+   * a payment both sides have settled, whether or not offer_accepted arrived,
+   * so the domain mustn't stay for sale. The agreed amount is on the order by
+   * payment_sent, and a cancelled negotiation declines the offer.
    */
   public function onWebhook(EscrowWebhookEvent $event): void {
-    $offer = $this->starter->offerFor($event->getOrder());
+    $order = $event->getOrder();
+    $offer = $this->starter->offerFor($order) ?? $this->starter->recordOffer($order);
     if (!$offer) {
       return;
     }
     $payload = $event->getPayload();
+    $name = $payload['event'] ?? NULL;
     $changed = FALSE;
-    // By now the order holds the agreed amount.
-    if (($payload['event'] ?? NULL) === 'payment_sent' && ($total = $event->getOrder()->getTotalPrice())) {
+    if (in_array($name, self::SETTLED_EVENTS, TRUE)) {
+      $changed = $this->apply($offer, 'accept');
+      $this->takeOffSale($order);
+    }
+    if ($name === 'payment_sent' && ($total = $order->getTotalPrice())) {
       $offer->set('amount', $total);
       $changed = TRUE;
     }
-    if (($payload['event'] ?? NULL) === 'cancel') {
+    if ($name === 'cancel') {
       $changed = $this->apply($offer, 'decline') || $this->apply($offer, 'expire');
     }
     if ($changed) {
       $offer->save();
+    }
+  }
+
+  /**
+   * Takes the domains of an order off sale.
+   *
+   * As when an order is placed: the variation bought, and any other variation
+   * that would keep the domain for sale.
+   */
+  protected function takeOffSale(OrderInterface $order): void {
+    foreach ($order->getItems() as $item) {
+      $variation = $item->getPurchasedEntity();
+      $product = $variation instanceof ProductVariationInterface ? $variation->getProduct() : NULL;
+      if ($product && $product->hasField('domain')) {
+        $this->availability->markSold($variation);
+        $this->availability->markProductSold($product);
+      }
     }
   }
 
