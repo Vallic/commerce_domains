@@ -80,8 +80,6 @@ class EscrowOfferStarter {
    *   The buyer's account; anonymous for buyers without one.
    * @param \Drupal\commerce_store\Entity\StoreInterface $store
    *   The store the offer is made in.
-   * @param \Drupal\commerce_price\Price|null $amount
-   *   The amount the buyer means to offer, if they named one.
    *
    * @return string
    *   The Escrow.com page, for the buyer's email.
@@ -89,7 +87,7 @@ class EscrowOfferStarter {
    * @throws \Exception
    *   When Escrow.com refuses the transaction; nothing is kept then.
    */
-  public function start(ProductVariationInterface $variation, array $buyer, AccountInterface $account, StoreInterface $store, ?Price $amount = NULL): string {
+  public function start(ProductVariationInterface $variation, array $buyer, AccountInterface $account, StoreInterface $store): string {
     $gateway = $this->gateway();
     $price = $this->offerPolicy->price($variation, new Context($account, $store));
     if (!$gateway || !$price || !in_array($price->getCurrencyCode(), self::CURRENCIES, TRUE)) {
@@ -122,7 +120,7 @@ class EscrowOfferStarter {
     $payment->save();
     $plugin->createPayment($payment, $escrow);
 
-    $offer = $this->offerManager->submit($variation, $amount, $buyer, $account, $store, self::SOURCE);
+    $offer = $this->offerManager->submit($variation, NULL, $buyer, $account, $store, self::SOURCE);
     $offer->setOrder($order)->save();
     return $escrow['make_offer_page'] . '&email=' . rawurlencode($buyer['mail']);
   }

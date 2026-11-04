@@ -688,7 +688,9 @@ Commerce Domains Offers via Escrow.com (submodule, needs
 *Negotiate on Escrow.com* choice to the form, for prices in USD, EUR, GBP,
 AUD or CAD while an Escrow Offer gateway is enabled. The buyer goes on to
 Escrow.com to make the offer, and the negotiation, payment and transfer run
-there; the offer on the site follows Escrow.com's webhooks to accepted,
+there. The amount field is hidden and emptied with this choice, and the form
+refuses an amount sent with it, which stops bots that fill in every field from
+starting a negotiation. The offer on the site follows Escrow.com's webhooks to accepted,
 purchased or declined, and doesn't expire on the site. Once accepted, the
 domain is off sale, with any other variation of it. The *Escrow.com offer*
 condition keeps the other payment gateways off those orders, and the Escrow

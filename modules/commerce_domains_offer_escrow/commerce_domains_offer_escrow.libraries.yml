@@ -1,0 +1,6 @@
+offer_form:
+  js:
+    js/offer-form.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

@@ -178,6 +178,24 @@ class EscrowOfferTest extends DomainsKernelTestBase {
   }
 
   /**
+   * Tests that an amount with the Escrow.com choice starts nothing.
+   *
+   * The field is hidden with that choice, so this is a bot filling in the form.
+   */
+  public function testAmountWithEscrowIsRefused(): void {
+    $variation = $this->domain('filled.com', new Price('2000', 'USD'));
+    $form = $this->container->get('form_builder')->getForm(OfferForm::class, $variation);
+    $this->assertContains('commerce_domains_offer_escrow/offer_form', $form['#attached']['library']);
+
+    $form_state = $this->submit($variation, ['escrow' => 1, 'amount' => '1500']);
+    $this->assertArrayHasKey('amount', $form_state->getErrors());
+    $this->assertNull($form_state->getResponse());
+    $this->assertSame([], $this->offers());
+    $this->assertSame([], $this->entityTypeManager->getStorage('commerce_order')->loadMultiple());
+    $this->assertCount(0, $this->getMails(['key' => 'new_offer']));
+  }
+
+  /**
    * Tests that a refused negotiation leaves nothing behind.
    */
   public function testRefused(): void {

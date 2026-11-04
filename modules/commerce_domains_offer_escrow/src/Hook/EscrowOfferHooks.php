@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_offer_escrow\Hook;
 
-use Drupal\commerce\Context;
 use Drupal\commerce_domains_offer\Form\OfferForm;
 use Drupal\commerce_domains_offer\OfferPolicy;
 use Drupal\commerce_domains_offer_escrow\EscrowOfferStarter;
-use Drupal\commerce_price\Price;
 use Drupal\commerce_product\Entity\ProductVariationInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -56,6 +54,8 @@ class EscrowOfferHooks {
       'visible' => [':input[name="escrow"]' => ['checked' => FALSE]],
       'required' => [':input[name="escrow"]' => ['checked' => FALSE]],
     ];
+    // Choosing Escrow.com empties the amount, which only a bot then fills in.
+    $form['#attached']['library'][] = 'commerce_domains_offer_escrow/offer_form';
     $form['#validate'] = [[static::class, 'validateOffer'], '::validateForm'];
     $form['#submit'] = ['::submitForm', [static::class, 'submitOffer']];
   }
@@ -90,11 +90,19 @@ class EscrowOfferHooks {
   }
 
   /**
-   * Validation handler: an Escrow.com offer needs no amount here.
+   * Validation handler: an Escrow.com offer takes no amount here.
+   *
+   * The field is hidden and emptied for buyers who choose Escrow.com, so an
+   * amount with that choice comes from a bot filling in every field. It stops
+   * here, before anything is created on Escrow.com.
    */
   public static function validateOffer(array &$form, FormStateInterface $form_state): void {
-    if ($form_state->getValue('escrow')) {
-      $form_state->set(OfferForm::ELSEWHERE, TRUE);
+    if (!$form_state->getValue('escrow')) {
+      return;
+    }
+    $form_state->set(OfferForm::ELSEWHERE, TRUE);
+    if ((string) $form_state->getValue('amount') !== '') {
+      $form_state->setErrorByName('amount', new TranslatableMarkup('Leave the amount empty to negotiate on Escrow.com, as you make your offer there. To make it here, untick Negotiate on Escrow.com.'));
     }
   }
 
@@ -112,10 +120,6 @@ class EscrowOfferHooks {
     $account = \Drupal::currentUser();
     $policy = \Drupal::service(OfferPolicy::class);
     $store = $policy->store($variation);
-    $amount = NULL;
-    if ((string) $form_state->getValue('amount') !== '' && ($price = $policy->price($variation, new Context($account, $store)))) {
-      $amount = new Price((string) $form_state->getValue('amount'), $price->getCurrencyCode());
-    }
     \Drupal::service(FloodInterface::class)->register(OfferForm::FLOOD_EVENT);
     try {
       $url = \Drupal::service(EscrowOfferStarter::class)->start($variation, [
@@ -123,7 +127,7 @@ class EscrowOfferHooks {
         'name' => $form_state->getValue('name'),
         'phone' => OfferForm::phone($form_state),
         'message' => $form_state->getValue('message'),
-      ], $account, $store, $amount);
+      ], $account, $store);
     }
     catch (\Exception) {
       \Drupal::messenger()->addError(new TranslatableMarkup('Escrow.com could not start the negotiation. Please try again, or make your offer here instead.'));
