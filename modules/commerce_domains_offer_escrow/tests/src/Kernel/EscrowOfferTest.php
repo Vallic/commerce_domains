@@ -132,7 +132,9 @@ class EscrowOfferTest extends DomainsKernelTestBase {
     $storage->resetCache();
     $orders = $storage->loadByProperties(['mail' => $mail]);
     ksort($orders);
-    return end($orders);
+    $order = end($orders);
+    $this->assertInstanceOf(OrderInterface::class, $order);
+    return $order;
   }
 
   /**
