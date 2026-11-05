@@ -82,7 +82,8 @@ class UnpaidOrdersTest extends DomainsKernelTestBase {
     // A workflow in which a placed order can be canceled.
     OrderType::load('default')->setWorkflowId('order_fulfillment')->save();
     PaymentGateway::create(['id' => 'bank', 'label' => 'Bank', 'plugin' => 'manual'])->save();
-    $this->config('system.site')->set('mail', 'owner@example.com')->save();
+    $this->store->setEmail('owner@example.com')->save();
+    $this->config('system.site')->set('mail', 'site@example.com')->save();
     $this->unpaidOrders = $this->container->get(UnpaidOrders::class);
     $this->now = $this->container->get('datetime.time')->getRequestTime();
     // The hold started long before the orders here.
@@ -330,6 +331,30 @@ class UnpaidOrdersTest extends DomainsKernelTestBase {
     Payment::load($payment->id())->setRemoteState('changed')->save();
     $this->assertCount(1, $this->getMails(['key' => 'unpaid_late_payment']));
     $this->assertSame('canceled', $this->state($order));
+  }
+
+  /**
+   * Tests where the owner's mail goes.
+   */
+  public function testOwnerAddress(): void {
+    $this->placedOrder($this->createDomain('Store.com', 1000), 8);
+    $this->unpaidOrders->process();
+    $this->assertCount(1, $this->getMails(['key' => 'unpaid_canceled', 'to' => 'owner@example.com']));
+
+    // A store without an address falls back to the site's.
+    $this->store->setEmail('')->save();
+    $this->placedOrder($this->createDomain('Site.com', 1000), 8);
+    $this->unpaidOrders->process();
+    $this->assertCount(1, $this->getMails(['key' => 'unpaid_canceled', 'to' => 'site@example.com']));
+
+    // An address set for the owner's mail comes first.
+    $this->enableModules(['commerce_domains_owner']);
+    $this->unpaidOrders = $this->container->get(UnpaidOrders::class);
+    $this->config('commerce_domains_owner.settings')->set('notify_mail', 'notify@example.com')->save();
+    $this->store->setEmail('owner@example.com')->save();
+    $this->placedOrder($this->createDomain('Notify.com', 1000), 8);
+    $this->unpaidOrders->process();
+    $this->assertCount(1, $this->getMails(['key' => 'unpaid_canceled', 'to' => 'notify@example.com']));
   }
 
   /**

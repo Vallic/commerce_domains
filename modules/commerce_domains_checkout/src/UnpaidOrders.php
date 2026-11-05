@@ -240,9 +240,15 @@ class UnpaidOrders {
 
   /**
    * Mails the owner about an order.
+   *
+   * To where Commerce Domains Owner sends the owner's mail, if it is installed
+   * and has an address, otherwise the store's, otherwise the site's.
    */
   protected function mailOwner(string $key, OrderInterface $order, array $params = []): void {
-    if ($mail = (string) $this->configFactory->get('system.site')->get('mail')) {
+    $mail = (string) $this->configFactory->get('commerce_domains_owner.settings')->get('notify_mail')
+      ?: (string) $order->getStore()?->getEmail()
+      ?: (string) $this->configFactory->get('system.site')->get('mail');
+    if ($mail !== '') {
       $this->mailManager->mail('commerce_domains_checkout', $key, $mail, $order->getCustomer()->getPreferredLangcode(), $params + [
         'order' => $order,
         'to' => 'owner',

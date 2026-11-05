@@ -545,6 +545,10 @@ class LeaseManager {
 
   /**
    * Mails the buyer about a lease, and the owner when asked.
+   *
+   * The owner's address is the one set for leases, otherwise where Commerce
+   * Domains Owner sends the owner's mail, if it is installed and has an
+   * address, otherwise the store's, otherwise the site's.
    */
   protected function mail(string $key, LeaseInterface $lease, array $params = [], bool $owner = FALSE, bool $buyer = TRUE): void {
     $params += ['lease' => $lease];
@@ -554,6 +558,8 @@ class LeaseManager {
       $this->mailManager->mail('commerce_domains_lease', $key, $buyer_mail, $langcode, $params + ['to' => 'buyer']);
     }
     $owner_mail = (string) $this->configFactory->get('commerce_domains_lease.settings')->get('notify_mail')
+      ?: (string) $this->configFactory->get('commerce_domains_owner.settings')->get('notify_mail')
+      ?: (string) $lease->getOrder()?->getStore()?->getEmail()
       ?: (string) $this->configFactory->get('system.site')->get('mail');
     if ($owner && $owner_mail) {
       $this->mailManager->mail('commerce_domains_lease', $key, $owner_mail, $langcode, $params + ['to' => 'owner']);

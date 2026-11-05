@@ -117,7 +117,7 @@ class SettingsForm extends ConfigFormBase {
     $form['notify_mail'] = [
       '#type' => 'email',
       '#title' => $this->t('Tell this address about missed payments and completed leases'),
-      '#description' => $this->t("Leave empty for the site's email address."),
+      '#description' => $this->t("Leave empty for the address set for the owner's mail, or else the store's email address."),
       '#config_target' => 'commerce_domains_lease.settings:notify_mail',
     ];
     return parent::buildForm($form, $form_state);

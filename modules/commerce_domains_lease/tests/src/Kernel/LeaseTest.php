@@ -104,7 +104,8 @@ class LeaseTest extends DomainsKernelTestBase {
     PaymentGateway::create(['id' => 'card', 'label' => 'Card', 'plugin' => 'example_onsite'])->save();
     PaymentGateway::create(['id' => 'bank', 'label' => 'Bank', 'plugin' => 'manual'])->save();
     $this->config('commerce_domains_lease.settings')->set('gateway_plugins', ['example_onsite'])->save();
-    $this->config('system.site')->set('mail', 'owner@example.com')->save();
+    $this->store->setEmail('owner@example.com')->save();
+    $this->config('system.site')->set('mail', 'site@example.com')->save();
     $this->buyer = $this->createUser([], NULL, FALSE, ['mail' => 'buyer@example.com']);
   }
 
@@ -695,6 +696,40 @@ class LeaseTest extends DomainsKernelTestBase {
 
     $this->assertSame([], $this->getMails(['key' => 'request']));
     $this->assertSame(LeaseInterface::CANCELED, $this->lease($order)->getState());
+  }
+
+  /**
+   * Tests where the owner's mail goes.
+   */
+  public function testOwnerAddress(): void {
+    $missed_payment = function (string $domain): void {
+      $card = $this->card();
+      $order = $this->order($this->createDomain($domain, 6000), 6);
+      $this->checkout($order, $card);
+      $card->getBillingProfile()->set('address', ['country_code' => 'US', 'postal_code' => '53140'])->save();
+      $this->assertFalse($this->container->get(LeaseManager::class)->charge($this->lease($order)));
+    };
+
+    // The store's address.
+    $missed_payment('Store.com');
+    $this->assertCount(1, $this->getMails(['key' => 'failed', 'to' => 'owner@example.com']));
+
+    // A store without an address falls back to the site's.
+    $this->store->setEmail('')->save();
+    $missed_payment('Site.com');
+    $this->assertCount(1, $this->getMails(['key' => 'failed', 'to' => 'site@example.com']));
+
+    // An address set for the owner's mail comes before those.
+    $this->store->setEmail('owner@example.com')->save();
+    $this->enableModules(['commerce_domains_owner']);
+    $this->config('commerce_domains_owner.settings')->set('notify_mail', 'notify@example.com')->save();
+    $missed_payment('Notify.com');
+    $this->assertCount(1, $this->getMails(['key' => 'failed', 'to' => 'notify@example.com']));
+
+    // An address set for leases comes first.
+    $this->config('commerce_domains_lease.settings')->set('notify_mail', 'lease@example.com')->save();
+    $missed_payment('Lease.com');
+    $this->assertCount(1, $this->getMails(['key' => 'failed', 'to' => 'lease@example.com']));
   }
 
   /**

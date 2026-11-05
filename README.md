@@ -1012,3 +1012,8 @@ Give the API's rate limit in `REQUESTS_PER_MINUTE` to get a setting for it.
 
 Put the HTTP client in `src/Clients`, extending `ApiClient` for retries,
 rate-limit waits and keeping credentials out of error messages.
+
+## Maintainers
+
+Developed and maintained by [Vallic](https://vallic.com), a Drupal development
+company and the team behind Vallic Cloud, Drupal hosting.
