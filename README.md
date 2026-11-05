@@ -84,10 +84,13 @@ it is held at, and the marketplaces it is listed on.
   for order items, as promotion offers use, and for orders, which match when
   any of their domains does. Lease-to-own counts the domain's own term, or
   the one worked out from its price.
-- **A lander redirect** at `/domain-lander`: point a registrar's forwarding
-  of parked domains there, and visitors land on the domain's page here, by
-  the Referer or a `domain` query parameter. Domains not sold here go to the
-  route's `fallback` path, which a site's own route can set.
+- **A lander redirect** at `/domain-lander`, for forwarding parked domains
+  from a registrar. Forwarding a domain straight to its own page here works
+  too, and is the surest. The lander takes one address for all of them, and
+  finds the domain from a `domain` query parameter
+  (`/domain-lander?domain=example.com`) or else the Referer, which browsers
+  often leave out. Visitors it can't match, and domains not sold here, go to
+  the route's `fallback` path, which a site's own route can set.
 - **Price tokens** for structured data on domain pages:
   `[commerce_product:current_price]` and `[commerce_product:current_currency]`,
   as the visitor sees them. The domain's parts have field tokens, such as
@@ -968,8 +971,9 @@ registrar where its API reports it, the way expiry dates do.
   - when each registrar account was last read;
   - the next steps of setting up the site: add a registrar, import your
     domains, connect a marketplace, enable a payment gateway, point parked
-    domains at `/domain-lander` (done once a visitor comes through it), and
-    set the notification address.
+    domains at this site (optional, as forwarding straight to domain pages
+    can't be seen from here; done once a visitor comes through
+    `/domain-lander`), and set the notification address.
 
   The page asks no registrar or marketplace for anything.
 

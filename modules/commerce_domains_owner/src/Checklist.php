@@ -20,7 +20,8 @@ use Drupal\Core\Url;
  *
  * Nothing is asked of providers' APIs: a marketplace counts as connected
  * when its keys are set, and parked domains count as pointed at the lander
- * once a visitor has come through it.
+ * once a visitor has come through it. Domains forwarded to their own pages
+ * leave no such sign, so that step is optional.
  */
 class Checklist {
 
@@ -38,9 +39,9 @@ class Checklist {
   /**
    * Returns the steps, in order.
    *
-   * @return array<string, array{title: \Drupal\Core\StringTranslation\TranslatableMarkup, done: bool, help: \Drupal\Core\StringTranslation\TranslatableMarkup, url: \Drupal\Core\Url|null}>
+   * @return array<string, array{title: \Drupal\Core\StringTranslation\TranslatableMarkup, done: bool, help: \Drupal\Core\StringTranslation\TranslatableMarkup, url: \Drupal\Core\Url|null, optional?: bool}>
    *   The steps, keyed by ID: registrar, domains, marketplace, payment,
-   *   lander and notify.
+   *   lander and notify. An optional step doesn't count as still to do.
    */
   public function steps(): array {
     /** @var \Drupal\commerce_domains\Entity\ProviderInterface[] $providers */
@@ -103,12 +104,14 @@ class Checklist {
     ];
 
     $steps['lander'] = [
-      'title' => new TranslatableMarkup('Point parked domains at /domain-lander'),
+      'title' => new TranslatableMarkup('Point parked domains at this site'),
       'done' => (bool) $this->state->get(self::LANDER_KEY),
-      'help' => new TranslatableMarkup("Forward your parked domains at their registrars to @url, so visitors land on the domain's page here. This step is done once the first visitor comes through.", [
+      'help' => new TranslatableMarkup("At each registrar, forward a parked domain to its own page here, for example /domain/example.com, depending on your URL aliases. Or forward them all to @url: it finds the domain from a ?domain=example.com parameter, or else the Referer, which browsers often leave out. Visitors it can't match go to the fallback page. This step is optional, and shows as done once a visitor comes through that generic address.", [
         '@url' => Url::fromRoute('commerce_domains.lander', [], ['absolute' => TRUE])->toString(),
       ]),
       'url' => NULL,
+      // Forwarding straight to domain pages can't be seen from here.
+      'optional' => TRUE,
     ];
 
     $steps['notify'] = [

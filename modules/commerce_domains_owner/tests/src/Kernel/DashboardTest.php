@@ -104,6 +104,17 @@ class DashboardTest extends OwnerKernelTestBase {
     $this->assertTrue($steps['payment']);
 
     $this->createProvider('market', 'test_marketplace');
+    $this->config('commerce_domains_owner.settings')->set('notify_mail', 'owner@example.com')->save();
+    // The lander is optional: all done without it, and marked as such.
+    $controller = $this->container->get('class_resolver')->getInstanceFromDefinition(DashboardController::class);
+    $build = $controller->build();
+    $this->assertFalse($done()['lander']);
+    $this->assertSame('Next steps: all done', (string) $build['checklist']['#title']);
+    $this->assertFalse($build['checklist']['#open']);
+    $row = $build['checklist']['table']['#rows']['lander'];
+    $this->assertSame('Optional', (string) $row['data'][0]);
+    $this->assertSame([], $row['class']);
+
     // A visitor comes through the lander, on a path of the site's own.
     $visit = function (string $path, string $controller): void {
       $request = Request::create($path);
@@ -115,11 +126,10 @@ class DashboardTest extends OwnerKernelTestBase {
     $this->assertNull($this->container->get('state')->get(Checklist::LANDER_KEY));
     $visit('/system/redirect-landing', '\Drupal\commerce_domains\Controller\LanderController::redirect');
     $this->assertSame($this->now, $this->container->get('state')->get(Checklist::LANDER_KEY));
-    $this->config('commerce_domains_owner.settings')->set('notify_mail', 'owner@example.com')->save();
     $steps = $done();
     $this->assertSame([TRUE], array_values(array_unique($steps)));
 
-    $build = $this->container->get('class_resolver')->getInstanceFromDefinition(DashboardController::class)->build();
+    $build = $controller->build();
     $this->assertSame('Next steps: all done', (string) $build['checklist']['#title']);
     $this->assertFalse($build['checklist']['#open']);
   }

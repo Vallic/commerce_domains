@@ -78,12 +78,25 @@ final class DashboardController implements ContainerInjectionInterface {
     $rows = [];
     foreach ($steps as $id => $step) {
       $title = $step['url'] && !$step['done'] ? Link::fromTextAndUrl($step['title'], $step['url'])->toRenderable() : ['#plain_text' => $step['title']];
+      $optional = !$step['done'] && !empty($step['optional']);
       $rows[$id] = [
-        'data' => [$step['done'] ? $this->t('Done') : $this->t('To do'), ['data' => $title], $step['help']],
-        'class' => [$step['done'] ? 'color-success' : 'color-warning'],
+        'data' => [
+          match (TRUE) {
+            $step['done'] => $this->t('Done'),
+            $optional => $this->t('Optional'),
+            default => $this->t('To do'),
+          },
+          ['data' => $title],
+          $step['help'],
+        ],
+        'class' => match (TRUE) {
+          $step['done'] => ['color-success'],
+          $optional => [],
+          default => ['color-warning'],
+        },
       ];
     }
-    $open = count(array_filter($steps, fn(array $step) => !$step['done']));
+    $open = count(array_filter($steps, fn(array $step) => !$step['done'] && empty($step['optional'])));
     return [
       '#type' => 'details',
       '#title' => $open ? $this->formatPlural($open, 'Next steps: 1 to do', 'Next steps: @count to do') : $this->t('Next steps: all done'),
