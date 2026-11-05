@@ -797,6 +797,13 @@ order sells, from payment to the buyer's account.
    first. While a domain's handover is open, its *Registrar* tab points to
    the order's *Handover* tab.
 
+Orders whose workflow keeps them open after placing, so that an unpaid one can
+still be canceled, can complete by themselves: set
+`commerce_domains_handover.settings:complete_orders` to true (off by default).
+An order then completes when its last open handover closes, if it is paid in
+full and at least one domain was transferred. Orders paid on Escrow.com are left
+to Escrow.com. An order handed over before it was paid is completed by hand.
+
 Steps need *Hand over sold domains*; *View domain handovers* shows the tab
 and the list. With Commerce Log, each step and email is in the order's
 activity, without codes. The emails use the

@@ -17,3 +17,9 @@ services:
       $logger: '@logger.channel.commerce_domains_handover'
     tags:
       - { name: event_subscriber }
+
+  Drupal\commerce_domains_handover\EventSubscriber\OrderCompletionSubscriber:
+    arguments:
+      $logger: '@logger.channel.commerce_domains_handover'
+    tags:
+      - { name: event_subscriber }

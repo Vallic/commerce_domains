@@ -2,10 +2,20 @@
 
 /**
  * @file
- * Install and uninstall functions for Commerce Domains Handover.
+ * Install, update and uninstall functions for Commerce Domains Handover.
  */
 
 declare(strict_types=1);
+
+/**
+ * Adds the setting that completes orders after their handover, turned off.
+ */
+function commerce_domains_handover_update_11001(): void {
+  $settings = \Drupal::configFactory()->getEditable('commerce_domains_handover.settings');
+  if ($settings->get('complete_orders') === NULL) {
+    $settings->set('complete_orders', FALSE)->save();
+  }
+}
 
 /**
  * Implements hook_uninstall().
