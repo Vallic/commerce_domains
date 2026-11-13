@@ -23,8 +23,12 @@ use Psr\Log\LoggerInterface;
  */
 class RegistrarSync {
 
-  // How often cron refreshes a provider that asked for it.
-  public const INTERVAL = 86400;
+  // How early a refresh is still due: cron runs at about the same minute
+  // every hour, and a few seconds late must not put it off another hour.
+  public const LEEWAY = 600;
+
+  // The state key, plus the provider ID, of the last refresh.
+  public const REFRESHED_KEY = 'commerce_domains.registration_sync.';
 
   // Domains looked up in the catalog at once.
   protected const CHUNK_SIZE = 200;
@@ -244,35 +248,66 @@ class RegistrarSync {
   }
 
   /**
-   * Refreshes the providers that asked for a daily update, when due.
+   * Reads a provider's whole account and writes what changed to the catalog.
    *
-   * A provider is retried on the next cron run after an outage, and waits a
-   * day after any other failure, so bad keys don't log every hour.
+   * What cron does when a refresh is due, and the Registrations tab and the
+   * provider list do when asked.
+   *
+   * @return int
+   *   How many products were updated.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  public function refresh(ProviderInterface $provider): int {
+    $updated = $this->apply($provider, $this->plan($provider));
+    $this->state->set(self::REFRESHED_KEY . $provider->id(), $this->time->getCurrentTime());
+    return $updated;
+  }
+
+  /**
+   * Returns when a provider's registrations were last refreshed, or NULL.
+   */
+  public function lastRefresh(string $provider_id): ?int {
+    $time = (int) $this->state->get(self::REFRESHED_KEY . $provider_id, 0);
+    return $time ?: NULL;
+  }
+
+  /**
+   * Whether cron refreshes a provider's registrations now.
+   */
+  public function isDue(ProviderInterface $provider, int $now): bool {
+    if (!$provider->status() || !$provider->syncsRegistrations() || !$provider->hasCapability(RegistrarInterface::class)) {
+      return FALSE;
+    }
+    $interval = $provider->getRegistrationInterval() * 3600;
+    return $now - (int) $this->lastRefresh((string) $provider->id()) >= $interval - self::LEEWAY;
+  }
+
+  /**
+   * Refreshes the providers that asked for it, as often as each asked.
+   *
+   * A provider is retried on the next cron run after an outage, and waits
+   * its interval after any other failure, so bad keys don't log every hour.
    */
   public function cron(): void {
     $now = $this->time->getRequestTime();
     /** @var \Drupal\commerce_domains\Entity\ProviderInterface $provider */
     foreach ($this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple() as $provider) {
-      if (!$provider->status() || !$provider->syncsRegistrations() || !$provider->hasCapability(RegistrarInterface::class)) {
-        continue;
-      }
-      $key = 'commerce_domains.registration_sync.' . $provider->id();
-      if ($now - (int) $this->state->get($key, 0) < self::INTERVAL) {
+      if (!$this->isDue($provider, $now)) {
         continue;
       }
       try {
-        $this->apply($provider, $this->plan($provider));
+        $this->refresh($provider);
       }
       catch (ProviderException $e) {
         $this->logger->warning('@provider registrations not updated: @error', [
           '@provider' => $provider->label(),
           '@error' => $e->getMessage(),
         ]);
-        if ($e->retryable) {
-          continue;
+        if (!$e->retryable) {
+          $this->state->set(self::REFRESHED_KEY . $provider->id(), $now);
         }
       }
-      $this->state->set($key, $now);
     }
   }
 

@@ -1,0 +1,49 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Drupal\commerce_domains\Entity;
+
+use Drupal\Core\Config\Entity\ConfigEntityInterface;
+
+/**
+ * A set of DNS records to give domains, at whichever registrar they are.
+ *
+ * Values may hold {domain}, which becomes the domain the records are for.
+ */
+interface DnsTemplateInterface extends ConfigEntityInterface {
+
+  // The most records a template holds: what Dynadot takes on a domain itself.
+  public const MAX_RECORDS = 20;
+
+  // What becomes the domain in a record's value.
+  public const PLACEHOLDER = '{domain}';
+
+  /**
+   * Returns the records as stored.
+   *
+   * @return array<int, array{type: string, host: string, value: string, priority: int|null, ttl: int|null}>
+   *   The records.
+   */
+  public function getRecords(): array;
+
+  /**
+   * Sets the records.
+   *
+   * @param array<int, array<string, mixed>> $records
+   *   Records with type, host, value and, optionally, priority and ttl.
+   *
+   * @throws \InvalidArgumentException
+   *   When there are more than MAX_RECORDS.
+   */
+  public function setRecords(array $records): static;
+
+  /**
+   * Returns the records for a domain, with {domain} filled in.
+   *
+   * @return \Drupal\commerce_domains\DnsRecord[]
+   *   The records.
+   */
+  public function recordsFor(string $name): array;
+
+}

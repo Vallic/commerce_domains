@@ -20,6 +20,11 @@ use Drupal\Core\Entity\EntityWithPluginCollectionInterface;
  */
 interface ProviderInterface extends ConfigEntityInterface, EntityWithPluginCollectionInterface {
 
+  // The hours apart cron can refresh registration details, and the default.
+  public const REGISTRATION_INTERVALS = [1, 6, 12, 24];
+
+  public const REGISTRATION_INTERVAL = 24;
+
   /**
    * Returns the configured plugin, or NULL for a provider without an API.
    */
@@ -82,14 +87,33 @@ interface ProviderInterface extends ConfigEntityInterface, EntityWithPluginColle
   public function setCredentialKeys(array $keys): static;
 
   /**
-   * Whether cron refreshes registration details from the registrar daily.
+   * Whether cron refreshes registration details from the registrar.
    */
   public function syncsRegistrations(): bool;
 
   /**
-   * Sets whether cron refreshes registration details daily.
+   * Sets whether cron refreshes registration details.
    */
   public function setRegistrationSync(bool $sync): static;
+
+  /**
+   * Returns how many hours apart cron refreshes registration details.
+   *
+   * @return int
+   *   One of REGISTRATION_INTERVALS.
+   */
+  public function getRegistrationInterval(): int;
+
+  /**
+   * Sets how many hours apart cron refreshes registration details.
+   *
+   * @param int $hours
+   *   One of REGISTRATION_INTERVALS.
+   *
+   * @throws \InvalidArgumentException
+   *   For any other number of hours.
+   */
+  public function setRegistrationInterval(int $hours): static;
 
   /**
    * Returns the sale terms here, where they differ from the general ones.

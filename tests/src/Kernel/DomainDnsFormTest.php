@@ -6,6 +6,8 @@ namespace Drupal\Tests\commerce_domains\Kernel;
 
 use Drupal\commerce_domains\DnsHistory;
 use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\DnsTemplateApplier;
+use Drupal\commerce_domains\Entity\DnsTemplate;
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Form\DomainDnsForm;
 use Drupal\commerce_product\Entity\ProductInterface;
@@ -20,6 +22,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
  */
 #[CoversClass(DomainDnsForm::class)]
 #[CoversClass(DnsHistory::class)]
+#[CoversClass(DnsTemplate::class)]
+#[CoversClass(DnsTemplateApplier::class)]
 #[Group('commerce_domains')]
 #[RunTestsInSeparateProcesses]
 class DomainDnsFormTest extends DomainsKernelTestBase {
@@ -58,6 +62,7 @@ class DomainDnsFormTest extends DomainsKernelTestBase {
     $this->container->get('state')->set(self::KEY, [
       'example.com' => ['expires' => 1_820_000_000, 'dns' => $this->zone],
       'elsewhere.com' => ['expires' => 1_820_000_000],
+      'empty.com' => ['expires' => 1_820_000_000, 'dns' => []],
     ]);
   }
 
@@ -182,6 +187,103 @@ class DomainDnsFormTest extends DomainsKernelTestBase {
     $object->apply($form, $form_state);
     $this->assertEquals($this->zone, $this->zone('example.com'));
     $this->assertCount(2, $history->list('example.com'), 'The zone before the restore is kept too.');
+  }
+
+  /**
+   * Tests adding the first record to a zone with none.
+   */
+  public function testEmptyZone(): void {
+    $product = $this->createDomain('Empty.com', 1000, ['domain_registrar' => 'managed']);
+    [$object, $form, $form_state] = $this->form($product);
+    $this->assertSame([], array_values(array_filter(array_keys($form['records']), 'is_int')));
+
+    // An empty table posts an empty string.
+    $form_state->setValue('records', '');
+    $object->addRecord($form, $form_state);
+    $form = $object->buildForm([], $form_state, $product);
+    $this->assertSame([0], array_values(array_filter(array_keys($form['records']), 'is_int')));
+
+    $form_state->setValue('records', [(new DnsRecord('A', '@', '192.0.2.5'))->toArray()]);
+    $object->validateRecords($form, $form_state);
+    $this->assertSame([], $form_state->getErrors());
+    $object->review($form, $form_state);
+    $form = $object->buildForm([], $form_state, $product);
+    $object->apply($form, $form_state);
+    $this->assertSame(['192.0.2.5'], array_column($this->zone('empty.com'), 'value'));
+  }
+
+  /**
+   * Tests DNS templates: on the DNS tab, and applied at once.
+   */
+  public function testTemplate(): void {
+    $template = DnsTemplate::create(['id' => 'parked', 'label' => 'Parked']);
+    $template->setRecords([
+      ['type' => 'A', 'host' => '@', 'value' => '192.0.2.1'],
+      ['type' => 'CNAME', 'host' => 'WWW', 'value' => '{domain}.'],
+      ['type' => 'TXT', 'host' => '@', 'value' => 'v=spf1 -all', 'ttl' => '3600'],
+      ['type' => 'FORWARD', 'host' => 'shop', 'value' => 'https://{domain}/shop'],
+    ]);
+    $template->save();
+    $this->assertSame('www', DnsTemplate::load('parked')->getRecords()[1]['host']);
+    $this->assertSame(3600, DnsTemplate::load('parked')->getRecords()[2]['ttl']);
+    $this->assertSame('example.com.', DnsTemplate::load('parked')->recordsFor('example.com')[1]->value);
+
+    // On the tab, adding: the A record is there already.
+    $product = $this->createDomain('Example.com', 1000, ['domain_registrar' => 'managed']);
+    [$object, $form, $form_state] = $this->form($product);
+    $this->assertArrayHasKey('template', $form);
+    $form_state->setValues([
+      'records' => $this->zone,
+      'template_id' => 'parked',
+      'template_mode' => DnsTemplateApplier::ADD,
+    ]);
+    $object->useTemplate($form, $form_state);
+    $rows = $form_state->get('rows');
+    $this->assertSame(['A', 'MX', 'FORWARD', 'CNAME', 'TXT'], array_column($rows, 'type'));
+    $this->assertSame([FALSE, FALSE, TRUE, FALSE, FALSE], array_column($rows, 'remove'), 'The CNAME takes the place of the forward on www.');
+    $warnings = array_map('strval', $this->container->get('messenger')->messagesByType('warning'));
+    $this->assertStringContainsString('FORWARD', $warnings[0], 'A type the registrar lacks is left out.');
+    $this->assertSame($this->zone, $this->zone('example.com'), 'Nothing written before review.');
+
+    // Replacing: what is there is ticked for removal, to review.
+    $form_state->setValues([
+      'records' => $this->zone,
+      'template_id' => 'parked',
+      'template_mode' => DnsTemplateApplier::REPLACE,
+    ]);
+    $object->useTemplate($form, $form_state);
+    $rows = $form_state->get('rows');
+    $this->assertSame([FALSE, TRUE, TRUE, FALSE, FALSE], array_column($rows, 'remove'), 'The A record the template has too stays.');
+    $form_state->setValue('records', $rows);
+    $object->review($form, $form_state);
+    $form = $object->buildForm([], $form_state, $product);
+    $changes = array_map(fn(array $row) => (string) $row['data'][0], $form['changes']['#rows']);
+    $this->assertSame(['Remove', 'Remove', 'Add', 'Add'], $changes, 'The A record stays.');
+
+    // A host's own forward stays when the template's is another host's.
+    $zone = DnsTemplateApplier::zone(
+      [new DnsRecord('FORWARD', '@', 'https://a.example/'), new DnsRecord('FORWARD', 'www', 'https://a.example/')],
+      [new DnsRecord('FORWARD', '@', 'https://b.example/')],
+      DnsTemplateApplier::ADD,
+    );
+    $this->assertSame(
+      ['www https://a.example/', '@ https://b.example/'],
+      array_map(fn(DnsRecord $record) => $record->host . ' ' . $record->value, $zone),
+    );
+
+    // At once, as the bulk action does.
+    $applier = $this->container->get(DnsTemplateApplier::class);
+    $this->assertSame(DnsTemplateApplier::CHANGED, $applier->apply($product, $template, DnsTemplateApplier::ADD));
+    $this->assertSame(['A', 'MX', 'CNAME', 'TXT'], array_column($this->zone('example.com'), 'type'));
+    $this->assertCount(1, $this->container->get(DnsHistory::class)->list('example.com'), 'The zone before is kept.');
+    $this->assertSame(DnsTemplateApplier::UNCHANGED, $applier->apply($product, $template, DnsTemplateApplier::ADD));
+    $this->assertSame(DnsTemplateApplier::CHANGED, $applier->apply($product, $template, DnsTemplateApplier::REPLACE));
+    $this->assertSame(['A', 'CNAME', 'TXT'], array_column($this->zone('example.com'), 'type'));
+    $this->assertSame(DnsTemplateApplier::ELSEWHERE, $applier->apply($this->createDomain('Elsewhere.com', 1000, ['domain_registrar' => 'managed']), $template, DnsTemplateApplier::ADD));
+    $this->assertSame(DnsTemplateApplier::SKIPPED, $applier->apply($this->createDomain('Read.com', 1000, ['domain_registrar' => 'reg']), $template, DnsTemplateApplier::ADD));
+
+    $this->expectException(\InvalidArgumentException::class);
+    $template->setRecords(array_fill(0, 21, ['type' => 'A', 'host' => '@', 'value' => '192.0.2.1']));
   }
 
 }

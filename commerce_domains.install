@@ -146,3 +146,13 @@ function commerce_domains_update_11007(): void {
   }
   $config->save();
 }
+
+/**
+ * Adds DNS templates.
+ */
+function commerce_domains_update_11008(): void {
+  $update_manager = \Drupal::entityDefinitionUpdateManager();
+  if (!$update_manager->getEntityType('commerce_domains_dns_template')) {
+    $update_manager->installEntityType(\Drupal::entityTypeManager()->getDefinition('commerce_domains_dns_template'));
+  }
+}

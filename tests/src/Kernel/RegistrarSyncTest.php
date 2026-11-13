@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\commerce_domains\Kernel;
 
+use Drupal\commerce_domains\Controller\RegistrationRefreshController;
 use Drupal\commerce_domains\Entity\Provider;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Form\RegistrationsForm;
@@ -249,6 +250,21 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $this->sync->cron();
     $this->sync->cron();
     $this->assertSame(4, $calls());
+
+    // Every 6 hours, give or take the minutes an hourly cron drifts.
+    $state->delete('commerce_domains_test.registrar_fail');
+    Provider::load('reg')->setRegistrationInterval(6)->save();
+    $now = $this->container->get('datetime.time')->getRequestTime();
+    $state->set(RegistrarSync::REFRESHED_KEY . 'reg', $now - 5 * 3600);
+    $this->sync->cron();
+    $this->assertSame(4, $calls(), 'Not within 6 hours.');
+    $state->set(RegistrarSync::REFRESHED_KEY . 'reg', $now - 6 * 3600 + 120);
+    $this->sync->cron();
+    $this->assertSame(5, $calls(), 'Due when cron runs a few minutes early.');
+    $this->assertGreaterThanOrEqual($now, $this->sync->lastRefresh('reg'));
+
+    $this->expectException(\InvalidArgumentException::class);
+    Provider::load('reg')->setRegistrationInterval(3);
   }
 
   /**
@@ -269,16 +285,33 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $this->assertArrayNotHasKey('registration_sync', $form_builder->getForm(Provider::load('afternic'), 'edit'));
 
     $form_object = $this->entityTypeManager->getFormObject('commerce_domains_provider', 'edit')->setEntity(Provider::load('reg'));
+    $this->assertSame(ProviderInterface::REGISTRATION_INTERVAL, Provider::load('reg')->getRegistrationInterval(), 'Daily, as before the setting.');
     $form_state = (new FormState())->setValues([
       'label' => 'Reg',
       'status' => 1,
       'registration_sync' => 1,
+      'registration_interval' => '6',
       'op' => 'Save',
     ]);
     $this->container->get('form_builder')->submitForm($form_object, $form_state);
     $this->assertSame([], $form_state->getErrors());
     $this->assertTrue(Provider::load('reg')->syncsRegistrations());
     $this->assertTrue($this->config('commerce_domains.provider.reg')->get('registration_sync'));
+    $this->assertSame(6, Provider::load('reg')->getRegistrationInterval());
+    $this->assertSame(6, $this->config('commerce_domains.provider.reg')->get('registration_interval'));
+
+    // Refreshing at once from the list: enabled registrars only.
+    $this->setUpCurrentUser([], ['administer commerce_domains providers']);
+    $operations = $this->entityTypeManager->getListBuilder('commerce_domains_provider')->getOperations(Provider::load('reg'));
+    $this->assertArrayHasKey('refresh_registrations', $operations);
+    $this->assertStringContainsString('token=', $operations['refresh_registrations']['url']->toString(), 'The link carries a CSRF token.');
+    $this->assertTrue(RegistrationRefreshController::access(Provider::load('reg'))->isAllowed());
+    $this->assertFalse(RegistrationRefreshController::access(Provider::load('afternic'))->isAllowed());
+    $this->assertFalse(RegistrationRefreshController::access($this->createProvider('off', FALSE))->isAllowed(), 'Not while disabled.');
+    $response = RegistrationRefreshController::create($this->container)->refresh(Provider::load('reg'));
+    $this->assertStringEndsWith('/admin/commerce/domains/settings/providers', $response->getTargetUrl());
+    $this->assertSame('reg', $this->product('moved.com')->get('domain_registrar')->target_id);
+    $this->assertNotNull($this->sync->lastRefresh('reg'));
   }
 
   /**
@@ -330,6 +363,23 @@ class RegistrarSyncTest extends DomainsKernelTestBase {
     $form_state->addBuildInfo('args', [$provider]);
     $form_builder->submitForm(RegistrationsForm::class, $form_state);
     $this->assertSame(['renewed.com', 'parked.com'], array_keys($form_state->get('plan')->registrations));
+  }
+
+  /**
+   * Tests Refresh now on the Registrations page.
+   */
+  public function testRefreshNow(): void {
+    $provider = $this->createProvider();
+    $this->assertNull($this->sync->lastRefresh('reg'));
+    $form_builder = $this->container->get('form_builder');
+    $form_state = (new FormState())->setValues(['op' => 'Refresh now']);
+    $form_state->addBuildInfo('args', [$provider]);
+    $form_builder->submitForm(RegistrationsForm::class, $form_state);
+    $this->assertSame([], $form_state->getErrors());
+    $this->assertSame('reg', $this->product('moved.com')->get('domain_registrar')->target_id, 'Applied without a comparison.');
+    $this->assertSame(self::LATER, (int) $this->product('renewed.com')->get('domain_expires')->value);
+    $this->assertNotNull($this->sync->lastRefresh('reg'), 'Cron counts from it.');
+    $this->assertFalse($this->sync->isDue($provider->setRegistrationSync(TRUE), $this->container->get('datetime.time')->getRequestTime()));
   }
 
 }

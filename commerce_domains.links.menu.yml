@@ -18,3 +18,10 @@ commerce_domains.sale_terms:
   route_name: commerce_domains.sale_terms
   parent: commerce_domains.configuration
   weight: -5
+
+entity.commerce_domains_dns_template.collection:
+  title: 'DNS templates'
+  description: 'Records to give domains at their registrars, one at a time or in bulk.'
+  route_name: entity.commerce_domains_dns_template.collection
+  parent: commerce_domains.configuration
+  weight: -8

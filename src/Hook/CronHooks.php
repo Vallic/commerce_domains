@@ -21,7 +21,8 @@ class CronHooks {
   /**
    * Implements hook_cron().
    *
-   * Refreshes the Public Suffix List weekly, and registrations daily.
+   * Refreshes the Public Suffix List weekly, and registrations as often as
+   * each provider asked.
    */
   #[Hook('cron')]
   public function cron(): void {

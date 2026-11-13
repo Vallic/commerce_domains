@@ -7,6 +7,7 @@ namespace Drupal\commerce_domains\Form;
 use Drupal\commerce_domains\Availability;
 use Drupal\commerce_domains\DnsHistory;
 use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\DnsTemplateApplier;
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\ProviderException;
@@ -36,6 +37,7 @@ final class DomainDnsForm extends FormBase {
     protected DateFormatterInterface $dateFormatter,
     protected LoggerInterface $logger,
     protected DnsHistory $history,
+    protected DnsTemplateApplier $templateApplier,
   ) {}
 
   /**
@@ -47,6 +49,7 @@ final class DomainDnsForm extends FormBase {
       $container->get('date.formatter'),
       $container->get('logger.channel.commerce_domains'),
       $container->get(DnsHistory::class),
+      $container->get(DnsTemplateApplier::class),
     );
   }
 
@@ -222,6 +225,38 @@ final class DomainDnsForm extends FormBase {
       '#submit' => ['::review'],
     ];
 
+    $templates = $this->entityTypeManager->getStorage('commerce_domains_dns_template')->loadMultiple();
+    if ($templates) {
+      $form['template'] = [
+        '#type' => 'details',
+        '#title' => $this->t('Use a DNS template'),
+        '#description' => $this->t("Puts the template's records in the table above; nothing changes at the registrar until you review and apply."),
+        '#open' => !$form_state->get('current'),
+      ];
+      $form['template']['template_id'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Template'),
+        '#options' => array_map(static fn($template) => $template->label(), $templates),
+        '#parents' => ['template_id'],
+      ];
+      $form['template']['template_mode'] = [
+        '#type' => 'radios',
+        '#title' => $this->t('The records there now'),
+        '#options' => [
+          DnsTemplateApplier::ADD => $this->t("Keep them, and add the template's that are missing"),
+          DnsTemplateApplier::REPLACE => $this->t("Remove them: only the template's records stay"),
+        ],
+        '#default_value' => DnsTemplateApplier::ADD,
+        '#parents' => ['template_mode'],
+      ];
+      $form['template']['use'] = [
+        '#type' => 'submit',
+        '#value' => $this->t('Use the template'),
+        '#submit' => ['::useTemplate'],
+        '#limit_validation_errors' => [['records'], ['template_id'], ['template_mode']],
+      ];
+    }
+
     $kept = $this->history->list($name);
     if ($kept) {
       $form['history'] = [
@@ -317,6 +352,63 @@ final class DomainDnsForm extends FormBase {
   public function addRecord(array &$form, FormStateInterface $form_state): void {
     $rows = $this->enteredRows($form_state);
     $rows[] = (new DnsRecord('A', '@', ''))->toArray();
+    $form_state->set('rows', $rows)->setRebuild();
+  }
+
+  /**
+   * Puts a template's records in the table, for review.
+   */
+  public function useTemplate(array &$form, FormStateInterface $form_state): void {
+    /** @var \Drupal\commerce_product\Entity\ProductInterface $product */
+    $product = $this->entityTypeManager->getStorage('commerce_product')->load($form_state->get('product'));
+    /** @var \Drupal\commerce_domains\Entity\DnsTemplateInterface|null $template */
+    $template = $this->entityTypeManager->getStorage('commerce_domains_dns_template')->load((string) $form_state->getValue('template_id'));
+    $plugin = self::provider($product)?->getPlugin();
+    if (!$template || !$plugin instanceof DnsRecordsInterface) {
+      return;
+    }
+    $name = (string) $product->get('domain')->value;
+    [$records, $left_out] = $this->templateApplier->records($template, $name, $plugin->dnsRecordTypes());
+    $mode = $form_state->getValue('template_mode') === DnsTemplateApplier::REPLACE ? DnsTemplateApplier::REPLACE : DnsTemplateApplier::ADD;
+
+    // The rows that stay, as records; an added row left empty is no record.
+    $rows = $kept = [];
+    foreach ($this->enteredRows($form_state) as $row) {
+      if ($row['value'] === '' && $row['id'] === NULL) {
+        continue;
+      }
+      $rows[] = $row;
+      if (empty($row['remove'])) {
+        $kept[count($rows) - 1] = DnsRecord::fromArray($row);
+      }
+    }
+    // What the template changes: rows it removes are ticked, so the owner
+    // sees them go; its new records are added below.
+    $diff = DnsRecord::diff(array_values($kept), DnsTemplateApplier::zone(array_values($kept), $records, $mode));
+    $removed = array_count_values(array_map(static fn(DnsRecord $record) => $record->key(), $diff['delete']));
+    foreach ($kept as $i => $record) {
+      if (!empty($removed[$record->key()])) {
+        $rows[$i]['remove'] = TRUE;
+        $removed[$record->key()]--;
+      }
+    }
+    $added = 0;
+    foreach ($diff['create'] as $record) {
+      $rows[] = $record->toArray() + ['remove' => FALSE];
+      $added++;
+    }
+
+    $args = ['%template' => $template->label(), '@added' => $added, '@removed' => count($diff['delete'])];
+    $this->messenger()->addStatus($diff['delete']
+      ? $this->t('%template: @added records added to the table, and @removed ticked for removal. Review the changes to apply them.', $args)
+      : $this->t('%template: @added records added to the table. Review the changes to apply them.', $args));
+    if ($left_out) {
+      $this->messenger()->addWarning($this->t("Left out the template's @types records: the registrar's DNS has no such type.", ['@types' => implode(', ', $left_out)]));
+    }
+    // The rows are new: build them from these, not from what was posted.
+    $input = (array) $form_state->getUserInput();
+    unset($input['records']);
+    $form_state->setUserInput($input);
     $form_state->set('rows', $rows)->setRebuild();
   }
 
@@ -428,7 +520,12 @@ final class DomainDnsForm extends FormBase {
    */
   protected function enteredRows(FormStateInterface $form_state): array {
     $rows = [];
-    foreach ((array) $form_state->getValue('records', []) as $i => $row) {
+    // An empty table submits an empty string, not an empty array.
+    $values = $form_state->getValue('records');
+    foreach (is_array($values) ? $values : [] as $i => $row) {
+      if (!is_array($row)) {
+        continue;
+      }
       $record = DnsRecord::fromArray($row);
       $rows[(int) $i] = $record->toArray() + ['remove' => !empty($row['remove'])];
       $rows[(int) $i]['value'] = $record->value;

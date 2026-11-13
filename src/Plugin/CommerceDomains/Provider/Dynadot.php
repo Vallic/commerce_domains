@@ -302,6 +302,11 @@ final class Dynadot extends MarketplacePluginBase implements DomainManagementInt
         throw new ProviderException(sprintf('Dynadot DNS has no %s records for %s; its types there are %s.', $record->type, $record->fqdn($name), implode(', ', $types)));
       }
       $second = $record->type === 'MX' ? (string) $record->priority : (string) ($record->extra['value2'] ?? '');
+      // Dynadot needs the redirect kind of a forward; one added here has
+      // none, and gets a 302, as forwards to a sale page are.
+      if ($second === '' && $record->type === 'FORWARD') {
+        $second = '2';
+      }
       if ($record->host === '@') {
         if ($main >= 20) {
           throw new ProviderException('Dynadot DNS takes up to 20 records for the domain itself.');

@@ -30,3 +30,11 @@ commerce_domains_bulk.marketplaces:
     _title: 'Choose marketplaces'
   requirements:
     _permission: 'access commerce_product overview'
+
+commerce_domains_bulk.dns_template:
+  path: '/admin/commerce/domains/bulk/dns-template'
+  defaults:
+    _form: '\Drupal\commerce_domains_bulk\Form\DnsTemplateForm'
+    _title: 'Apply a DNS template'
+  requirements:
+    _permission: 'access commerce_product overview,manage domains at registrars'

@@ -11,6 +11,7 @@ use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\RegistrarInterface;
 use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Config\Entity\ConfigEntityListBuilder;
 use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Url;
 
 /**
  * Lists domain providers.
@@ -64,6 +65,16 @@ class ProviderListBuilder extends ConfigEntityListBuilder {
       $operations['registrations'] = [
         'title' => $this->t('Registrations'),
         'weight' => 20,
+        'url' => $this->ensureDestination($url),
+      ];
+    }
+    $url = Url::fromRoute('entity.commerce_domains_provider.refresh_registrations', ['commerce_domains_provider' => $entity->id()]);
+    $access = $url->access(NULL, TRUE);
+    $cacheability?->addCacheableDependency($access);
+    if ($access->isAllowed()) {
+      $operations['refresh_registrations'] = [
+        'title' => $this->t('Refresh registrations'),
+        'weight' => 21,
         'url' => $this->ensureDestination($url),
       ];
     }

@@ -34,7 +34,8 @@ class ImportHooks {
   /**
    * Implements hook_cron().
    *
-   * Adds the new domains of registrar accounts set to, once a day.
+   * Adds the new domains of registrar accounts set to, as often as their
+   * registrations are refreshed.
    */
   #[Hook('cron')]
   public function cron(): void {
@@ -44,7 +45,7 @@ class ImportHooks {
   /**
    * Implements hook_form_FORM_ID_alter() for the provider form.
    *
-   * Beside the daily registration refresh: also add the account's new
+   * Beside the registration refresh: also add the account's new
    * domains to the catalog.
    */
   #[Hook('form_commerce_domains_provider_form_alter')]
@@ -59,7 +60,7 @@ class ImportHooks {
     $form['add_new_domains'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Also add the domains the account holds that the catalog lacks'),
-      '#description' => $this->t("Once a day, as unpublished domains not listed on marketplaces, with the account's expiry and registration dates and auto-renew where it gives them, and the price of the first matching pricing rule, else 0. Publish them, and set their price, when you are ready to sell."),
+      '#description' => $this->t("As often as registrations are refreshed, as unpublished domains not listed on marketplaces, with the account's expiry and registration dates and auto-renew where it gives them, and the price of the first matching pricing rule, else 0. Publish them, and set their price, when you are ready to sell."),
       '#default_value' => AccountImport::addsNew($provider),
       '#weight' => ($form['registration_sync']['#weight'] ?? 0) + 0.01,
       '#states' => ['visible' => [':input[name="registration_sync"]' => ['checked' => TRUE]]],

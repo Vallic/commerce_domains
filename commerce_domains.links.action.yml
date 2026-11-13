@@ -3,3 +3,9 @@ entity.commerce_domains_provider.add_form:
   route_name: entity.commerce_domains_provider.add_form
   appears_on:
     - entity.commerce_domains_provider.collection
+
+entity.commerce_domains_dns_template.add_form:
+  title: 'Add DNS template'
+  route_name: entity.commerce_domains_dns_template.add_form
+  appears_on:
+    - entity.commerce_domains_dns_template.collection

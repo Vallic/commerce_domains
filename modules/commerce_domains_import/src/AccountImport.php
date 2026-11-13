@@ -21,20 +21,17 @@ use Psr\Log\LoggerInterface;
 /**
  * Adds the domains a registrar account holds that the catalog lacks.
  *
- * For providers set to (Add new domains from the account, beside the daily
- * registration refresh), cron does it once a day. New domains are
- * unpublished and not listed on marketplaces, so nothing is offered until
- * the owner has looked at them; they get the account's expiry date,
- * registration date and auto-renew setting where the registrar gives them,
- * and the price of the first matching pricing rule, else 0.
+ * For providers set to (Add new domains from the account, beside the
+ * registration refresh), cron does it as often as it refreshes them. New
+ * domains are unpublished and not listed on marketplaces, so nothing is
+ * offered until the owner has looked at them; they get the account's expiry
+ * date, registration date and auto-renew setting where the registrar gives
+ * them, and the price of the first matching pricing rule, else 0.
  */
 class AccountImport {
 
   // The provider's third-party settings.
   public const MODULE = 'commerce_domains_import';
-
-  // How often an account is read: once a day.
-  protected const INTERVAL = 86400;
 
   public function __construct(
     protected DomainImporter $importer,
@@ -98,10 +95,10 @@ class AccountImport {
   }
 
   /**
-   * Adds the new domains of the providers set to, once a day each.
+   * Adds the new domains of the providers set to, as often as each asked.
    *
-   * A provider is retried on the next cron run after an outage, and waits a
-   * day after any other failure.
+   * A provider is retried on the next cron run after an outage, and waits
+   * its interval after any other failure.
    */
   public function cron(): void {
     $now = $this->time->getRequestTime();
@@ -110,8 +107,9 @@ class AccountImport {
       if (!$provider->status() || !$provider->syncsRegistrations() || !self::addsNew($provider) || !$provider->hasCapability(RegistrarInterface::class)) {
         continue;
       }
+      // As often as the provider's registrations are refreshed.
       $key = 'commerce_domains_import.account_import.' . $provider->id();
-      if ($now - (int) $this->state->get($key, 0) < self::INTERVAL) {
+      if ($now - (int) $this->state->get($key, 0) < $provider->getRegistrationInterval() * 3600 - RegistrarSync::LEEWAY) {
         continue;
       }
       try {

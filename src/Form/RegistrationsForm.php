@@ -16,7 +16,6 @@ use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\Core\State\StateInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -31,7 +30,6 @@ final class RegistrationsForm extends FormBase {
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
     protected RegistrarSync $sync,
-    protected StateInterface $stateStore,
     protected DateFormatterInterface $dateFormatter,
   ) {}
 
@@ -42,7 +40,6 @@ final class RegistrationsForm extends FormBase {
     return new static(
       $container->get('entity_type.manager'),
       $container->get(RegistrarSync::class),
-      $container->get('state'),
       $container->get('date.formatter'),
     );
   }
@@ -78,14 +75,15 @@ final class RegistrationsForm extends FormBase {
     $form_state->set('provider', $commerce_domains_provider->id());
     $provider = $this->provider($form_state);
 
-    $last = (int) $this->stateStore->get('commerce_domains.registration_sync.' . $provider->id(), 0);
+    $last = $this->sync->lastRefresh((string) $provider->id());
     $form['intro'] = [
       '#markup' => '<p>' . $this->t("Every catalog domain the @label account holds is recorded at @label and gets the account's expiry date. Domains recorded at @label that the account no longer has are only listed. Nothing is written to @label.", ['@label' => $provider->label()]) . '</p>',
     ];
+    $args = ['@time' => $last ? $this->dateFormatter->format($last) : $this->t('never')];
     $form['refresh'] = [
       '#markup' => '<p>' . ($provider->syncsRegistrations()
-        ? $this->t('Cron refreshes this daily; last run: @time.', ['@time' => $last ? $this->dateFormatter->format($last) : $this->t('never')])
-        : $this->t('Cron does not refresh this provider; turn on <em>Refresh registration details daily</em> in its settings.')) . '</p>',
+        ? $this->formatPlural($provider->getRegistrationInterval(), 'Cron refreshes this every hour; last refresh: @time.', 'Cron refreshes this every @count hours; last refresh: @time.', $args)
+        : $this->t('Cron does not refresh this provider; turn on <em>Refresh registration details</em> in its settings. Last refresh: @time.', $args)) . '</p>',
     ];
 
     if ($error = $provider->getPlugin()->getSetupError()) {
@@ -104,6 +102,14 @@ final class RegistrationsForm extends FormBase {
       '#type' => 'submit',
       '#value' => $this->t('Compare with the account'),
       '#submit' => ['::compare'],
+    ];
+    // What cron does: the whole account, applied without a comparison.
+    $form['actions']['refresh_now'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('Refresh now'),
+      '#submit' => ['::refreshNow'],
+      '#limit_validation_errors' => [],
+      '#disabled' => !$provider->status(),
     ];
 
     $plan = $form_state->get('plan');
@@ -223,6 +229,22 @@ final class RegistrationsForm extends FormBase {
       $this->messenger()->addError($this->t('@label could not be read: @error', $args));
     }
     $form_state->setRebuild();
+  }
+
+  /**
+   * Refreshes the whole account at once, as cron does.
+   */
+  public function refreshNow(array &$form, FormStateInterface $form_state): void {
+    $provider = $this->provider($form_state);
+    $args = ['@label' => $provider->label()];
+    try {
+      $updated = $this->sync->refresh($provider);
+      $this->messenger()->addStatus($this->formatPlural($updated, 'Refreshed @label: 1 product updated.', 'Refreshed @label: @count products updated.', $args));
+    }
+    catch (ProviderException $e) {
+      $this->messenger()->addError($this->t('@label could not be read: @error', $args + ['@error' => $e->getMessage()]));
+    }
+    $form_state->set('plan', NULL);
   }
 
   /**

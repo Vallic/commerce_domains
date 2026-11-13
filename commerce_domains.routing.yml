@@ -12,6 +12,22 @@ entity.commerce_domains_provider.registrations:
       commerce_domains_provider:
         type: entity:commerce_domains_provider
 
+entity.commerce_domains_provider.refresh_registrations:
+  path: '/admin/commerce/domains/settings/providers/{commerce_domains_provider}/registrations/refresh'
+  defaults:
+    _controller: '\Drupal\commerce_domains\Controller\RegistrationRefreshController::refresh'
+  methods: [GET]
+  requirements:
+    _permission: 'administer commerce_domains providers'
+    _custom_access: '\Drupal\commerce_domains\Controller\RegistrationRefreshController::access'
+    # A link that changes the catalog: only from a page that was rendered.
+    _csrf_token: 'TRUE'
+  options:
+    _admin_route: TRUE
+    parameters:
+      commerce_domains_provider:
+        type: entity:commerce_domains_provider
+
 commerce_domains.product_dns:
   path: '/product/{commerce_product}/dns'
   defaults:

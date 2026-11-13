@@ -64,6 +64,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
     'configuration',
     'credential_keys',
     'registration_sync',
+    'registration_interval',
     'marketplace',
     'sale_terms',
   ],
@@ -106,11 +107,18 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
   protected array $credential_keys = [];
 
   /**
-   * Whether cron refreshes registration details daily.
+   * Whether cron refreshes registration details from the registrar.
    *
    * @var bool
    */
   protected bool $registration_sync = FALSE;
+
+  /**
+   * How many hours apart cron refreshes registration details.
+   *
+   * @var int
+   */
+  protected int $registration_interval = self::REGISTRATION_INTERVAL;
 
   /**
    * Whether domains are listed for sale here, by hand when there is no API.
@@ -242,6 +250,24 @@ class Provider extends ConfigEntityBase implements ProviderInterface {
    */
   public function setRegistrationSync(bool $sync): static {
     $this->registration_sync = $sync;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getRegistrationInterval(): int {
+    return in_array($this->registration_interval, self::REGISTRATION_INTERVALS, TRUE) ? $this->registration_interval : self::REGISTRATION_INTERVAL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setRegistrationInterval(int $hours): static {
+    if (!in_array($hours, self::REGISTRATION_INTERVALS, TRUE)) {
+      throw new \InvalidArgumentException(sprintf('Registrations refresh every %s hours, not %d.', implode(', ', self::REGISTRATION_INTERVALS), $hours));
+    }
+    $this->registration_interval = $hours;
     return $this;
   }
 

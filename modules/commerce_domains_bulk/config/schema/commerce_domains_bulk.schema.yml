@@ -13,3 +13,7 @@ action.configuration.commerce_domains_sale_terms:
 action.configuration.commerce_domains_marketplaces:
   type: action_configuration_default
   label: 'Configuration for the Choose marketplaces action'
+
+action.configuration.commerce_domains_dns_template:
+  type: action_configuration_default
+  label: 'Configuration for the Apply a DNS template action'

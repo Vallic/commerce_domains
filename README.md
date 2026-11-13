@@ -380,11 +380,12 @@ drush commerce-domains:registrar-sync dynadot --dry-run --details
 drush cdrs dynadot
 ```
 
-Turn on *Refresh registration details daily* on the provider to have cron do
-the update once a day.
+Turn on *Refresh registration details* on the provider to have cron do the
+update every 1, 6, 12 or 24 hours (*Refresh every*). *Refresh now* on the
+provider's *Registrations* tab, or in the provider list, does it at once.
 
 With Commerce Domains Import, *Also add the domains the account holds that
-the catalog lacks* (below it) has cron add them too, once a day: unpublished
+the catalog lacks* (below it) has cron add them too, as often: unpublished
 and not listed on marketplaces, recorded at that registrar with the
 account's expiry and registration dates and auto-renew where it gives them,
 and priced by the first matching pricing rule, else 0. Publish and price

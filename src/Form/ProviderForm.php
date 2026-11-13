@@ -137,9 +137,21 @@ class ProviderForm extends EntityForm {
       if ($plugin instanceof RegistrarInterface) {
         $form['registration_sync'] = [
           '#type' => 'checkbox',
-          '#title' => $this->t('Refresh registration details daily'),
-          '#description' => $this->t('Cron records this registrar on every catalog domain its account holds, and updates their expiry dates.'),
+          '#title' => $this->t('Refresh registration details'),
+          '#description' => $this->t('Cron records this registrar on every catalog domain its account holds, and updates their expiry dates. The Registrations tab refreshes at once.'),
           '#default_value' => $this->entity->syncsRegistrations(),
+        ];
+        $form['registration_interval'] = [
+          '#type' => 'select',
+          '#title' => $this->t('Refresh every'),
+          '#options' => array_combine(ProviderInterface::REGISTRATION_INTERVALS, array_map(
+            fn(int $hours) => $this->formatPlural($hours, 'hour', '@count hours'),
+            ProviderInterface::REGISTRATION_INTERVALS,
+          )),
+          '#default_value' => $this->entity->getRegistrationInterval(),
+          '#states' => [
+            'visible' => [':input[name="registration_sync"]' => ['checked' => TRUE]],
+          ],
         ];
       }
       $form['configuration'] = [
@@ -267,6 +279,9 @@ class ProviderForm extends EntityForm {
       if ($form_state->hasValue($key)) {
         $entity->set($key, $form_state->getValue($key));
       }
+    }
+    if ($form_state->hasValue('registration_interval')) {
+      $entity->setRegistrationInterval((int) $form_state->getValue('registration_interval'));
     }
     if ($form_state->hasValue('is_marketplace') && !$entity->listsByApi()) {
       $entity->setMarketplace((bool) $form_state->getValue('is_marketplace'));

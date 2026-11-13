@@ -42,7 +42,14 @@ commerce_domains.provider.*:
         label: 'Key ID, keyed by the setting it fills'
     registration_sync:
       type: boolean
-      label: 'Refresh registration details daily'
+      label: 'Refresh registration details from the registrar'
+    registration_interval:
+      type: integer
+      label: 'Hours between refreshes of registration details'
+      requiredKey: false
+      constraints:
+        Choice:
+          choices: [1, 6, 12, 24]
     marketplace:
       type: boolean
       label: 'Domains are listed for sale here'
@@ -365,3 +372,38 @@ commerce.commerce_condition.plugin.commerce_domains_order_item_sale_terms:
 
 commerce.commerce_condition.plugin.commerce_domains_order_sale_terms:
   type: commerce.commerce_condition.plugin.commerce_domains_order_item_sale_terms
+
+commerce_domains.dns_template.*:
+  type: config_entity
+  label: 'DNS template'
+  mapping:
+    id:
+      type: machine_name
+      label: 'ID'
+    label:
+      type: required_label
+      label: 'Name'
+    records:
+      type: sequence
+      label: 'Records'
+      sequence:
+        type: mapping
+        label: 'Record'
+        mapping:
+          type:
+            type: string
+            label: 'Type'
+          host:
+            type: string
+            label: 'Host, relative to the domain'
+          value:
+            type: string
+            label: 'Value; {domain} becomes the domain'
+          priority:
+            type: integer
+            label: 'Priority'
+            nullable: true
+          ttl:
+            type: integer
+            label: 'TTL in seconds'
+            nullable: true
