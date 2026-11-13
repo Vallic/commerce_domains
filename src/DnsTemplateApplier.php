@@ -15,9 +15,9 @@ use Psr\Log\LoggerInterface;
  *
  * Adding keeps the records there and adds the template's that are missing,
  * except that a host has one record of a type such as CNAME or a forward:
- * the template's takes its place. Replacing leaves only the template's. Records of a type the registrar's
- * DNS does not take are left out. The zone there before is kept, so it can
- * be put back from the domain's DNS tab.
+ * the template's takes its place. Replacing leaves only the template's.
+ * Records of a type the registrar's DNS does not take are left out. The zone
+ * there before is kept, so it can be put back from the domain's DNS tab.
  */
 class DnsTemplateApplier {
 
