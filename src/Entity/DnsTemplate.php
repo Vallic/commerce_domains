@@ -75,7 +75,7 @@ class DnsTemplate extends ConfigEntityBase implements DnsTemplateInterface {
   /**
    * The records.
    *
-   * @var array<int, array{type: string, host: string, value: string, priority: int|null, ttl: int|null}>
+   * @var array<int, array{type: string, host: string, value: string, priority: int|null, ttl: int|null, note: string|null}>
    */
   protected array $records = [];
 
@@ -102,9 +102,18 @@ class DnsTemplate extends ConfigEntityBase implements DnsTemplateInterface {
         'value' => $record->value,
         'priority' => $record->priority,
         'ttl' => $record->ttl,
+        'note' => self::note($values['note'] ?? NULL),
       ];
     }
     return $this;
+  }
+
+  /**
+   * Returns a record's note, trimmed; NULL when it has none.
+   */
+  protected static function note(mixed $note): ?string {
+    $note = is_scalar($note) ? trim((string) $note) : '';
+    return $note === '' ? NULL : mb_substr($note, 0, self::NOTE_LENGTH);
   }
 
   /**

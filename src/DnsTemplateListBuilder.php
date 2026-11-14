@@ -28,7 +28,7 @@ class DnsTemplateListBuilder extends ConfigEntityListBuilder {
     /** @var \Drupal\commerce_domains\Entity\DnsTemplateInterface $entity */
     $row['label'] = $entity->label();
     $row['records'] = implode(', ', array_map(
-      static fn(array $record) => $record['type'] . ' ' . $record['host'],
+      static fn(array $record) => $record['type'] . ' ' . $record['host'] . (($record['note'] ?? NULL) !== NULL ? ' (' . $record['note'] . ')' : ''),
       $entity->getRecords(),
     ));
     return $row + parent::buildRow($entity);

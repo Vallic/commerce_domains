@@ -103,8 +103,11 @@ final class NamecheapClient extends ApiClient {
    *   Namecheap's DNS.
    */
   public function getHosts(string $sld, string $tld): ?array {
-    $result = $this->command('namecheap.domains.dns.getHosts', ['SLD' => $sld, 'TLD' => $tld])->DomainDNSGetHostsResult;
-    if (strtolower((string) $result['IsUsingOurDNS']) !== 'true') {
+    // A domain on other nameservers is refused with error 2030288 ("not
+    // using proper DNS servers"), not answered with IsUsingOurDNS="false".
+    $response = $this->commandUnless('namecheap.domains.dns.getHosts', ['SLD' => $sld, 'TLD' => $tld], ['2030288']);
+    $result = $response?->DomainDNSGetHostsResult;
+    if ($result === NULL || strtolower((string) $result['IsUsingOurDNS']) !== 'true') {
       return NULL;
     }
     $hosts = [];
@@ -174,6 +177,25 @@ final class NamecheapClient extends ApiClient {
    * @throws \Drupal\commerce_domains\ProviderException
    */
   protected function command(string $command, array $parameters = []): \SimpleXMLElement {
+    return $this->commandUnless($command, $parameters) ?? throw new ProviderException(sprintf('%s %s returned nothing.', static::NETWORK, $command));
+  }
+
+  /**
+   * Runs a command, with some errors meaning there is nothing to return.
+   *
+   * @param string $command
+   *   The command.
+   * @param array<string, string> $parameters
+   *   Its parameters.
+   * @param string[] $absent
+   *   Error numbers that mean there is nothing to return, not a failure.
+   *
+   * @return \SimpleXMLElement|null
+   *   The CommandResponse element; NULL for one of those errors.
+   *
+   * @throws \Drupal\commerce_domains\ProviderException
+   */
+  protected function commandUnless(string $command, array $parameters = [], array $absent = []): ?\SimpleXMLElement {
     $response = $this->request('GET', 'xml.response', [
       RequestOptions::QUERY => ['Command' => $command] + $parameters,
     ]);
@@ -184,6 +206,9 @@ final class NamecheapClient extends ApiClient {
     if ((string) $xml['Status'] !== 'OK') {
       $error = $xml->Errors->Error[0] ?? NULL;
       $number = $error ? (string) $error['Number'] : '';
+      if (in_array($number, $absent, TRUE)) {
+        return NULL;
+      }
       // Numbers from 1010000 are about the key, user or IP address, which are
       // fixed outside the code.
       throw new ProviderException($this->redact(sprintf('%s %s: %s', static::NETWORK, $command, $this->describeError(200, $response))), str_starts_with($number, '101'));

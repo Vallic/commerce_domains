@@ -50,7 +50,7 @@ class DnsTemplateForm extends EntityForm {
     $types = $this->types();
     $form['help'] = [
       '#type' => 'item',
-      '#markup' => $this->t("Up to @max records. Hosts are relative to the domain: @ for the domain itself, www, mail, _dmarc. {domain} in a value becomes the domain, as in https://example.com/domain/{domain}. A URL redirect becomes the registrar's own kind (a Dynadot forward, a GNAME or Namecheap URL record), as a 302; registrars without one leave it out. Leave TTL empty for the registrar default; a row with no value is dropped.", ['@max' => DnsTemplateInterface::MAX_RECORDS]),
+      '#markup' => $this->t("Up to @max records. Hosts are relative to the domain: @ for the domain itself, www, mail, _dmarc. {domain} in a value becomes the domain, as in https://example.com/domain/{domain}. A URL redirect becomes the registrar's own kind (a Dynadot forward, a GNAME or Namecheap URL record), as a 302; registrars without one leave it out. Leave TTL empty for the registrar default; a row with no value is dropped. The note says what a record is for, such as the marketplace a TXT record verifies; it stays here.", ['@max' => DnsTemplateInterface::MAX_RECORDS]),
     ];
     $form['records'] = [
       '#type' => 'table',
@@ -60,6 +60,7 @@ class DnsTemplateForm extends EntityForm {
         $this->t('Value'),
         $this->t('Priority'),
         $this->t('TTL'),
+        $this->t('Note'),
         $this->t('Remove'),
       ],
       '#tree' => TRUE,
@@ -109,6 +110,15 @@ class DnsTemplateForm extends EntityForm {
           '#min' => 60,
           '#max' => 604800,
           '#size' => 7,
+        ],
+        'note' => [
+          '#type' => 'textfield',
+          '#title' => $this->t('Note'),
+          '#title_display' => 'invisible',
+          '#default_value' => $row['note'] ?? '',
+          '#size' => 16,
+          '#maxlength' => DnsTemplateInterface::NOTE_LENGTH,
+          '#placeholder' => $this->t('e.g. Sedo'),
         ],
         'remove' => [
           '#type' => 'checkbox',
@@ -218,7 +228,7 @@ class DnsTemplateForm extends EntityForm {
       if ($record->value === '' && !$keep_empty) {
         continue;
       }
-      $rows[(int) $i] = $record->toArray();
+      $rows[(int) $i] = $record->toArray() + ['note' => trim((string) ($row['note'] ?? ''))];
     }
     return $rows;
   }

@@ -156,6 +156,8 @@ class NamecheapTest extends ProviderTestBase {
         . '<host HostId="15" Name="@" Type="MX" Address="mail.example.net" MXPref="5" TTL="3600" />'
         . '</DomainDNSGetHostsResult>'),
       $result('namecheap.domains.dns.getHosts', '<DomainDNSGetHostsResult Domain="b.com" IsUsingOurDNS="false" />'),
+      // What the API answers for a domain on other nameservers.
+      self::xml('<Errors><Error Number="2030288">Cannot complete this command as this domain is not using proper DNS servers</Error></Errors>', 'ERROR'),
       $result('namecheap.domains.dns.setHosts', '<DomainDNSSetHostsResult Domain="a.co.uk" IsSuccess="true" />'),
     ]);
     $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
@@ -167,6 +169,7 @@ class NamecheapTest extends ProviderTestBase {
     ], $records);
     $this->assertSame('namecheap.domains.dns.getHosts', $this->query(0)['Command']);
     $this->assertNull($plugin->getDnsRecords('b.com'), 'Not on Namecheap DNS.');
+    $this->assertNull($plugin->getDnsRecords('c.com'), 'Refused as not on Namecheap DNS.');
 
     $records[] = new DnsRecord('TXT', '_dmarc', 'v=DMARC1; p=none');
     $plugin->setDnsRecords('a.co.uk', $records);
@@ -191,7 +194,7 @@ class NamecheapTest extends ProviderTestBase {
       'RecordType4' => 'TXT',
       'Address4' => 'v=DMARC1; p=none',
       'TTL4' => '1800',
-    ], array_diff_key($this->query(2), array_flip(['Command', 'ApiUser', 'ApiKey', 'UserName', 'ClientIp'])));
+    ], array_diff_key($this->query(3), array_flip(['Command', 'ApiUser', 'ApiKey', 'UserName', 'ClientIp'])));
 
     try {
       $plugin->setDnsRecords('a.co.uk', [new DnsRecord('SRV', '_sip._tcp', '5 5060 sip.example.com', 10)]);
@@ -200,7 +203,7 @@ class NamecheapTest extends ProviderTestBase {
     catch (ProviderException $e) {
       $this->assertStringContainsString('no SRV records', $e->getMessage());
     }
-    $this->assertCount(3, $this->history);
+    $this->assertCount(4, $this->history);
   }
 
   /**

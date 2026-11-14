@@ -16,6 +16,9 @@ interface DnsTemplateInterface extends ConfigEntityInterface {
   // The most records a template holds: what Dynadot takes on a domain itself.
   public const MAX_RECORDS = 20;
 
+  // The longest note a record takes.
+  public const NOTE_LENGTH = 255;
+
   // What becomes the domain in a record's value.
   public const PLACEHOLDER = '{domain}';
 
@@ -30,8 +33,9 @@ interface DnsTemplateInterface extends ConfigEntityInterface {
   /**
    * Returns the records as stored.
    *
-   * @return array<int, array{type: string, host: string, value: string, priority: int|null, ttl: int|null}>
-   *   The records.
+   * @return array<int, array{type: string, host: string, value: string, priority: int|null, ttl: int|null, note: string|null}>
+   *   The records; the note is what the record is for, never written to
+   *   the registrar.
    */
   public function getRecords(): array;
 
@@ -39,7 +43,8 @@ interface DnsTemplateInterface extends ConfigEntityInterface {
    * Sets the records.
    *
    * @param array<int, array<string, mixed>> $records
-   *   Records with type, host, value and, optionally, priority and ttl.
+   *   Records with type, host, value and, optionally, priority, ttl and a
+   *   note on what the record is for.
    *
    * @throws \InvalidArgumentException
    *   When there are more than MAX_RECORDS.

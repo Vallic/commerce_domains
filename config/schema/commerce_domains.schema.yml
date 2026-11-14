@@ -407,3 +407,8 @@ commerce_domains.dns_template.*:
             type: integer
             label: 'TTL in seconds'
             nullable: true
+          note:
+            type: string
+            label: 'What the record is for; never written to the registrar'
+            nullable: true
+            requiredKey: false

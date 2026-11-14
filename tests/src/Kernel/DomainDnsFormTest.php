@@ -225,6 +225,7 @@ class DomainDnsFormTest extends DomainsKernelTestBase {
     ]);
     $template->save();
     $this->assertSame('www', DnsTemplate::load('parked')->getRecords()[1]['host']);
+    $this->assertNull(DnsTemplate::load('parked')->getRecords()[1]['note']);
     $this->assertSame(3600, DnsTemplate::load('parked')->getRecords()[2]['ttl']);
     $this->assertSame('example.com.', DnsTemplate::load('parked')->recordsFor('example.com')[1]->value);
 
@@ -305,6 +306,46 @@ class DomainDnsFormTest extends DomainsKernelTestBase {
 
     $this->expectException(\InvalidArgumentException::class);
     $template->setRecords(array_fill(0, 21, ['type' => 'A', 'host' => '@', 'value' => '192.0.2.1']));
+  }
+
+  /**
+   * Tests the template form: records, notes and the limit.
+   */
+  public function testTemplateForm(): void {
+    $this->setUpCurrentUser([], ['administer commerce_domains providers']);
+    $form_object = $this->container->get('entity_type.manager')->getFormObject('commerce_domains_dns_template', 'add')
+      ->setEntity(DnsTemplate::create());
+    $form_state = (new FormState())->setValues([
+      'label' => 'For sale',
+      'id' => 'for_sale',
+      'records' => [
+        ['type' => 'REDIRECT', 'host' => '@', 'value' => 'https://shop.example/domain/{domain}', 'note' => ''],
+        ['type' => 'TXT', 'host' => '@', 'value' => 'sedo-token', 'note' => ' Sedo '],
+        ['type' => 'TXT', 'host' => '@', 'value' => '', 'note' => 'Dropped: no value'],
+        ['type' => 'TXT', 'host' => '@', 'value' => 'gone', 'note' => 'Removed', 'remove' => 1],
+      ],
+      'op' => 'Save',
+    ]);
+    $this->container->get('form_builder')->submitForm($form_object, $form_state);
+    $this->assertSame([], array_map('strval', $form_state->getErrors()));
+    $records = DnsTemplate::load('for_sale')->getRecords();
+    $this->assertSame(['REDIRECT', 'TXT'], array_column($records, 'type'));
+    $this->assertSame([NULL, 'Sedo'], array_column($records, 'note'));
+    $this->assertSame('sedo-token', DnsTemplate::load('for_sale')->recordsFor('example.com')[1]->value, 'The note is not part of the record.');
+    $row = $this->container->get('entity_type.manager')->getListBuilder('commerce_domains_dns_template')->buildRow(DnsTemplate::load('for_sale'));
+    $this->assertSame('REDIRECT @, TXT @ (Sedo)', $row['records']);
+
+    // A redirect needs a web address.
+    $form_object = $this->container->get('entity_type.manager')->getFormObject('commerce_domains_dns_template', 'edit')
+      ->setEntity(DnsTemplate::load('for_sale'));
+    $form_state = (new FormState())->setValues([
+      'label' => 'For sale',
+      'id' => 'for_sale',
+      'records' => [['type' => 'REDIRECT', 'host' => '@', 'value' => 'shop.example', 'note' => '']],
+      'op' => 'Save',
+    ]);
+    $this->container->get('form_builder')->submitForm($form_object, $form_state);
+    $this->assertNotEmpty($form_state->getErrors());
   }
 
 }

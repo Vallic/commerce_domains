@@ -634,7 +634,9 @@ write scopes.
 Records to give many domains, such as marketplace verification TXT records
 and a redirect to the domain's page, go in a DNS template at *Commerce →
 Configuration → Domains → DNS templates* (*Administer domain providers*): up
-to 20 records, `{domain}` in a value for the domain's name.
+to 20 records, `{domain}` in a value for the domain's name. Each record can
+have a note on what it is for, such as the marketplace a TXT record
+verifies; notes stay in the template and are never written to a registrar.
 
 - *Use a DNS template* on a domain's DNS tab puts the records in the table,
   to review and apply as any other change: beside the records there, or in
