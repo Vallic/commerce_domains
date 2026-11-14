@@ -51,6 +51,7 @@ godaddy
 gtld
 handover
 handovers
+hostrecords
 iana
 iban
 idna
@@ -76,6 +77,8 @@ minbid
 mnchen
 münchen
 namebright
+namebrightdns
+namebrightmail
 namecheap
 nameclub
 namesilo
@@ -115,6 +118,7 @@ unstoppabledomains
 untick
 unticked
 upserting
+urlforward
 vallic
 vcard
 whois
