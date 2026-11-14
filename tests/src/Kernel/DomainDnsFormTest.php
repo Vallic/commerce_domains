@@ -332,8 +332,8 @@ class DomainDnsFormTest extends DomainsKernelTestBase {
     $this->assertSame(['REDIRECT', 'TXT'], array_column($records, 'type'));
     $this->assertSame([NULL, 'Sedo'], array_column($records, 'note'));
     $this->assertSame('sedo-token', DnsTemplate::load('for_sale')->recordsFor('example.com')[1]->value, 'The note is not part of the record.');
-    $row = $this->container->get('entity_type.manager')->getListBuilder('commerce_domains_dns_template')->buildRow(DnsTemplate::load('for_sale'));
-    $this->assertSame('REDIRECT @, TXT @ (Sedo)', $row['records']);
+    $rows = $this->container->get('entity_type.manager')->getListBuilder('commerce_domains_dns_template')->render()['table']['#rows'];
+    $this->assertSame('REDIRECT @, TXT @ (Sedo)', $rows['for_sale']['records']);
 
     // A redirect needs a web address.
     $form_object = $this->container->get('entity_type.manager')->getFormObject('commerce_domains_dns_template', 'edit')
