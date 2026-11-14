@@ -19,6 +19,14 @@ interface DnsTemplateInterface extends ConfigEntityInterface {
   // What becomes the domain in a record's value.
   public const PLACEHOLDER = '{domain}';
 
+  // A URL redirect, whichever registrar: it becomes the first of
+  // REDIRECT_TYPES the registrar's DNS takes.
+  public const REDIRECT = 'REDIRECT';
+
+  // Registrars' redirect types, the temporary (302) ones first: Dynadot's
+  // forward, GNAME's and Namecheap's URL record, Namecheap's 301.
+  public const REDIRECT_TYPES = ['FORWARD', 'URL', 'URL301'];
+
   /**
    * Returns the records as stored.
    *

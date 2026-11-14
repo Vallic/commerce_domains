@@ -50,6 +50,9 @@ class DnsTemplateApplier {
   /**
    * Returns a template's records for a domain, that its registrar takes.
    *
+   * A URL redirect becomes the registrar's own redirect type, where it has
+   * one.
+   *
    * @param \Drupal\commerce_domains\Entity\DnsTemplateInterface $template
    *   The template.
    * @param string $name
@@ -62,7 +65,16 @@ class DnsTemplateApplier {
    */
   public function records(DnsTemplateInterface $template, string $name, array $types): array {
     $records = $left_out = [];
+    $redirect = current(array_filter(DnsTemplateInterface::REDIRECT_TYPES, static fn(string $type) => isset($types[$type]))) ?: NULL;
     foreach ($template->recordsFor($name) as $record) {
+      // A redirect becomes the registrar's own kind.
+      if ($record->type === DnsTemplateInterface::REDIRECT) {
+        if ($redirect === NULL) {
+          $left_out[$record->type] = 'URL redirect';
+          continue;
+        }
+        $record = new DnsRecord($redirect, $record->host, $record->value, ttl: $record->ttl);
+      }
       if (isset($types[$record->type])) {
         $records[] = $record;
       }

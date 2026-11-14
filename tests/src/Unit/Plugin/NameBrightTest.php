@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Drupal\Tests\commerce_domains\Unit\Plugin;
 
 use Drupal\commerce_domains\Clients\NameBrightClient;
+use Drupal\commerce_domains\DnsRecord;
+use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DnsRecordsInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\DomainManagementInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\NameBright;
 use Drupal\commerce_domains\ProviderException;
@@ -107,6 +109,72 @@ class NameBrightTest extends ProviderTestBase {
     catch (ProviderException $e) {
       $this->assertSame('NameBright returned no auth code for a.com.', $e->getMessage());
     }
+  }
+
+  /**
+   * Tests reading and writing host records.
+   */
+  public function testDnsRecords(): void {
+    $ours = ['nameServers' => ['ns1.namebrightdns.com', 'ns2.namebrightdns.com']];
+    $zone = [
+      'domainName' => 'a.com',
+      'aRecords' => [],
+      'aaaaRecords' => [],
+      'cnameRecords' => [
+        ['recordId' => 11, 'subdomain' => '*', 'redirectDomain' => 'urlforward-https.namebright.com'],
+      ],
+      'mxRecords' => [
+        ['recordId' => 12, 'subdomain' => '@', 'mailServer' => 'mail1.namebrightmail.com', 'priority' => 10],
+      ],
+      'txtRecords' => [['recordId' => 13, 'subdomain' => '@', 'textRecord' => 'old']],
+      'srvRecords' => [
+        [
+          'recordId' => 14,
+          'subdomain' => NULL,
+          'service' => 'sip',
+          'protocol' => 'tcp',
+          'priority' => 5,
+          'weight' => 1,
+          'port' => 5060,
+          'target' => 'sip.a.com',
+        ],
+      ],
+    ];
+    $plugin = $this->registrar(NameBright::class, 'namebright', self::KEYS, [
+      self::json(['access_token' => 'nb-tok']),
+      self::json($ours),
+      self::json($zone),
+      self::json(['nameServers' => ['ns1.elsewhere.net']]),
+      // The write: nameservers and records read again, one delete, one add.
+      self::json($ours),
+      self::json($zone),
+      self::json([]),
+      self::json(['recordId' => 15], 201),
+      // The refused write reads them too.
+      self::json($ours),
+      self::json($zone),
+    ]);
+    $this->assertInstanceOf(DnsRecordsInterface::class, $plugin);
+    $records = $plugin->getDnsRecords('a.com');
+    $this->assertEquals([
+      new DnsRecord('CNAME', '*', 'urlforward-https.namebright.com', id: '11'),
+      new DnsRecord('MX', '@', 'mail1.namebrightmail.com', 10, id: '12'),
+      new DnsRecord('TXT', '@', 'old', id: '13'),
+      new DnsRecord('SRV', '_sip._tcp', '1 5060 sip.a.com', 5, id: '14'),
+    ], $records);
+    $this->assertSame('GET https://api.namebright.com/domains/a.com/hostrecords/all', $this->call(2));
+    $this->assertNull($plugin->getDnsRecords('b.com'), 'Nameservers elsewhere: the records there do not apply.');
+
+    $wanted = [$records[0], $records[1], $records[3], new DnsRecord('TXT', '_brandstore', 'token')];
+    $plugin->setDnsRecords('a.com', $wanted);
+    $this->assertSame('DELETE https://api.namebright.com/domains/a.com/hostrecords/txt/13', $this->call(6));
+    $this->assertSame('POST https://api.namebright.com/domains/a.com/hostrecords/txt', $this->call(7));
+    $this->assertSame(['subdomain' => '_brandstore', 'textRecord' => 'token'], $this->body(7));
+    $this->assertCount(8, $this->history, 'The records that stay, SRV among them, are not written.');
+
+    // No TTLs: one asked for is refused before anything is written.
+    $this->expectException(ProviderException::class);
+    $plugin->setDnsRecords('a.com', [...$records, new DnsRecord('A', '@', '192.0.2.1', ttl: 600)]);
   }
 
 }

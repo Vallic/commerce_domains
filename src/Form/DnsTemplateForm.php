@@ -50,7 +50,7 @@ class DnsTemplateForm extends EntityForm {
     $types = $this->types();
     $form['help'] = [
       '#type' => 'item',
-      '#markup' => $this->t('Up to @max records. Hosts are relative to the domain: @ for the domain itself, www, mail, _dmarc. {domain} in a value becomes the domain, as in https://{domain}/. Leave TTL empty for the registrar default; a row with no value is dropped.', ['@max' => DnsTemplateInterface::MAX_RECORDS]),
+      '#markup' => $this->t("Up to @max records. Hosts are relative to the domain: @ for the domain itself, www, mail, _dmarc. {domain} in a value becomes the domain, as in https://example.com/domain/{domain}. A URL redirect becomes the registrar's own kind (a Dynadot forward, a GNAME or Namecheap URL record), as a 302; registrars without one leave it out. Leave TTL empty for the registrar default; a row with no value is dropped.", ['@max' => DnsTemplateInterface::MAX_RECORDS]),
     ];
     $form['records'] = [
       '#type' => 'table',
@@ -158,6 +158,9 @@ class DnsTemplateForm extends EntityForm {
       foreach (DnsRecord::fromArray($row)->problems() as $problem) {
         $form_state->setErrorByName("records][$i][value", $problem);
       }
+      if ($row['type'] === DnsTemplateInterface::REDIRECT && !preg_match('#^https?://[^\s/]+#i', (string) $row['value'])) {
+        $form_state->setErrorByName("records][$i][value", $this->t('A URL redirect goes to a web address, such as https://example.com/domain/{domain}.'));
+      }
     }
   }
 
@@ -228,6 +231,7 @@ class DnsTemplateForm extends EntityForm {
    */
   protected function types(): array {
     $types = array_combine(array_keys(DnsRecord::TYPES), array_keys(DnsRecord::TYPES));
+    $types[DnsTemplateInterface::REDIRECT] = $this->t('URL redirect, any registrar');
     /** @var \Drupal\commerce_domains\Entity\ProviderInterface $provider */
     foreach ($this->entityTypeManager->getStorage('commerce_domains_provider')->loadMultiple() as $provider) {
       $plugin = $provider->getPlugin();

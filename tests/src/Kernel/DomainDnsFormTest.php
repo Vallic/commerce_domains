@@ -282,6 +282,27 @@ class DomainDnsFormTest extends DomainsKernelTestBase {
     $this->assertSame(DnsTemplateApplier::ELSEWHERE, $applier->apply($this->createDomain('Elsewhere.com', 1000, ['domain_registrar' => 'managed']), $template, DnsTemplateApplier::ADD));
     $this->assertSame(DnsTemplateApplier::SKIPPED, $applier->apply($this->createDomain('Read.com', 1000, ['domain_registrar' => 'reg']), $template, DnsTemplateApplier::ADD));
 
+    // A URL redirect becomes the registrar's own kind, where it has one.
+    $redirect = DnsTemplate::create(['id' => 'lander', 'label' => 'Lander'])->setRecords([
+      ['type' => 'REDIRECT', 'host' => '@', 'value' => 'https://shop.example/domain/{domain}'],
+      ['type' => 'REDIRECT', 'host' => 'www', 'value' => 'https://shop.example/domain/{domain}'],
+      ['type' => 'TXT', 'host' => '_brandstore', 'value' => 'token'],
+    ]);
+    $types = fn(string ...$types) => array_flip(['A', 'TXT', ...$types]);
+    [$records] = $applier->records($redirect, 'example.com', $types('FORWARD', 'STEALTH'));
+    $this->assertSame(['FORWARD', 'FORWARD', 'TXT'], array_map(fn(DnsRecord $record) => $record->type, $records), 'Dynadot');
+    $this->assertSame('https://shop.example/domain/example.com', $records[0]->value);
+    [$records] = $applier->records($redirect, 'example.com', $types('URL'));
+    $this->assertSame(['URL', 'URL', 'TXT'], array_map(fn(DnsRecord $record) => $record->type, $records), 'GNAME');
+    [$records] = $applier->records($redirect, 'example.com', $types('URL301', 'URL', 'FRAME'));
+    $this->assertSame('URL', $records[0]->type, 'Namecheap: the 302.');
+    [$records, $left_out] = $applier->records($redirect, 'example.com', $types());
+    $this->assertSame(['TXT'], array_map(fn(DnsRecord $record) => $record->type, $records));
+    $this->assertSame(['URL redirect'], $left_out);
+    // Applied over a host's own forward, it takes its place.
+    $zone = DnsTemplateApplier::zone([new DnsRecord('FORWARD', '@', 'https://old.example/')], $applier->records($redirect, 'example.com', $types('FORWARD'))[0], DnsTemplateApplier::ADD);
+    $this->assertSame(['https://shop.example/domain/example.com'], array_column(array_map(fn(DnsRecord $record) => $record->toArray(), array_filter($zone, fn(DnsRecord $record) => $record->host === '@')), 'value'));
+
     $this->expectException(\InvalidArgumentException::class);
     $template->setRecords(array_fill(0, 21, ['type' => 'A', 'host' => '@', 'value' => '192.0.2.1']));
   }

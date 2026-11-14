@@ -604,6 +604,7 @@ the kept zone puts it back.
 | GNAME     | record by record | `*.share-dns.com`, `*.share-dns.net` (older: `*.gname-dns.com`) | A, CNAME, MX, TXT, URL forward | records switched off |
 | GoDaddy   | record by record | `*.domaincontrol.com` | A, AAAA, CNAME, MX, TXT, CAA, NS | SRV; SOA and the domain's NS are left out |
 | Namecheap | the whole zone | Namecheap BasicDNS | A, AAAA, CNAME, MX, TXT, CAA, NS, ALIAS, URL redirects (301, 302, masked) | |
+| NameBright | record by record | `*.namebrightdns.com` | A, AAAA, CNAME, MX, TXT | SRV ³ |
 | NameSilo  | record by record | `*.dnsowl.com` | A, AAAA, CNAME, MX, TXT | any other type |
 | Porkbun   | record by record | `*.porkbun.com` ² | A, AAAA, CNAME, MX, TXT, SRV, CAA, NS, ALIAS | |
 | Spaceship | record by record | Spaceship basic DNS | A, AAAA, CNAME, MX, TXT, CAA, NS, ALIAS | SRV, TLSA, HTTPS; records Spaceship adds for its products are left out |
@@ -612,16 +613,42 @@ the kept zone puts it back.
   offered; one already there is written back as it was read.
 ² Porkbun keeps, and takes changes to, records of a domain whose
   nameservers are elsewhere, so the nameservers decide.
+³ NameBright's API creates SRV records but this module doesn't offer new
+  ones; those there stay. Its URL forwarding is a CNAME to NameBright's
+  forwarder, with the address set in the NameBright account: the API has
+  no field for it.
 
 Limits the registrars set: Dynadot takes 20 records for the domain itself
 and 100 for subdomains, with one TTL for the zone (the lowest asked for);
 Namecheap takes TTLs of 60 to 60000 seconds, and its mail settings switch to
 custom MX when the zone has MX records; Porkbun's lowest TTL is 600 seconds;
 GoDaddy's is 600 and highest 86400; Spaceship takes 60 to 3600; GNAME's MX
-priorities go from 0 to 50. GoDaddy uses
+priorities go from 0 to 50; NameBright's API sets no TTL, so one asked for
+is refused. GoDaddy uses
 the API's version 3 with the personal access token already set; its token
 needs the DNS update scope. The Spaceship key needs the DNS records read and
 write scopes.
+
+### DNS templates
+
+Records to give many domains, such as marketplace verification TXT records
+and a redirect to the domain's page, go in a DNS template at *Commerce →
+Configuration → Domains → DNS templates* (*Administer domain providers*): up
+to 20 records, `{domain}` in a value for the domain's name.
+
+- *Use a DNS template* on a domain's DNS tab puts the records in the table,
+  to review and apply as any other change: beside the records there, or in
+  their place. Beside them, a template's CNAME or redirect takes the place
+  of the one the host has.
+- *Apply a DNS template*, a bulk action of Commerce Domains Bulk editing on
+  the Domains overview (*Manage domains at registrars*), writes it to a
+  selection at once, without a review per domain. Each zone as it was is
+  kept on the DNS tab. Domains on other nameservers, sold ones, and those at
+  registrars whose API edits no DNS are skipped.
+- A *URL redirect, any registrar* record becomes the registrar's own: a
+  Dynadot forward, a GNAME or Namecheap URL record, each a 302. Registrars
+  without one (GoDaddy, NameBright, NameSilo, Porkbun, Spaceship) leave it
+  out, as they do any type their DNS does not take, with a warning.
 
 ## Offers
 

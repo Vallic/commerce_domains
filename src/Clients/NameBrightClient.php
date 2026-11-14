@@ -92,6 +92,47 @@ final class NameBrightClient extends ApiClient {
   }
 
   /**
+   * Fetches a domain's host records, by type.
+   *
+   * @return array<string, array>
+   *   The lists aRecords, aaaaRecords, cnameRecords, mxRecords, txtRecords
+   *   and srvRecords, each record with its recordId and subdomain ("@" for
+   *   the domain itself).
+   */
+  public function getHostRecords(string $name): array {
+    return $this->request('GET', 'domains/' . rawurlencode($name) . '/hostrecords/all');
+  }
+
+  /**
+   * Adds a host record.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string $type
+   *   The type, lower case: a, aaaa, cname, mx, txt or srv.
+   * @param array<string, mixed> $fields
+   *   The subdomain, and the type's own fields: ipV4Address, ipV6Address,
+   *   redirectDomain, mailServer and priority, or textRecord.
+   */
+  public function addHostRecord(string $name, string $type, array $fields): void {
+    $this->request('POST', 'domains/' . rawurlencode($name) . '/hostrecords/' . rawurlencode($type), [RequestOptions::JSON => $fields]);
+  }
+
+  /**
+   * Deletes a host record.
+   *
+   * @param string $name
+   *   The domain.
+   * @param string $type
+   *   The type, lower case.
+   * @param string $id
+   *   The record's recordId.
+   */
+  public function deleteHostRecord(string $name, string $type, string $id): void {
+    $this->request('DELETE', 'domains/' . rawurlencode($name) . '/hostrecords/' . rawurlencode($type) . '/' . rawurlencode($id));
+  }
+
+  /**
    * Changes a domain's lock, auto-renew or privacy.
    *
    * The update takes all three, so the ones not changing are sent as they
