@@ -19,8 +19,7 @@ use Drupal\commerce_domains\Clients\SpaceshipClient;
  *
  * Buy Now at the catalog price times the price factor, with offers from the
  * base minimum (the full price for Atom premium names). The API has no
- * lease-to-own or down-payment settings, so
- * those stay as set in SellerHub.
+ * lease-to-own or down-payment settings: those go out in the CSV file only.
  */
 #[CommerceDomainsProvider(
   id: 'spaceship',
@@ -476,7 +475,7 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
       $listing['minPriceEnabled'] ? $listing['minPrice'] : '',
       $listing['binPriceEnabled'] ? $price : '',
       $lease_months,
-      25,
+      $item->terms->leaseDownPayment ?? $this->saleTermRules()->leaseDownPayment,
       'on',
     ];
   }
@@ -489,7 +488,7 @@ final class Spaceship extends MarketplacePluginBase implements DomainManagementI
       'floor' => NULL,
       'minimum_offer' => $this->usualMinimumOffer(),
       'lease_months' => self::MAX_LEASE_MONTHS,
-      'note' => $this->t('The lease goes out by CSV file only: the API has no setting for it. Atom premium names: the full price.'),
+      'note' => $this->t('The lease and its down payment go out by CSV file only: the API has no setting for them. Atom premium names: the full price.'),
     ];
   }
 

@@ -2,9 +2,19 @@ commerce_domains_lease.settings:
   type: config_object
   label: 'Domain lease settings'
   mapping:
-    default_down_payment:
-      type: integer
-      label: 'Down payment, in percent of the price, for domains that set none'
+    surcharges:
+      type: sequence
+      label: 'What a lease adds to the price, by its term'
+      sequence:
+        type: mapping
+        label: 'Surcharge'
+        mapping:
+          months:
+            type: integer
+            label: 'The term, in monthly payments'
+          percent:
+            type: integer
+            label: 'Added to the order total, in percent'
     retry_days:
       type: integer
       label: 'Days between attempts to charge a missed payment'

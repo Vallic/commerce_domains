@@ -16,3 +16,8 @@ services:
   Drupal\commerce_domains_lease\EventSubscriber\CheckoutSubscriber:
     tags:
       - { name: event_subscriber }
+
+  # After promotions (100) and tax (50): a share of what paying in full costs.
+  Drupal\commerce_domains_lease\OrderProcessor\LeaseSurchargeProcessor:
+    tags:
+      - { name: commerce_order.order_processor, priority: -100 }

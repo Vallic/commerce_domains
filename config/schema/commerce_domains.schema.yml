@@ -17,6 +17,25 @@ commerce_domains.settings:
     minimum_offer_break:
       type: integer
       label: 'The price where the minimum offer changes percentage'
+    lease_terms:
+      type: sequence
+      label: 'The longest lease by price, lowest price first'
+      sequence:
+        type: mapping
+        label: 'Price band'
+        mapping:
+          below:
+            type: integer
+            label: 'Below this price'
+          months:
+            type: integer
+            label: 'The longest lease, in monthly payments; 0 for none'
+    lease_term_above:
+      type: integer
+      label: 'The longest lease from the last price band up'
+    lease_down_payment:
+      type: integer
+      label: 'Down payment, in percent of the price, for domains that set none'
 
 commerce_domains.provider.*:
   type: config_entity

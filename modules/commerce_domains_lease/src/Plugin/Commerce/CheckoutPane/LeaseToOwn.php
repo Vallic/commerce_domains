@@ -10,6 +10,7 @@ use Drupal\commerce_checkout\Plugin\Commerce\CheckoutFlow\CheckoutFlowInterface;
 use Drupal\commerce_checkout\Plugin\Commerce\CheckoutPane\CheckoutPaneBase;
 use Drupal\commerce_domains_lease\LeaseCalculator;
 use Drupal\commerce_domains_lease\LeasePlan;
+use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_price\Price;
 use Drupal\Component\Render\MarkupInterface;
 use Drupal\Component\Utility\Html;
@@ -74,14 +75,19 @@ class LeaseToOwn extends CheckoutPaneBase {
    * {@inheritdoc}
    */
   public function buildPaneForm(array $pane_form, FormStateInterface $form_state, array &$complete_form): array {
-    $options = [self::FULL => $this->option($this->t('Pay in full'), $this->money($this->order->getTotalPrice()))];
+    $options = [self::FULL => $this->option($this->t('Pay in full'), $this->money(LeaseCalculator::baseTotal($this->order)))];
     foreach ($this->calculator->terms($this->order) as $months) {
       $plan = $this->calculator->plan($this->order, $months);
       if ($plan) {
         $options[$months] = $this->option(
           $this->t('Lease to own over @count months', ['@count' => $plan->months]),
           (string) $this->t('@installment a month', ['@installment' => $this->money($plan->installment)]),
-          $this->t('@down now, then @count monthly payments. @total in all.', [
+          $plan->surcharge ? $this->t('@down now, then @count monthly payments. @total in all, @surcharge more than paying in full.', [
+            '@down' => $this->money($plan->downPayment),
+            '@count' => $plan->months,
+            '@total' => $this->money($plan->total),
+            '@surcharge' => $this->money($plan->surcharge),
+          ]) : $this->t('@down now, then @count monthly payments. @total in all.', [
             '@down' => $this->money($plan->downPayment),
             '@count' => $plan->months,
             '@total' => $this->money($plan->total),
@@ -144,6 +150,8 @@ class LeaseToOwn extends CheckoutPaneBase {
     else {
       $this->order->unsetData(LeaseCalculator::DATA_KEY);
     }
+    // Adds or removes the lease's surcharge as the order is saved.
+    $this->order->setRefreshState(OrderInterface::REFRESH_ON_SAVE);
   }
 
   /**

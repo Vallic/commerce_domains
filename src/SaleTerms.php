@@ -15,10 +15,11 @@ use Drupal\commerce_product\Entity\ProductVariationInterface;
  */
 final class SaleTerms {
 
-  // The longest lease worked out from a price: months below each amount.
+  // The price bands a new site starts with: months below each amount. The
+  // bands in use are in the general sale terms (SaleTermRules).
   public const LEASE_TERMS = [2000 => 0, 8000 => 6, 20000 => 12, 50000 => 24];
 
-  // The longest lease above those.
+  // The longest lease above those, on a new site.
   public const LEASE_TERM_ABOVE = 36;
 
   public function __construct(
@@ -37,8 +38,8 @@ final class SaleTerms {
     public readonly bool $marketplaces = TRUE,
     // The IDs of providers that must not list the domain.
     public readonly array $notListedOn = [],
-    // The percentage of the price paid at checkout for a lease on the site,
-    // or NULL for the lease settings' default.
+    // The percentage of the price paid first on a lease, at checkout here or
+    // on a marketplace that takes one, or NULL for the general sale terms'.
     public readonly ?int $leaseDownPayment = NULL,
   ) {}
 
@@ -76,19 +77,14 @@ final class SaleTerms {
   /**
    * Returns the lease-to-own term worked out from a price.
    *
-   * Nothing below 2,000, then 6/12/24/36 months as the price grows: the rule
-   * for domains whose terms set no term, where automatic leases are on.
+   * The price bands of the general sale terms: the rule for domains whose
+   * terms set no term, where automatic leases are on.
    *
    * @return int
    *   The term in months, 0 when the price is too low for lease-to-own.
    */
   public static function defaultLeaseMonths(float $price): int {
-    foreach (self::LEASE_TERMS as $below => $months) {
-      if ($price < $below) {
-        return $months;
-      }
-    }
-    return self::LEASE_TERM_ABOVE;
+    return SaleTermRules::general()->bandMonths($price);
   }
 
   /**

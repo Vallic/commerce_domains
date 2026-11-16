@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\commerce_domains_offer\Form;
 
 use CommerceGuys\Intl\Formatter\CurrencyFormatterInterface;
+use Drupal\commerce_domains\SaleTermRules;
 use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_domains_offer\Entity\OfferInterface;
 use Drupal\commerce_domains_offer\OfferManager;
@@ -134,7 +135,7 @@ final class OfferAdminForm extends FormBase {
         '#field_suffix' => '%',
         '#min' => 0,
         '#max' => 99,
-        '#default_value' => $terms->leaseDownPayment ?? 10,
+        '#default_value' => $terms->leaseDownPayment ?? SaleTermRules::general()->leaseDownPayment,
         '#states' => ['visible' => [$selector => ['value' => 'lease']]],
       ];
     }

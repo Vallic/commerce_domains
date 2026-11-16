@@ -15,6 +15,7 @@ use Drupal\commerce_domains\SaleTermRules;
 use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_price\Price;
 use Drupal\Core\Form\FormState;
+use Drupal\Core\Form\FormStateInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -82,14 +83,15 @@ class SaleTermsFormTest extends DomainsKernelTestBase {
     Provider::create(['id' => 'spaceship', 'label' => 'Spaceship', 'plugin' => 'spaceship', 'status' => FALSE])->save();
     $form = $this->container->get('form_builder')->getForm(SaleTermsForm::class);
 
-    $lease = array_map(fn(array $row) => array_map('strval', $row), $form['lease']['#rows']);
-    $this->assertSame([
-      ['Below 2,000', 'No lease'],
-      ['2,000 to 8,000', '6 months'],
-      ['8,000 to 20,000', '12 months'],
-      ['20,000 to 50,000', '24 months'],
-      ['50,000 and above', '36 months'],
-    ], $lease);
+    // The bands, and two empty rows for more.
+    $lease = [];
+    foreach (range(0, 5) as $delta) {
+      $lease[] = [$form['lease'][$delta]['below']['#default_value'], $form['lease'][$delta]['months']['#default_value']];
+    }
+    $this->assertSame([[2000, 0], [8000, 6], [20000, 12], [50000, 24], [NULL, NULL], [NULL, NULL]], $lease);
+    $this->assertArrayNotHasKey(6, $form['lease']);
+    $this->assertSame(36, $form['lease_term_above']['#default_value']);
+    $this->assertSame(10, $form['lease_down_payment']['#default_value']);
 
     // Enabled marketplaces only, not registrars or those switched off.
     $rows = [];
@@ -233,6 +235,90 @@ class SaleTermsFormTest extends DomainsKernelTestBase {
     $this->assertSame('Up to 6 months', (string) $row[3]);
     $this->assertStringContainsString("A domain's own term can go up to 60 months.", $row[5]);
     $this->assertSame('floor, lease', $row[4]);
+  }
+
+  /**
+   * Tests changing the price bands and the down payment.
+   */
+  public function testLeaseBands(): void {
+    $builder = $this->container->get('form_builder');
+    $values = [
+      'floor_percent' => 80,
+      'minimum_offer_break' => 10000,
+      'minimum_offer_percent' => 50,
+      'minimum_offer_percent_above' => 25,
+      'automatic_lease' => 1,
+      'lease_term_above' => 36,
+      'lease_down_payment' => 15,
+      'op' => 'Save configuration',
+    ];
+    $submit = function (array $bands) use ($builder, $values): FormStateInterface {
+      $form_state = (new FormState())->setValues($values + ['lease' => $bands]);
+      $builder->submitForm(SaleTermsForm::class, $form_state);
+      $this->container->get('config.factory')->reset('commerce_domains.settings');
+      return $form_state;
+    };
+
+    // A band without its lease, and bands out of order, aren't saved.
+    $empty = array_fill(0, 6, ['below' => '', 'months' => '']);
+    $this->assertNotEmpty($submit([['below' => 6000, 'months' => '']] + $empty)->getErrors());
+    $this->assertNotEmpty($submit([['below' => 30000, 'months' => 12], ['below' => 6000, 'months' => 6]] + $empty)->getErrors());
+    $this->assertSame(SaleTermRules::DEFAULTS['lease_terms'], $this->config('commerce_domains.settings')->get('lease_terms'));
+
+    // Every row, as a browser sends them: one left out keeps its default.
+    $form_state = $submit([
+      ['below' => 6000, 'months' => 6],
+      ['below' => '', 'months' => ''],
+      ['below' => 30000, 'months' => 12],
+    ] + array_fill(3, 3, ['below' => '', 'months' => '']));
+    $this->assertSame([], $form_state->getErrors());
+    $this->assertSame([['below' => 6000, 'months' => 6], ['below' => 30000, 'months' => 12]], $this->config('commerce_domains.settings')->get('lease_terms'));
+    $general = SaleTermRules::general();
+    $this->assertSame(15, $general->leaseDownPayment);
+    $this->assertSame([6, 6, 12, 36], array_map($general->leaseMonths(...), [100, 5999, 6000, 30000]));
+    $this->assertSame(6, SaleTerms::defaultLeaseMonths(500));
+
+    // Marketplaces take the bands within their own limits.
+    $this->createDomain('cheap.com', 500);
+    $this->createDomain('dear.com', 40000);
+    Provider::create(['id' => 'dynadot', 'label' => 'Dynadot', 'plugin' => 'dynadot', 'status' => TRUE])->save();
+    Provider::create(['id' => 'afternic', 'label' => 'Afternic', 'plugin' => 'afternic', 'status' => TRUE])->save();
+    $items = $this->container->get(Catalog::class)->load(['cheap.com', 'dear.com']);
+    $afternic = Provider::load('afternic')->getPlugin();
+    $dynadot = Provider::load('dynadot')->getPlugin();
+    $this->assertInstanceOf(MarketplaceInterface::class, $afternic);
+    $this->assertInstanceOf(MarketplaceInterface::class, $dynadot);
+    $this->assertSame(6, $afternic->buildListing($items['cheap.com'])['maxLeasePeriod']);
+    $this->assertSame(36, $afternic->buildListing($items['dear.com'])['maxLeasePeriod']);
+    $this->assertSame(12, $dynadot->buildListing($items['dear.com'])['maximum_installments']);
+  }
+
+  /**
+   * Tests moving the down payment from the lease settings.
+   */
+  public function testLeaseUpdate(): void {
+    $storage = $this->container->get('config.storage');
+    $lease_keys = ['lease_terms', 'lease_term_above', 'lease_down_payment'];
+    $before = array_diff_key(SaleTermRules::DEFAULTS, array_flip($lease_keys));
+    $storage->write('commerce_domains.settings', $before);
+    $this->container->get('config.factory')->reset();
+    $this->container->get('module_handler')->loadInclude('commerce_domains', 'install');
+
+    // Without the lease module: Spaceship's 25%.
+    commerce_domains_update_11009();
+    $config = $this->config('commerce_domains.settings');
+    $this->assertSame(SaleTermRules::DEFAULTS['lease_terms'], $config->get('lease_terms'));
+    $this->assertSame(36, $config->get('lease_term_above'));
+    $this->assertSame(25, $config->get('lease_down_payment'));
+
+    // With it: its default, which leaves the lease settings.
+    $this->enableModules(['commerce_domains_lease']);
+    $storage = $this->container->get('config.storage');
+    $storage->write('commerce_domains_lease.settings', ['default_down_payment' => 12, 'retry_days' => 3]);
+    $this->container->get('config.factory')->reset();
+    commerce_domains_update_11009();
+    $this->assertSame(12, $this->config('commerce_domains.settings')->get('lease_down_payment'));
+    $this->assertSame(['retry_days' => 3], $storage->read('commerce_domains_lease.settings'));
   }
 
   /**

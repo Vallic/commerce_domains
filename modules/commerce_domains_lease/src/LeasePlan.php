@@ -10,7 +10,8 @@ use Drupal\commerce_price\Price;
  * What a lease costs: a down payment, then equal monthly payments.
  *
  * The last monthly payment makes up what rounding the others left over, so
- * the payments add up to the total exactly.
+ * the payments add up to the total exactly. The total includes what the lease
+ * adds to paying in full, if anything.
  */
 final class LeasePlan {
 
@@ -23,6 +24,9 @@ final class LeasePlan {
     public readonly Price $downPayment,
     // A monthly payment.
     public readonly Price $installment,
+    // What the lease adds to paying in full, included in the total; NULL for
+    // nothing.
+    public readonly ?Price $surcharge = NULL,
   ) {}
 
   /**

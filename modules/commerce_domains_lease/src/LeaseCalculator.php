@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_lease;
 
+use Drupal\commerce_domains\SaleTermRules;
 use Drupal\commerce_domains\SaleTerms;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\commerce_order\Entity\OrderItemInterface;
@@ -23,6 +24,11 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
  * account, and a payment gateway that can charge a saved card is enabled:
  * the monthly payments are charged to the card the down payment was paid
  * with, which only works for cards saved to an account.
+ *
+ * A lease can cost more than paying in full: a percentage by its term (the
+ * surcharges in the settings), added to the order as a fee once the buyer
+ * chooses it (see LeaseSurchargeProcessor). Terms and the price bands go by
+ * the order's total without it.
  */
 class LeaseCalculator {
 
@@ -31,6 +37,9 @@ class LeaseCalculator {
 
   // The terms offered, in months, up to the domain's longest lease.
   public const TERMS = [6, 12, 24, 36, 48, 60];
+
+  // The source ID of the surcharge's adjustment on a leased order.
+  public const ADJUSTMENT_SOURCE = 'commerce_domains_lease';
 
   public function __construct(
     protected ConfigFactoryInterface $configFactory,
@@ -60,7 +69,7 @@ class LeaseCalculator {
    */
   public function terms(OrderInterface $order): array {
     $variation = $this->domainItem($order)?->getPurchasedEntity();
-    $total = $order->getTotalPrice();
+    $total = self::baseTotal($order);
     return $variation instanceof ProductVariationInterface && $total ? $this->termsFor($variation, $total) : [];
   }
 
@@ -99,7 +108,7 @@ class LeaseCalculator {
    */
   protected function downPaymentPercentFor(?ProductVariationInterface $variation): int {
     $percent = $variation ? SaleTerms::fromVariation($variation)->leaseDownPayment : NULL;
-    $percent ??= (int) $this->configFactory->get('commerce_domains_lease.settings')->get('default_down_payment');
+    $percent ??= SaleTermRules::general()->leaseDownPayment;
     // At least something at checkout, and something left for the months.
     return max(1, min(90, $percent));
   }
@@ -108,11 +117,16 @@ class LeaseCalculator {
    * Returns what a lease of the order over some months costs.
    */
   public function plan(OrderInterface $order, int $months): ?LeasePlan {
-    $total = $order->getTotalPrice();
-    if (!$total || $months < 2) {
+    $base = self::baseTotal($order);
+    if (!$base || $months < 2) {
       return NULL;
     }
-    return self::planFor($total, $months, $this->downPaymentPercent($order), $this->rounder);
+    // Once placed, or charged for this term already, the order's total is the
+    // lease's: the surcharge was settled then, whatever the settings say now.
+    $settled = $order->getState()->getId() !== 'draft'
+      || (self::chosenMonths($order) === $months && self::hasSurcharge($order));
+    $surcharge = $settled ? $order->getTotalPrice()->subtract($base) : $this->surcharge($base, $months);
+    return self::planFor($base->add($surcharge), $months, $this->downPaymentPercent($order), $this->rounder, $surcharge);
   }
 
   /**
@@ -123,7 +137,56 @@ class LeaseCalculator {
    */
   public function lowestPlan(ProductVariationInterface $variation, Price $price): ?LeasePlan {
     $terms = $this->gateways() ? $this->termsFor($variation, $price) : [];
-    return $terms ? self::planFor($price, end($terms), $this->downPaymentPercentFor($variation), $this->rounder) : NULL;
+    if (!$terms) {
+      return NULL;
+    }
+    $months = end($terms);
+    $surcharge = $this->surcharge($price, $months);
+    return self::planFor($price->add($surcharge), $months, $this->downPaymentPercentFor($variation), $this->rounder, $surcharge);
+  }
+
+  /**
+   * Returns what a lease over a term adds to paying in full, in percent.
+   */
+  public function surchargePercent(int $months): int {
+    foreach ((array) $this->configFactory->get('commerce_domains_lease.settings')->get('surcharges') as $surcharge) {
+      if ((int) ($surcharge['months'] ?? 0) === $months) {
+        return max(0, (int) ($surcharge['percent'] ?? 0));
+      }
+    }
+    return 0;
+  }
+
+  /**
+   * Returns what a lease over a term adds to an amount paid in full.
+   */
+  public function surcharge(Price $price, int $months): Price {
+    return $this->rounder->round($price->multiply((string) ($this->surchargePercent($months) / 100)));
+  }
+
+  /**
+   * Returns the order's total without a lease's surcharge: paying in full.
+   */
+  public static function baseTotal(OrderInterface $order): ?Price {
+    $total = $order->getTotalPrice();
+    foreach ($total ? $order->getAdjustments() : [] as $adjustment) {
+      if ($adjustment->getSourceId() === self::ADJUSTMENT_SOURCE) {
+        $total = $total->subtract($adjustment->getAmount());
+      }
+    }
+    return $total;
+  }
+
+  /**
+   * Whether the order carries a lease's surcharge.
+   */
+  public static function hasSurcharge(OrderInterface $order): bool {
+    foreach ($order->getAdjustments() as $adjustment) {
+      if ($adjustment->getSourceId() === self::ADJUSTMENT_SOURCE) {
+        return TRUE;
+      }
+    }
+    return FALSE;
   }
 
   /**
@@ -139,10 +202,10 @@ class LeaseCalculator {
   /**
    * Returns what a lease of an amount costs.
    */
-  public static function planFor(Price $total, int $months, int $percent, RounderInterface $rounder): LeasePlan {
+  public static function planFor(Price $total, int $months, int $percent, RounderInterface $rounder, ?Price $surcharge = NULL): LeasePlan {
     $down = $rounder->round($total->multiply((string) ($percent / 100)));
     $installment = $rounder->round($total->subtract($down)->divide((string) $months), PHP_ROUND_HALF_DOWN);
-    return new LeasePlan($months, $total, $down, $installment);
+    return new LeasePlan($months, $total, $down, $installment, $surcharge && $surcharge->isPositive() ? $surcharge : NULL);
   }
 
   /**

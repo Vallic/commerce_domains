@@ -26,9 +26,12 @@ it is held at, and the marketplaces it is listed on.
   provider form, then the domain's own on its variation, each applying where
   the next is empty. A domain's own term always wins, even over a marketplace
   with leases off. The floor, the minimum offer and lease-to-own on or off can
-  be set at both levels; a marketplace can also shorten the longest lease, and
-  the price bands of the lease rule are the same everywhere. This site uses the
-  general terms. *Sale terms* shows what each enabled marketplace comes to, and
+  be set at both levels; a marketplace can also shorten the longest lease. The
+  price bands of the lease rule (the longest lease below each price; by
+  default none below 2,000, then 6, 12, 24 and 36 months) and the down
+  payment (10%) are general only: the same on this site and every
+  marketplace, within each marketplace's own limit. Spaceship's file is the
+  only marketplace that takes a down payment. This site uses the general terms. *Sale terms* shows what each enabled marketplace comes to, and
   the variation's fields say it at its price. Marketplaces get a change with
   the next full sync.
 - **Domain providers**: the companies domains are registered or listed with.
@@ -742,9 +745,17 @@ paid by bank transfer, Wise or another gateway each month. Terms of 6, 12,
 24, 36, 48 and 60 months are offered up to the domain's longest.
 
 - **Down payment**: *Lease down payment* on the variation, in percent of
-  the price; empty takes the default on the lease settings page
-  (*Commerce → Domains → Settings → Domain leases*, 10%). The monthly
+  the price; empty takes *Down payment on a lease* on *Sale terms*
+  (*Commerce → Configuration → Domains*, 10%). The monthly
   payments split the rest, the last one making up the rounding.
+- **Surcharge**: a lease can cost more than paying in full, by a percentage
+  for each term on the lease settings page (none by default). Once the
+  buyer chooses the lease, it is added to the order as a fee (*Lease to own,
+  12 months*), after promotions and tax, so the order's total, the down
+  payment, the monthly payments and the invoice all include it. Checkout
+  shows each term's total and what it adds; paying in full stays at the
+  price. A placed order keeps the surcharge it was placed with. Leases on
+  marketplaces are not affected.
 - **Paying**: a lease needs an account, and a gateway chosen under
   *Paying* on the lease settings page; leased orders offer no other.
   - *Charged to the saved card* (`gateway_plugins`; Stripe's Payment

@@ -11,6 +11,7 @@ use Drupal\commerce_domains_lease\EventSubscriber\CheckoutSubscriber;
 use Drupal\commerce_domains_lease\Form\LeaseAdminForm;
 use Drupal\commerce_domains_lease\LeaseCalculator;
 use Drupal\commerce_domains_lease\LeaseManager;
+use Drupal\commerce_domains_lease\OrderProcessor\LeaseSurchargeProcessor;
 use Drupal\commerce_domains_lease\Plugin\AdvancedQueue\JobType\LeaseChargeJob;
 use Drupal\commerce_domains_lease\Plugin\Commerce\CheckoutPane\LeaseToOwn;
 use Drupal\commerce_order\Entity\Order;
@@ -42,6 +43,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[CoversClass(LeaseChargeJob::class)]
 #[CoversClass(LeaseToOwn::class)]
 #[CoversClass(Lease::class)]
+#[CoversClass(LeaseSurchargeProcessor::class)]
 #[Group('commerce_domains')]
 #[RunTestsInSeparateProcesses]
 class LeaseTest extends DomainsKernelTestBase {
@@ -343,6 +345,69 @@ class LeaseTest extends DomainsKernelTestBase {
     $this->assertTrue($this->pane($order)->isVisible(), 'Bank transfer takes a lease too.');
     PaymentGateway::load('bank')->setStatus(FALSE)->save();
     $this->assertFalse($this->pane($order)->isVisible());
+  }
+
+  /**
+   * Tests a lease costing more than paying in full.
+   */
+  public function testSurcharge(): void {
+    $this->config('commerce_domains_lease.settings')->set('surcharges', [
+      ['months' => 12, 'percent' => 10],
+      ['months' => 24, 'percent' => 15],
+    ])->save();
+    $calculator = $this->container->get(LeaseCalculator::class);
+    $this->assertSame([0, 10, 15], array_map($calculator->surchargePercent(...), [6, 12, 24]));
+
+    // Each term at its own price; paying in full at the price.
+    $order = $this->order($this->createDomain('Charged.com', 30000));
+    $pane = $this->pane($order);
+    $complete_form = [];
+    $pane_form = $pane->buildPaneForm(['#parents' => ['lease']], new FormState(), $complete_form);
+    $this->assertStringContainsString('$30,000.00', (string) $pane_form['choice']['#options']['full']);
+    $this->assertSame('Lease to own over 6 months $4,500.00 a month $3,000.00 now, then 6 monthly payments. $30,000.00 in all.', strip_tags((string) $pane_form['choice']['#options'][6]));
+    $this->assertSame('Lease to own over 12 months $2,475.00 a month $3,300.00 now, then 12 monthly payments. $33,000.00 in all, $3,000.00 more than paying in full.', strip_tags((string) $pane_form['choice']['#options'][12]));
+
+    // Choosing it adds a fee to the order; the terms and the plans stay.
+    $choose = function (string $choice) use ($pane, $pane_form, &$complete_form, $order): void {
+      $pane->submitPaneForm($pane_form, (new FormState())->setValue('lease', ['choice' => $choice]), $complete_form);
+      $order->save();
+    };
+    $choose('12');
+    $this->assertEquals(new Price('33000', 'USD'), $order->getTotalPrice());
+    $this->assertEquals(new Price('30000', 'USD'), LeaseCalculator::baseTotal($order));
+    $adjustments = $order->getAdjustments(['fee']);
+    $this->assertCount(1, $adjustments);
+    $this->assertSame('Lease to own, 12 months', $adjustments[0]->getLabel());
+    $this->assertEquals(new Price('3000', 'USD'), $adjustments[0]->getAmount());
+    $this->assertSame([6, 12, 24], $calculator->terms($order));
+    $this->assertEquals(new Price('33000', 'USD'), $calculator->plan($order, 12)->total);
+    $this->assertEquals(new Price('34500', 'USD'), $calculator->plan($order, 24)->total);
+    $this->assertEquals(new Price('30000', 'USD'), $calculator->plan($order, 6)->total);
+    $this->assertNull($calculator->plan($order, 6)->surcharge);
+
+    // Another term, or paying in full, changes the fee.
+    $choose('24');
+    $this->assertEquals(new Price('34500', 'USD'), $order->getTotalPrice());
+    $choose('full');
+    $this->assertEquals(new Price('30000', 'USD'), $order->getTotalPrice());
+    $this->assertSame([], $order->getAdjustments(['fee']));
+
+    // The lease is of the total with the fee, and keeps it once placed.
+    $choose('12');
+    $this->checkout($order, $this->card());
+    $lease = $this->lease($order);
+    $this->assertEquals(new Price('33000', 'USD'), $lease->getTotal());
+    $this->assertEquals(new Price('3300', 'USD'), $lease->getDownPayment());
+    $this->config('commerce_domains_lease.settings')->set('surcharges', [['months' => 12, 'percent' => 20]])->save();
+    $this->assertEquals(new Price('33000', 'USD'), $calculator->plan(Order::load($order->id()), 12)->total);
+
+    // The lowest monthly payment shown before checkout includes it.
+    $variation = $this->createDomain('Shown.com', 30000)->getVariations()[0];
+    $plan = $calculator->lowestPlan($variation, new Price('30000', 'USD'));
+    $this->assertSame(24, $plan->months);
+    $this->assertEquals(new Price('30000', 'USD'), $plan->total, 'No surcharge set for 24 months any more.');
+    $this->config('commerce_domains_lease.settings')->set('surcharges', [['months' => 24, 'percent' => 5]])->save();
+    $this->assertEquals(new Price('31500', 'USD'), $calculator->lowestPlan($variation, new Price('30000', 'USD'))->total);
   }
 
   /**

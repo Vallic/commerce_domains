@@ -154,10 +154,12 @@ class CsvExportTest extends ProviderTestBase {
 
     $spaceship = $this->csv(Spaceship::class, 'spaceship');
     $this->assertSame(['Domain', 'Offer Minimum', 'Buy Now Price', 'LTO Period', 'Downpayment %', 'For Sale Page'], $spaceship->csvHeader('listings'));
-    $this->assertSame(['A.com', 525, 1050, 0, 25, 'on'], $spaceship->csvRow(self::item('a.com'), 'listings'));
-    $this->assertSame(['B.com', 1575, 3150, 6, 25, 'on'], $spaceship->csvRow(self::item('b.com', 3000), 'listings'));
-    $this->assertSame(['B.com', '', 3150, 6, 25, 'on'], $spaceship->csvRow(self::item('b.com', 3000, ['terms' => new SaleTerms(offers: FALSE)]), 'listings'));
-    $this->assertSame(['B.com', 1575, '', 0, 25, 'on'], $spaceship->csvRow(self::item('b.com', 3000, ['terms' => new SaleTerms(buyNow: FALSE)]), 'listings'));
+    // The general down payment, or the domain's own.
+    $this->assertSame(['A.com', 525, 1050, 0, 10, 'on'], $spaceship->csvRow(self::item('a.com'), 'listings'));
+    $this->assertSame(['B.com', 1575, 3150, 6, 10, 'on'], $spaceship->csvRow(self::item('b.com', 3000), 'listings'));
+    $this->assertSame(['B.com', 1575, 3150, 6, 25, 'on'], $spaceship->csvRow(self::item('b.com', 3000, ['terms' => new SaleTerms(leaseDownPayment: 25)]), 'listings'));
+    $this->assertSame(['B.com', '', 3150, 6, 10, 'on'], $spaceship->csvRow(self::item('b.com', 3000, ['terms' => new SaleTerms(offers: FALSE)]), 'listings'));
+    $this->assertSame(['B.com', 1575, '', 0, 10, 'on'], $spaceship->csvRow(self::item('b.com', 3000, ['terms' => new SaleTerms(buyNow: FALSE)]), 'listings'));
 
     $atom = $this->csv(Atom::class, 'atom');
     $this->assertSame(['Domain Name', 'Selling Price'], $atom->csvHeader('listings'));

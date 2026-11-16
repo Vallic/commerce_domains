@@ -10,7 +10,8 @@ namespace Drupal\commerce_domains;
  * Terms resolve from the general rules (Sale terms settings), to a provider's
  * own (its form), to the domain's own (its variation). This covers the first
  * two; SaleTerms holds the domain's, and takes them first. The price bands of
- * the lease rule are the same everywhere: see SaleTerms::LEASE_TERMS.
+ * the lease rule and the down payment are general only: a provider can turn
+ * leases on or off and shorten them, not move the bands.
  */
 final class SaleTermRules {
 
@@ -21,7 +22,19 @@ final class SaleTermRules {
     'minimum_offer_percent' => 50,
     'minimum_offer_percent_above' => 25,
     'minimum_offer_break' => 10000,
+    // The longest lease below each price, lowest first, then above them all.
+    'lease_terms' => [
+      ['below' => 2000, 'months' => 0],
+      ['below' => 8000, 'months' => 6],
+      ['below' => 20000, 'months' => 12],
+      ['below' => 50000, 'months' => 24],
+    ],
+    'lease_term_above' => 36,
+    'lease_down_payment' => 10,
   ];
+
+  // The longest lease the bands may set, in monthly payments.
+  public const MAX_LEASE_MONTHS = 120;
 
   public function __construct(
     // The lowest price a broker may agree to.
@@ -37,6 +50,13 @@ final class SaleTermRules {
     // The longest lease worked out from the price, or NULL for no limit but
     // the price bands.
     public readonly ?int $leaseLimit = NULL,
+    // The price bands: the longest lease below each price, lowest first.
+    public readonly array $leaseTerms = self::DEFAULTS['lease_terms'],
+    // The longest lease from the last band's price up.
+    public readonly int $leaseTermAbove = self::DEFAULTS['lease_term_above'],
+    // The share of the price paid first on a lease, in percent, for domains
+    // that set none.
+    public readonly int $leaseDownPayment = self::DEFAULTS['lease_down_payment'],
   ) {}
 
   /**
@@ -51,6 +71,9 @@ final class SaleTermRules {
       minimumOfferPercentAbove: (int) $value('minimum_offer_percent_above'),
       minimumOfferBreak: (int) $value('minimum_offer_break'),
       automaticLease: (bool) $value('automatic_lease'),
+      leaseTerms: array_map(fn(array $band) => ['below' => (int) $band['below'], 'months' => (int) $band['months']], (array) $value('lease_terms')),
+      leaseTermAbove: (int) $value('lease_term_above'),
+      leaseDownPayment: (int) $value('lease_down_payment'),
     );
   }
 
@@ -70,6 +93,9 @@ final class SaleTermRules {
       minimumOfferBreak: $this->minimumOfferBreak,
       automaticLease: (bool) ($terms['automatic_lease'] ?? $this->automaticLease),
       leaseLimit: isset($terms['lease_months']) ? (int) $terms['lease_months'] : $this->leaseLimit,
+      leaseTerms: $this->leaseTerms,
+      leaseTermAbove: $this->leaseTermAbove,
+      leaseDownPayment: $this->leaseDownPayment,
     );
   }
 
@@ -101,8 +127,22 @@ final class SaleTermRules {
     if (!$this->automaticLease) {
       return 0;
     }
-    $months = SaleTerms::defaultLeaseMonths($price);
+    $months = $this->bandMonths($price);
     return $this->leaseLimit === NULL ? $months : min($months, $this->leaseLimit);
+  }
+
+  /**
+   * Returns the longest lease the price bands give a price, 0 for none.
+   *
+   * Whether automatic leases are on doesn't matter here: see leaseMonths().
+   */
+  public function bandMonths(float $price): int {
+    foreach ($this->leaseTerms as $band) {
+      if ($price < $band['below']) {
+        return $band['months'];
+      }
+    }
+    return $this->leaseTermAbove;
   }
 
 }

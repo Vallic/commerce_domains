@@ -3,3 +3,18 @@ floor_percent: 80
 minimum_offer_percent: 50
 minimum_offer_percent_above: 25
 minimum_offer_break: 10000
+lease_terms:
+  -
+    below: 2000
+    months: 0
+  -
+    below: 8000
+    months: 6
+  -
+    below: 20000
+    months: 12
+  -
+    below: 50000
+    months: 24
+lease_term_above: 36
+lease_down_payment: 10

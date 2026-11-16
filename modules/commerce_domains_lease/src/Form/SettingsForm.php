@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Drupal\commerce_domains_lease\Form;
 
+use Drupal\commerce_domains_lease\LeaseCalculator;
 use Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\SupportsStoredPaymentMethodsInterface;
 use Drupal\Component\Plugin\PluginManagerInterface;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\ConfigTarget;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -24,11 +26,19 @@ class SettingsForm extends ConfigFormBase {
   protected PluginManagerInterface $gatewayManager;
 
   /**
+   * The lease calculator.
+   *
+   * @var \Drupal\commerce_domains_lease\LeaseCalculator
+   */
+  protected LeaseCalculator $calculator;
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container): static {
     $instance = parent::create($container);
     $instance->gatewayManager = $container->get('plugin.manager.commerce_payment_gateway');
+    $instance->calculator = $container->get(LeaseCalculator::class);
     return $instance;
   }
 
@@ -50,15 +60,31 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state): array {
-    $form['default_down_payment'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Down payment'),
-      '#description' => $this->t("The share of the price paid at checkout, for domains whose sale terms set none (Lease down payment on the variation). The rest is paid in the lease's monthly payments."),
-      '#min' => 1,
-      '#max' => 90,
-      '#field_suffix' => '%',
-      '#config_target' => 'commerce_domains_lease.settings:default_down_payment',
+    $form['down_payment'] = [
+      '#markup' => '<p>' . $this->t('The down payment and the longest lease by price are in the <a href=":url">sale terms</a>, with those of the marketplaces.', [
+        ':url' => Url::fromRoute('commerce_domains.sale_terms')->toString(),
+      ]) . '</p>',
     ];
+    $form['surcharges'] = [
+      '#type' => 'table',
+      '#caption' => $this->t('What a lease costs over paying in full'),
+      '#header' => [$this->t('Term'), $this->t('Added to the total')],
+      '#suffix' => '<div class="description">' . $this->t("A percentage of the order's total, tax included, added as a fee once the buyer chooses the lease at checkout; the down payment and the monthly payments include it. Leases on marketplaces are not affected. Empty or 0 adds nothing.") . '</div>',
+    ];
+    foreach (LeaseCalculator::TERMS as $months) {
+      $form['surcharges'][$months]['term'] = [
+        '#markup' => $this->formatPlural($months, '1 month', '@count months'),
+      ];
+      $form['surcharges'][$months]['percent'] = [
+        '#type' => 'number',
+        '#title' => $this->t('Added to the total over @count months', ['@count' => $months]),
+        '#title_display' => 'invisible',
+        '#min' => 0,
+        '#max' => 100,
+        '#field_suffix' => '%',
+        '#default_value' => $this->calculator->surchargePercent($months) ?: NULL,
+      ];
+    }
     // Gateways by plugin, as the settings keep them: those that can charge
     // a saved card, and the rest, which the buyer pays through each time.
     $card = $manual = [];
@@ -121,6 +147,20 @@ class SettingsForm extends ConfigFormBase {
       '#config_target' => 'commerce_domains_lease.settings:notify_mail',
     ];
     return parent::buildForm($form, $form_state);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function submitForm(array &$form, FormStateInterface $form_state): void {
+    $surcharges = [];
+    foreach ((array) $form_state->getValue('surcharges') as $months => $row) {
+      if ((int) ($row['percent'] ?? 0) > 0) {
+        $surcharges[] = ['months' => (int) $months, 'percent' => (int) $row['percent']];
+      }
+    }
+    $this->config('commerce_domains_lease.settings')->set('surcharges', $surcharges)->save();
+    parent::submitForm($form, $form_state);
   }
 
 }

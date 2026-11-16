@@ -139,7 +139,8 @@ function commerce_domains_update_11006(): void {
  */
 function commerce_domains_update_11007(): void {
   $config = \Drupal::configFactory()->getEditable('commerce_domains.settings');
-  foreach (SaleTermRules::DEFAULTS as $key => $value) {
+  // The lease rules came later: commerce_domains_update_11009().
+  foreach (array_diff_key(SaleTermRules::DEFAULTS, array_flip(['lease_terms', 'lease_term_above', 'lease_down_payment'])) as $key => $value) {
     if ($config->get($key) === NULL) {
       $config->set($key, $value);
     }
@@ -155,4 +156,30 @@ function commerce_domains_update_11008(): void {
   if (!$update_manager->getEntityType('commerce_domains_dns_template')) {
     $update_manager->installEntityType(\Drupal::entityTypeManager()->getDefinition('commerce_domains_dns_template'));
   }
+}
+
+/**
+ * Makes the lease price bands and down payment general sale terms.
+ *
+ * The bands stay as they were. The down payment moves from the lease
+ * settings; without the lease module, it stays at the 25% Spaceship's file
+ * always had.
+ */
+function commerce_domains_update_11009(): void {
+  $config = \Drupal::configFactory()->getEditable('commerce_domains.settings');
+  foreach (['lease_terms', 'lease_term_above'] as $key) {
+    if ($config->get($key) === NULL) {
+      $config->set($key, SaleTermRules::DEFAULTS[$key]);
+    }
+  }
+  $lease = \Drupal::configFactory()->getEditable('commerce_domains_lease.settings');
+  $down_payment = $lease->get('default_down_payment');
+  if ($down_payment !== NULL) {
+    $config->set('lease_down_payment', (int) $down_payment);
+    $lease->clear('default_down_payment')->save();
+  }
+  elseif ($config->get('lease_down_payment') === NULL) {
+    $config->set('lease_down_payment', 25);
+  }
+  $config->save();
 }

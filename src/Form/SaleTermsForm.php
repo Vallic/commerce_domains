@@ -6,7 +6,7 @@ namespace Drupal\commerce_domains\Form;
 
 use Drupal\commerce_domains\Entity\ProviderInterface;
 use Drupal\commerce_domains\Plugin\CommerceDomains\Provider\ListingPluginBase;
-use Drupal\commerce_domains\SaleTerms;
+use Drupal\commerce_domains\SaleTermRules;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
@@ -82,9 +82,32 @@ class SaleTermsForm extends ConfigFormBase {
     $form['lease'] = [
       '#type' => 'table',
       '#caption' => $this->t('Longest lease by price, the same on every marketplace'),
-      '#header' => [$this->t('Price'), $this->t('Longest lease')],
-      '#rows' => $this->leaseRows(),
+      '#header' => [$this->t('Below this price'), $this->t('Longest lease')],
+      '#suffix' => '<div class="description">' . $this->t('Lowest price first. 0 months for no lease; one payment is no lease either. Marketplaces with a shorter limit of their own stop there. Empty rows are dropped.') . '</div>',
     ];
+    $general = SaleTermRules::general();
+    $bands = $general->leaseTerms;
+    // Room for two more each time.
+    for ($delta = 0; $delta < count($bands) + 2; $delta++) {
+      $form['lease'][$delta]['below'] = [
+        '#type' => 'number',
+        '#title' => $this->t('Below this price'),
+        '#title_display' => 'invisible',
+        '#min' => 1,
+        '#default_value' => $bands[$delta]['below'] ?? NULL,
+      ];
+      $form['lease'][$delta]['months'] = $this->monthsElement($bands[$delta]['months'] ?? NULL) + [
+        '#title' => $this->t('Longest lease'),
+        '#title_display' => 'invisible',
+      ];
+    }
+    $form['lease_term_above'] = $this->monthsElement($general->leaseTermAbove) + [
+      '#title' => $this->t('Longest lease from the last price up'),
+      '#required' => TRUE,
+    ];
+    $form['lease_down_payment'] = $percent($this->t('Down payment on a lease'), 'lease_down_payment');
+    $form['lease_down_payment']['#max'] = 90;
+    $form['lease_down_payment']['#description'] = $this->t("The share of the price paid first, for domains that set none: at checkout on this site, and in the files of marketplaces that take one. The rest is paid in the lease's monthly payments.");
     $form['marketplaces'] = [
       '#type' => 'table',
       '#caption' => $this->t('What your marketplaces do with empty terms'),
@@ -106,25 +129,56 @@ class SaleTermsForm extends ConfigFormBase {
   }
 
   /**
-   * Returns the rows of the lease rule.
+   * Returns a field for a number of monthly payments.
    */
-  protected function leaseRows(): array {
-    $rows = [];
-    $from = NULL;
-    foreach (SaleTerms::LEASE_TERMS as $below => $months) {
-      $rows[] = [
-        $from === NULL
-          ? $this->t('Below @below', ['@below' => number_format($below)])
-          : $this->t('@from to @below', ['@from' => number_format($from), '@below' => number_format($below)]),
-        $months ? $this->formatPlural($months, '1 month', '@count months') : $this->t('No lease'),
-      ];
-      $from = $below;
-    }
-    $rows[] = [
-      $this->t('@from and above', ['@from' => number_format((int) $from)]),
-      $this->formatPlural(SaleTerms::LEASE_TERM_ABOVE, '1 month', '@count months'),
+  protected function monthsElement(?int $months): array {
+    return [
+      '#type' => 'number',
+      '#min' => 0,
+      '#max' => SaleTermRules::MAX_LEASE_MONTHS,
+      '#field_suffix' => $this->t('months'),
+      '#default_value' => $months,
     ];
-    return $rows;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function validateForm(array &$form, FormStateInterface $form_state): void {
+    parent::validateForm($form, $form_state);
+    $previous = 0;
+    foreach ((array) $form_state->getValue('lease') as $delta => $band) {
+      $below = $band['below'] ?? '';
+      $months = $band['months'] ?? '';
+      if ($below === '' && $months === '') {
+        continue;
+      }
+      if ($below === '' || $months === '') {
+        $form_state->setErrorByName("lease][$delta][" . ($below === '' ? 'below' : 'months'), $this->t('Give each price band both a price and a lease.'));
+        continue;
+      }
+      if ((int) $below <= $previous) {
+        $form_state->setErrorByName("lease][$delta][below", $this->t('Each price band starts above the one before it.'));
+      }
+      $previous = (int) $below;
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function submitForm(array &$form, FormStateInterface $form_state): void {
+    $bands = [];
+    foreach ((array) $form_state->getValue('lease') as $band) {
+      if (($band['below'] ?? '') !== '' && ($band['months'] ?? '') !== '') {
+        $bands[] = ['below' => (int) $band['below'], 'months' => (int) $band['months']];
+      }
+    }
+    $this->config('commerce_domains.settings')
+      ->set('lease_terms', $bands)
+      ->set('lease_term_above', (int) $form_state->getValue('lease_term_above'))
+      ->save();
+    parent::submitForm($form, $form_state);
   }
 
   /**
