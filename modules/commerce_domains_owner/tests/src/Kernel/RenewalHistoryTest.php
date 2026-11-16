@@ -50,6 +50,27 @@ class RenewalHistoryTest extends OwnerKernelTestBase {
   }
 
   /**
+   * Tests a domain caught as it dropped: its registration isn't a renewal.
+   */
+  public function testCaught(): void {
+    $costs = $this->container->get(Costs::class);
+    $caught = $this->createDomain('Caught.com', 1000, [
+      'domain_purchase_price' => new Price('26', 'USD'),
+      'domain_purchase_date' => self::date('2025-07-25'),
+      'domain_registered' => self::date('2025-07-25') + 1500,
+      'domain_expires' => self::date('2027-07-25') + 1500,
+      'domain_renewal_cost' => new Price('11', 'USD'),
+    ]);
+    $payments = $costs->renewalPayments($caught, self::date('2026-11-01'));
+    $this->assertSame(['2026-07-25'], array_map(fn(array $payment) => gmdate('Y-m-d', $payment['time']), $payments));
+    $this->assertTrue($payments[0]['estimated']);
+
+    $this->renewal($caught, '2026-07-20', new Price('10.88', 'USD'));
+    $payments = $costs->renewalPayments($caught, self::date('2026-11-01'));
+    $this->assertSame([FALSE], array_column($payments, 'estimated'));
+  }
+
+  /**
    * Tests that recorded renewals count, and only the rest is estimated.
    */
   public function testCosts(): void {

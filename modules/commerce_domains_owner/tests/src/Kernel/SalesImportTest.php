@@ -52,12 +52,17 @@ class SalesImportTest extends OwnerKernelTestBase {
     $this->assertSame([1500.5, 'EUR'], SalesImporter::amount('EUR 1.500,50'));
     $this->assertSame([12.5, NULL], SalesImporter::amount('12,5'));
     $this->assertSame([2500.0, NULL], SalesImporter::amount('2,500'));
+    $this->assertSame('EUR', SalesImporter::currency('Euro EUR (€)'));
+    $this->assertSame('USD', SalesImporter::currency(' US Dollar USD ($) '));
+    $this->assertSame('GBP', SalesImporter::currency('gbp'));
+    $this->assertNull(SalesImporter::currency(''));
     $this->assertSame(15.0, SalesImporter::percent('15%'));
     $this->assertSame(12.5, SalesImporter::percent('12,5'));
     $this->assertSame(SalesImporter::date('2026-10-30'), SalesImporter::date('30.10.2026'));
     $this->assertSame(SalesImporter::date('2026-10-30'), SalesImporter::date('10/30/2026'));
     foreach ([
       fn() => SalesImporter::amount('soon'),
+      fn() => SalesImporter::currency('€'),
       fn() => SalesImporter::percent('120'),
       fn() => SalesImporter::date('31.02.2026'),
       fn() => SalesImporter::parse("title;price\nfoo;1"),

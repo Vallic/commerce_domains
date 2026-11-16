@@ -118,15 +118,19 @@ class RenewalCostsTest extends OwnerKernelTestBase {
     $this->createProvider('dynadot');
     $this->setRenewalCosts([['com', '12'], ['net', '13'], ['io', '40', 'USD', 'dynadot']]);
     $importer = $this->container->get(RenewalCostImporter::class);
-    $rows = RenewalCostImporter::parse("sep=,\nTLD,Renewal,Currency,Registrar\n.COM,\"10,50\",USD,\nnet,13,USD,\nio,\"39 USD\",,Dynadot\nxyz,2,XXX,\norg,ten,USD,\ninfo,3,,\nbiz,3,USD,nobody\nnet,14,USD,\nco.uk,7,USD,dynadot\n");
+    $rows = RenewalCostImporter::parse("sep=,\nTLD,Renewal,Currency,Registrar\n.COM,\"10,50\",USD,\nnet,13,USD,\nio,\"39 USD\",,Dynadot\nxyz,2,XXX,\norg,ten,USD,\ninfo,3,,\nbiz,3,USD,nobody\nnet,14,USD,\nco.uk,7,USD,dynadot\ndev,5,US Dollar USD ($),\napp,5,€,\n");
     $plan = $importer->planRows($rows);
-    $this->assertSame(['replaced', 'same', 'replaced', 'problem', 'problem', 'problem', 'problem', 'problem', 'new'], array_column($plan, 'status'));
-    $this->assertSame(['new' => 1, 'replaced' => 2, 'same' => 1, 'kept' => 0, 'problem' => 5], RenewalCostImporter::summary($plan));
+    $this->assertSame([
+      'replaced', 'same', 'replaced', 'problem', 'problem', 'problem', 'problem', 'problem', 'new', 'new', 'problem',
+    ], array_column($plan, 'status'));
+    $this->assertSame(['new' => 2, 'replaced' => 2, 'same' => 1, 'kept' => 0, 'problem' => 6], RenewalCostImporter::summary($plan));
     $this->assertStringContainsString('Already on line 4', $plan[10]['problem']);
-    $this->assertSame(3, $importer->apply($plan));
+    $this->assertStringContainsString('€ is not a currency', $plan[13]['problem']);
+    $this->assertSame(4, $importer->apply($plan));
     $this->assertSame([
       'co.uk dynadot 7 USD',
       'com 10.5 USD',
+      'dev 5 USD',
       'io dynadot 39 USD',
       'net 13 USD',
     ], $this->table());

@@ -923,7 +923,9 @@ registrar where its API reports it, the way expiry dates do.
   minus the renewals paid. Renewals paid is the yearly renewal cost times
   the renewals while the domain was held: one on each anniversary of its
   expiry date (or of its purchase date, without one) between the purchase
-  and the sale. A domain whose renewals aren't recorded takes the cost of its
+  and the sale, except in the first year of its registration, which the
+  registration paid for: a domain caught as it dropped is registered as it is
+  bought, and that is no renewal. A domain whose renewals aren't recorded takes the cost of its
   extension from the *Renewal costs* tab, which the Expiring soon page and the
   digest use too: a table with a row for each extension, its registrar (or any)
   and what a year costs, in any currency. A domain takes its registrar's cost

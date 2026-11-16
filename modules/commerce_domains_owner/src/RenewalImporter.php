@@ -201,9 +201,7 @@ class RenewalImporter {
     $paid = SalesImporter::date($row['date']);
     [$number, $currency] = SalesImporter::amount($row['amount']);
     // "US Dollar USD ($)" as well as "USD".
-    if (isset($row['currency'])) {
-      $currency = preg_match('/\b[A-Z]{3}\b/', $row['currency'], $match) ? $match[0] : strtoupper($row['currency']);
-    }
+    $currency = SalesImporter::currency($row['currency'] ?? '') ?? $currency;
     if ($currency === NULL || !$this->entityTypeManager->getStorage('commerce_currency')->load($currency)) {
       throw new \InvalidArgumentException((string) new TranslatableMarkup('Currency @currency is not on the site.', ['@currency' => $currency ?? '?']));
     }

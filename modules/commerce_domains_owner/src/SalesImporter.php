@@ -259,7 +259,7 @@ class SalesImporter {
     $sold = isset($row['sold']) ? self::date($row['sold']) : NULL;
     [$amount, $currency] = isset($row['price']) ? self::amount($row['price']) : [NULL, NULL];
     [$received, $received_currency] = isset($row['received']) ? self::amount($row['received']) : [NULL, NULL];
-    $currency = strtoupper($row['currency'] ?? '') ?: $currency ?: $received_currency ?: $current?->getCurrencyCode() ?: $this->domainCurrency($product);
+    $currency = self::currency($row['currency'] ?? '') ?? $currency ?: $received_currency ?: $current?->getCurrencyCode() ?: $this->domainCurrency($product);
     if ($currency === NULL || !$this->entityTypeManager->getStorage('commerce_currency')->load($currency)) {
       throw new \InvalidArgumentException((string) new TranslatableMarkup('Currency @currency is not on the site.', ['@currency' => $currency ?? '?']));
     }
@@ -378,6 +378,29 @@ class SalesImporter {
       }
     }
     throw new \InvalidArgumentException((string) new TranslatableMarkup('@value is not a date: write it as 2026-10-30.', ['@value' => $value]));
+  }
+
+  /**
+   * Reads a currency cell: "EUR", "eur", "Euro EUR (€)", "US Dollar USD ($)".
+   *
+   * @return string|null
+   *   The currency code, or NULL for an empty cell.
+   *
+   * @throws \InvalidArgumentException
+   *   When the cell holds no three-letter code.
+   */
+  public static function currency(string $value): ?string {
+    $value = trim($value);
+    if ($value === '') {
+      return NULL;
+    }
+    if (preg_match('/\b[A-Z]{3}\b/', $value, $match)) {
+      return $match[0];
+    }
+    if (preg_match('/^[A-Za-z]{3}$/', $value)) {
+      return strtoupper($value);
+    }
+    throw new \InvalidArgumentException((string) new TranslatableMarkup('@value is not a currency: write its code, like EUR.', ['@value' => $value]));
   }
 
   /**

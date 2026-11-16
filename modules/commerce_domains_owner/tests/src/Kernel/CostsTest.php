@@ -172,6 +172,17 @@ class CostsTest extends OwnerKernelTestBase {
     $this->assertSame(0, Costs::renewals($date('2020-03-01'), $date('2020-03-01')));
     // A 29 February expiry renews on the 1 March of other years.
     $this->assertSame(2, Costs::renewals($date('2019-06-01'), $date('2021-06-01'), $date('2024-02-29')));
+
+    // Caught as it dropped, registered just after the purchase: the
+    // registration pays the first year, so only July 2026 renews.
+    $at = fn(string $time) => (new \DateTimeImmutable($time, new \DateTimeZone('UTC')))->getTimestamp();
+    $caught = [$at('2025-07-25 12:00'), $at('2026-11-16 12:00'), $at('2027-07-25 12:25')];
+    $this->assertSame(2, Costs::renewals(...$caught), 'Without the registration, its day counted.');
+    $this->assertSame([$at('2026-07-25 12:25')], Costs::renewalDates(...[...$caught, $at('2025-07-25 12:25')]));
+    // A registrar whose expiry time is half a day after the registration's.
+    $this->assertSame(0, Costs::renewals($at('2026-02-19 00:00'), $at('2026-11-16 12:00'), $at('2027-02-19 12:00'), $at('2026-02-18 23:00')));
+    // Registered years before, bought two days before it renewed: that counts.
+    $this->assertSame(1, Costs::renewals($date('2026-04-12'), $date('2026-11-16'), $date('2027-04-14'), $date('2021-04-14')));
   }
 
   /**

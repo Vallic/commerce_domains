@@ -95,7 +95,7 @@ class RenewalCostImporter {
         }
         $registrar = isset($row['registrar']) ? $this->provider($row['registrar']) : NULL;
         [$number, $currency] = SalesImporter::amount($row['amount'] ?? '');
-        $currency = strtoupper($row['currency'] ?? '') ?: $currency;
+        $currency = SalesImporter::currency($row['currency'] ?? '') ?? $currency;
         if ($currency === NULL) {
           throw new \InvalidArgumentException((string) new TranslatableMarkup('No currency.'));
         }

@@ -19,7 +19,9 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  * Renewals paid are the renewals recorded while the domain was held, at what
  * they cost (see RenewalHistory), and an estimate for the years they don't
  * cover. A domain renews on each anniversary of its expiry date (or, without
- * one, of its purchase date) after the purchase, up to the sale; those not
+ * one, of its purchase date) after the purchase, up to the sale, and not
+ * within the first year of its registration, which the registration paid for
+ * (a domain caught as it dropped is registered when it is bought); those not
  * covered by a record count at the yearly cost, the oldest first, since
  * records usually start when a domain reached the registrar they came from.
  * Without a purchase date no anniversaries count.
@@ -105,7 +107,7 @@ class Costs {
       ];
     }
     if ($purchased !== NULL) {
-      $dates = self::renewalDates($purchased, $until, self::time($product, 'domain_expires'));
+      $dates = self::renewalDates($purchased, $until, self::time($product, 'domain_expires'), self::time($product, 'domain_registered'));
       foreach (array_slice($dates, 0, max(0, count($dates) - $covered)) as $date) {
         $payments[] = ['time' => $date, 'years' => 1, 'amount' => $yearly, 'estimated' => TRUE];
       }
@@ -214,9 +216,11 @@ class Costs {
    * @param int|null $expires
    *   When its registration runs out, if known: registrations renew on its
    *   anniversaries. Without it they renew on the purchase date's.
+   * @param int|null $registered
+   *   When it was registered, if known: see renewalDates().
    */
-  public static function renewals(int $purchased, int $sold, ?int $expires = NULL): int {
-    return count(self::renewalDates($purchased, $sold, $expires));
+  public static function renewals(int $purchased, int $sold, ?int $expires = NULL, ?int $registered = NULL): int {
+    return count(self::renewalDates($purchased, $sold, $expires, $registered));
   }
 
   /**
@@ -229,20 +233,27 @@ class Costs {
    * @param int|null $expires
    *   When its registration runs out, if known: registrations renew on its
    *   anniversaries. Without it they renew on the purchase date's.
+   * @param int|null $registered
+   *   When it was registered, if known. A registration pays for at least a
+   *   year, so no renewal falls due within the first: the anniversary of the
+   *   day a domain caught as it dropped was registered is that registration,
+   *   bought with the domain. A month's leeway allows for registrars whose
+   *   expiry time differs from the registration's.
    *
    * @return int[]
    *   Unix times, oldest first.
    */
-  public static function renewalDates(int $purchased, int $until, ?int $expires = NULL): array {
+  public static function renewalDates(int $purchased, int $until, ?int $expires = NULL, ?int $registered = NULL): array {
     if ($until <= $purchased) {
       return [];
     }
+    $first_due = $registered === NULL ? $purchased : max($purchased, (new \DateTimeImmutable('@' . $registered))->modify('+11 months')->getTimestamp());
     $anchor = new \DateTimeImmutable('@' . ($expires ?? $purchased));
     // Each anniversary counted from the anchor itself, so a 29 February
     // doesn't drift into March.
     $anniversary = fn(int $years) => $anchor->modify(sprintf('%+d years', $years))->getTimestamp();
     $years = (int) gmdate('Y', $purchased) - (int) $anchor->format('Y') - 1;
-    while ($anniversary($years) <= $purchased) {
+    while ($anniversary($years) <= $first_due) {
       $years++;
     }
     $dates = [];
