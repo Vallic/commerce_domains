@@ -25,19 +25,11 @@ trait PricingTestTrait {
   /**
    * NameAcre's ProductVariationSubscriber::getRoundNumber(), as written.
    *
-   * It gets the converted price cast to an integer.
+   * It gets the converted price cast to an integer. The original also capped
+   * the first branch at 9999, which it can never exceed.
    */
   protected static function nameAcreRound(int $price): int {
-    $threshold = 10000;
-    if ($price <= $threshold) {
-      $rounded_price = ceil($price / 100) * 100 - 1;
-      if ($rounded_price > $threshold) {
-        return 9999;
-      }
-    }
-    else {
-      $rounded_price = round($price, -2);
-    }
+    $rounded_price = $price <= 10000 ? ceil($price / 100) * 100 - 1 : round($price, -2);
     return (int) $rounded_price;
   }
 
